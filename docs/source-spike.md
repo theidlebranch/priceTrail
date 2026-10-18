@@ -237,7 +237,7 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 - [x] Add `tests/fixtures/models-dev-api.json` to `.gitignore`.
 - [x] Commit a small trimmed slice of models.dev and LiteLLM for the **spike example ids** named in this note (`tests/fixtures/models-dev-sample.json`, `tests/fixtures/litellm-sample.json`). This is so tests do not need the 5.6 MB file. It is **not** the MVP catalog; picking the ~10 tracked models is still a later step.
 - [x] Verify LiteLLM tier fields (see section 3.5). The TODO jq also matches `above_1hr`; token-tier fields are the `*_above_*k_tokens` names.
-- [ ] Open the PR for step 5. Then step 6 (Wayback check).
+- [ ] Open the PR for step 5 (`source-spike` is pushed; `gh` is not installed locally). Then step 6 (Wayback check).
 
 ## 9. Out of scope for the MVP
 
