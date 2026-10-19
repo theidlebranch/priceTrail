@@ -1,3 +1,5 @@
+This file is the order of work. `docs/architecture.md` is the design (the principles there do not change). `docs/source-spike.md` is the findings. If the sequence disagrees, this file wins.
+
 ### Phase 1: Project setup (DONE)
 
 1. **Create the app.** `create-next-app` with TypeScript, Tailwind, ESLint, App Router, `src/` directory. Turn on `strict`. Add your AGENTS.md and PRICETRAIL.md.  
@@ -12,11 +14,16 @@
 ### Phase 2: Source spike
 
 5. **Fetch the 3 pricing pages.** Write `scripts/spike-sources.ts` that fetches each page and logs status, size, and whether the prices are in the raw HTML. Note which are static, JS-rendered, or blocked in `docs/source-spike.md`. Save the HTML to `tests/fixtures/`.  
-   _Done:_ you know which providers are easy and which are hard.
+   _Done:_ you know which providers are easy and which are hard. Anthropic and OpenAI are markdown tables. Google is static HTML (always fetch with `?hl=en`). No Playwright. Witnesses (models.dev, LiteLLM) never publish a price. Merged as PR #3.
 6. **Wayback live check.** Write `scripts/spike-wayback.ts`: try Save Page Now on one pricing URL by hand, and note the request flow, timing, and whether the archived copy is readable.  
    _Done:_ a written answer to "does Wayback work well enough as Tier 3?"
-7. **Parse one provider.** Pick the easiest (probably OpenAI) and extract model name and prices from the saved fixture in a pure function, with tests.  
-   _Done:_ parser tests pass against the fixture.
+7. **Parsers and witness adapters.** One letter per branch. Open questions in `docs/source-spike.md` section 7 (OpenAI `cache_write`, Google price schedules, SQL `NULL` uniqueness) stay open until the step that needs them.
+   - **7a.** Anthropic parser: header-based, fixture tests, fail-closed cases (missing column, bad unit, empty table, 0 or 2 matching tables, unparseable tier parenthetical).
+   - **7b.** models.dev witness adapter, compared against Anthropic only. Decide here whether a later "verify mode" fallback is worth it.
+   - **7c.** OpenAI parser, Standard section only. Assert `Prices per 1M tokens.` Skip `-` cells. Do not guess a 272K long-context threshold.
+   - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
+   - **7e.** LiteLLM witness adapter. Filter `litellm_provider` + `mode == "chat"`. Convert per-token costs with `decimal.js`, never float math.
+   _Done:_ parser tests pass against the fixture for that letter.
 
 ### Phase 3: Data foundation
 
@@ -25,7 +32,7 @@
 9. **First tables.** `providers`, `models`, `model_aliases`. Generate and run the first migration.  
    _Done:_ tables exist and Drizzle Studio shows them.
 10. **Price tables.** `price_components` (dimension, unit, amount, condition) and `price_versions` (the bracket fields, `supersedes_id`).  
-    _Done:_ migration runs. Write a short note on why you chose components over fixed price columns.
+    _Done:_ migration runs. Write a short note on why you chose components over fixed price columns. The `NULL` uniqueness question from the spike belongs in that note.
 11. **Evidence tables.** `observations`, `observation_items`, `fetch_log`.  
     _Done:_ migration runs.
 12. **Repository layer.** Define repository interfaces in `src/server/db/repositories`, with a Drizzle implementation.  
@@ -47,12 +54,12 @@
 
 ### Phase 5: Tier 2 + 3 pipeline
 
-21. **Provider source interface.** `ProviderSource` (fetch + parse), with the OpenAI source implemented.
+21. **Provider source interface.** `ProviderSource` (fetch + parse), wired around the Anthropic parser from 7a. Do not write a new parser here.
 22. **Sanity checks.** Pure functions in `core/verification` for "did the parse break?", with tests built from broken fixtures.
 23. **Hash and store.** Hash `parsed_data`; on a changed hash store an observation and items, otherwise only update `fetch_log` and `last_confirmed_at`.
 24. **Archive step.** Turn the Wayback spike into `wayback-client.ts` with a fake-fetch test suite, and fall back to stored `raw_content` on failure.
 25. **Run script.** Chain these into `scripts/run-verify.ts` for one provider.
-26. **Add Anthropic, then Google.** One step each. This proves the plugin shape works.
+26. **Wire OpenAI, then Google.** One step each, using the parsers from 7c and 7d. This proves the plugin shape works.
 27. **Schedule it.** `verify.yml` cron (~6h), then watch a few real runs.
 
 ### Phase 6: Review queue
@@ -65,9 +72,9 @@
 
 ### Phase 7: Tier 1 signals
 
-33. **LiteLLM feed signal.** It writes to `fetch_triggers` only, never prices.
+33. **LiteLLM feed signal.** It writes to `fetch_triggers` only, never prices. The LiteLLM commits feed was not checked in the source spike; confirm it here.
 34. **OpenRouter and `/models` endpoints.** They feed `candidate_models` and `verification_flags`.
-35. **Trigger-driven verification.** Triggers can prompt an early Tier 2 check.
+35. **Trigger-driven verification.** Triggers can prompt an early Tier 2 check. Provider changelog feeds were not checked in the source spike; confirm one here if this step uses them.
 
 ### Phase 8: Polish
 
@@ -79,7 +86,5 @@
 Three tips:
 
 - Phases 1 to 4 give you a **live, real-looking site** early, which keeps motivation up. The hard pipeline work comes after you already have something to show.
-- Don't plan Phases 5 to 8 in detail yet. The source spike in Phase 2 will probably change them.
+- The source spike changed parser order (Anthropic first, then OpenAI, then Google) and confirmed no Playwright and no LLM extraction for the MVP. The rest of Phases 5 to 8 stays as written.
 - Treat each step as one small branch and PR, even if you're alone. That's a habit worth building.
-
-When you start step 1, I can help you break it into a checklist or review your AGENTS.md changes. Which one first?

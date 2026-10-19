@@ -252,6 +252,8 @@ Rule of thumb while building: if a decision only matters once you have 6+ provid
 
 ## Build order (weekend-sized chunks)
 
+For what to do next, follow [docs/build-plan.md](build-plan.md). This section is the coarse design sequence from before the spike.
+
 0. **Source spike (an evening, before any code).** Fetch the OpenAI, Anthropic, and Google pricing pages by hand and see what you actually get: static HTML table, JS-rendered, bot-protected, or an underlying JSON endpoint? The "structured docs table" assumption may only hold for one provider. Note each source's URL, format, and the plan for it (parser, JSON endpoint, LLM + grounding, or Playwright). Also confirm the LiteLLM commits feed and one provider changelog feed work.
 1. **Schema + seed.** Drizzle migrations for the v3 model. Hand-seed ~10 models with today's real prices, **through `publishPriceVersion()`** (so the seed exercises the invariant). Build `/models/[slug]` against seed data before touching any fetching.
 2. **Tier 2 + Tier 3, wired together.** OpenAI + Anthropic parsers as plain functions returning Zod-validated normalized JSON; sanity checks; column-aware grounding; hash compare; `fetch_log`; observation + items on change; Wayback submit-on-change storing the permalink. Run manually first, then wire the GitHub Action cron.
