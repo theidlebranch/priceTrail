@@ -1,7 +1,7 @@
 # Source spike: findings (2026-10-18)
 
 Purpose: find out, before writing parsers, which assumptions in the v3 plan are false.
-Status: probing finished. Step 5 checklist is done except the PR.
+Status: probing finished. Step 5 is merged (PR #3). Step 6 (Wayback live check) is written up in section 10.
 
 ---
 
@@ -237,8 +237,41 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 - [x] Add `tests/fixtures/models-dev-api.json` to `.gitignore`.
 - [x] Commit a small trimmed slice of models.dev and LiteLLM for the **spike example ids** named in this note (`tests/fixtures/models-dev-sample.json`, `tests/fixtures/litellm-sample.json`). This is so tests do not need the 5.6 MB file. It is **not** the MVP catalog; picking the ~10 tracked models is still a later step.
 - [x] Verify LiteLLM tier fields (see section 3.5). The TODO jq also matches `above_1hr`; token-tier fields are the `*_above_*k_tokens` names.
-- [ ] Open the PR for step 5 (`source-spike` is pushed; `gh` is not installed locally). Then step 6 (Wayback check).
+- [x] Open the PR for step 5. Merged as PR #3.
 
 ## 9. Out of scope for the MVP
 
 Batch, Flex, Fast, Ultrafast, Priority and Contributor modes; per-request tool pricing (grounding); audio, image and transcription pricing; regional and platform pricing (Bedrock, Vertex, Azure); sales and promo periods; following model-specific links.
+
+---
+
+## 10. Wayback live check (step 6, 2026-10-19)
+
+One authenticated Save Page Now capture of the Anthropic markdown page. Script: `pnpm run spike:wayback`. Archived HTML was not committed.
+
+**Request flow (confirmed live, not from a blog post):**
+
+1. `POST https://web.archive.org/save` with `url=...` and `Authorization: LOW <IA_ACCESS_KEY>:<IA_SECRET_KEY>`. Returns `{ url, job_id }` immediately. That is not an archive.
+2. Poll `GET https://web.archive.org/save/status/{job_id}` until `status` is `success` or `error`. Pending is the in-between state.
+3. On success, the permalink is `https://web.archive.org/web/{timestamp}/{original_url}`. The API does not send a permalink field.
+
+**Observed result:**
+
+| | |
+| --- | --- |
+| URL | `https://platform.claude.com/docs/en/about-claude/pricing.md` |
+| job_id | `spn2-eb689466aaf95d8a0a9e21c7b715f7caf3a5b380` (hex prefix, not the UUID in the public examples) |
+| Time to success | 91 seconds (pending until then) |
+| Permalink | `https://web.archive.org/web/20261019182706/https://platform.claude.com/docs/en/about-claude/pricing.md` |
+| Archive HTTP status | 200 |
+| Archive size | 49 KB |
+| Dollar amounts in archived body | 190 |
+| Readable | yes |
+
+**Where to look:** API captures do not appear in Uploads or My Web Archives. There is no archive.org UI that lists pages saved with the S3 keys. The record is the Wayback permalink (and later `observations.archive_url`). Open: `https://web.archive.org/web/20261019182706/https://platform.claude.com/docs/en/about-claude/pricing.md`.
+
+**Tier 3 answer:** yes, Wayback is good enough as the archive step. The archived copy of the easiest official page still contains the prices. Capture is slow (about a minute and a half here) and can fail or time out.
+
+Timeouts stay non-fatal. Always keep the page we already fetched as `raw_content` (with `raw_content_hash`). On Save Page Now success, store the permalink on `archive_url`. On timeout or error, set `archive_status` to `failed`, do not block prices, and retry on a later run (step 24). The UI says "archive unavailable, using stored copy." Do not treat a finished POST as a stored snapshot. Archive is evidence packaging, not the publish switch; only `publishPriceVersion()` writes prices.
+
+Auth keys stay in `.env` (`IA_ACCESS_KEY`, `IA_SECRET_KEY`). The production client is still step 24.
