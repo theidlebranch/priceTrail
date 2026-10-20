@@ -1,0 +1,36 @@
+---
+description: Run Fallow after generating or changing code and only fix findings this change introduced
+alwaysApply: true
+---
+
+# Fallow after code generation
+
+After you generate, edit, or delete code — and before you say the task is done — run:
+
+```bash
+npx fallow dead-code --format json
+```
+
+If the change is on a branch, `npx fallow audit` is enough: it only looks at files this branch changed.
+
+Do not add `fallow` as a project dependency unless asked. `npx` is enough.
+
+## What to fix
+
+Fix findings this change introduced: unused exports, unused types, unused files you just added.
+
+```ts
+// BAD — exported "for later", nothing imports it
+export const dimensionSchema = z.enum(["input", "output"]);
+
+// GOOD — keep it in the file, export when a second caller needs it
+const dimensionSchema = z.enum(["input", "output"]);
+```
+
+## What to leave
+
+Do not delete or suppress pre-existing noise without asking:
+
+- shadcn/ui kit exports (`CardHeader`, `CardTitle`, …) that later pages will use
+- CLI scripts under `scripts/` that are run with `pnpm`/`tsx`, not imported
+- packages Fallow cannot see as imports (`shadcn` CLI, Tailwind plugins)

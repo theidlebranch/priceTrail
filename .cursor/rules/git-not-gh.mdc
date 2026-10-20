@@ -1,0 +1,21 @@
+---
+description: Use git for version control and pull requests; do not use the gh CLI
+alwaysApply: true
+---
+
+# Use git, not gh
+
+Use `git` for branches, status, diff, log, commit, fetch, and push. Do not use the `gh` GitHub CLI (`gh pr create`, `gh issue`, `gh api`, …).
+
+```bash
+# BAD
+gh pr create --title "..." --body "..."
+
+# GOOD
+git push -u origin HEAD
+# then open the PR through GitLens / the git host, not gh
+```
+
+- Commit only when asked, with a message that says why.
+- Push with `git push -u origin HEAD` when asked to publish the branch.
+- Create or update pull requests through GitLens or the git host UI/API, never `gh`.

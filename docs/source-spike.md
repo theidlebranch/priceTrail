@@ -168,15 +168,19 @@ type Condition = { promptTokensOver?: number; promptTokensAtMost?: number };
 
 type NormalizedPrice = {
   provider: "anthropic" | "openai" | "google";
-  modelSlug: string;
+  modelName: string; // cleaned display name ("Claude Haiku 4.5")
+  modelSlug: string; // page-label slug from modelName ("claude-haiku-4.5"), not an API id
   dimension: Dimension;
   usdPer1M: string; // canonical decimal string ("12.5", never "12.50", never a float)
   condition?: Condition;
   validFrom?: string; // ISO date as written on the page ("2026-12-01"), no time zone invented
   validUntil?: string; // inclusive, as written
   source: "official" | "models.dev" | "litellm";
+  note?: string; // non-tier parenthetical ("retired...", "limited availability")
 };
 ```
+
+The Zod schema lives in `src/core/pricing/shape.ts`. Anthropic `modelSlug` is derived only from the cleaned display name (lowercase, spaces to hyphens, dots kept). It is not `claude-haiku-4-5`. Alias resolution is a later step.
 
 This replaces the earlier `minContextTokens`, which could not express `<=` versus `<` and invites off-by-one bugs.
 
@@ -209,7 +213,7 @@ We will measure the real break rate from `fetch_log` before adding heavier machi
 
 ## 6. Plan (stages replacing step 7)
 
-1. Anthropic parser, header-based, tested against the fixture.
+1. Anthropic parser, header-based, tested against the fixture. **Done:** `src/core/pricing/anthropic.ts` (`parseAnthropicPricing`). Fail-closed tests: `src/core/pricing/anthropic.test.ts`.
 2. models.dev adapter + a comparison script for Anthropic's models (decide the verify-mode fallback here).
 3. OpenAI parser (Standard section only).
 4. Google parser (largest job; cell grammar for 4 formats).
