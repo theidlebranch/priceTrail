@@ -21,6 +21,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
    - **7a.** Anthropic parser: header-based, fixture tests, fail-closed cases (missing column, bad unit, empty table, 0 or 2 matching tables, unparseable tier parenthetical).
      _Done:_ `parseAnthropicPricing()` in `src/core/pricing/anthropic.ts`. Tests in `src/core/pricing/anthropic.test.ts` pass against `tests/fixtures/anthropic-pricing.md`.
    - **7b.** models.dev witness adapter, compared against Anthropic only. Decide here whether a later "verify mode" fallback is worth it.
+     _Done:_ `parseModelsDevAnthropic()` in `src/core/pricing/models-dev.ts`. Comparison in `src/core/pricing/compare-anthropic-witness.ts`. Verify-mode fallback deferred until Phase 5 has a measured `parser_suspect` rate.
    - **7c.** OpenAI parser, Standard section only. Assert `Prices per 1M tokens.` Skip `-` cells. Do not guess a 272K long-context threshold.
    - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
    - **7e.** LiteLLM witness adapter. Filter `litellm_provider` + `mode == "chat"`. Convert per-token costs with `decimal.js`, never float math.
