@@ -63,7 +63,7 @@ No source needs Playwright or a JS-rendered fetch. Every official page is parsea
 | --------------------------------------------------------- | --------------------------------- | ----------------------------- |
 | Short context input                                       | `input`                           | none                          |
 | Short context cached input                                | `cache_read`                      | none                          |
-| Short context cache writes                                | `cache_write` (see open question) | none                          |
+| Short context cache writes                                | `cache_write`                     | none                          |
 | Short context output                                      | `output`                          | none                          |
 | Long context input / cached input / cache writes / output | same dimensions                   | long-context tier (see traps) |
 
@@ -158,7 +158,7 @@ type Dimension =
   | "cache_read"
   | "cache_write_5m"
   | "cache_write_1h"
-  | "cache_write"; // OpenAI's single cache-write price (open question)
+  | "cache_write"; // OpenAI's single cache-write price (decided in 7c)
 
 // Tier conditions use "over" / "atMost" so the boundary is never ambiguous:
 //   Anthropic "up to 100,000"  -> { promptTokensAtMost: 100000 }
@@ -215,7 +215,7 @@ We will measure the real break rate from `fetch_log` before adding heavier machi
 
 1. Anthropic parser, header-based, tested against the fixture. **Done:** `src/core/pricing/anthropic.ts` (`parseAnthropicPricing`). Fail-closed tests: `src/core/pricing/anthropic.test.ts`.
 2. models.dev adapter + a comparison script for Anthropic's models. **Done:** `src/core/pricing/models-dev.ts` (`parseModelsDevAnthropic`) and `scripts/compare-models-dev-anthropic.ts`. Fail-closed tests: `src/core/pricing/models-dev.test.ts`. **Verify-mode decision:** do not build it now. It cannot see dimensions, tiers, schedules, or dates; witnesses lag after real changes; and there is no `fetch_log` yet so there is no measured break rate. Revisit in Phase 5 if `parser_suspect` shows up.
-3. OpenAI parser (Standard section only).
+3. OpenAI parser (Standard section only). **Done:** `src/core/pricing/openai.ts` (`parseOpenAiPricing`). Fail-closed tests: `src/core/pricing/openai.test.ts`. OpenAI's single cache-write column maps to `cache_write`.
 4. Google parser (largest job; cell grammar for 4 formats).
 5. LiteLLM adapter as a third witness.
 6. Later: new-model detection, deprecation detection (missing on N consecutive checks), hash-based change detection (Phase 5).
@@ -226,7 +226,7 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 
 ## 7. Decisions still open (confirm during the parser stages)
 
-- OpenAI single cache-write price: add a generic `cache_write` dimension, or leave unmapped for the MVP?
+- OpenAI single cache-write price: **Decided in 7c.** Map it to dimension `cache_write`. Do not treat it as a 5-minute or 1-hour price.
 - Published price schedules (Google): keep as segments with `validFrom`/`validUntil` (proposed). Sales and promo periods remain out of scope, but a schedule written inside the price cell is in the data and must be parsed.
 - Postgres: `unique(price_version_id, dimension, condition)` treats NULL conditions as distinct. Use `NOT NULL DEFAULT '{}'` or `NULLS NOT DISTINCT` (Postgres 15+). Put this in the step-10 note.
 - Google: do the Batch, Flex, Priority and Contributor modes matter? Out of MVP for now.

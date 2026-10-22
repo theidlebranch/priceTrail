@@ -17,12 +17,13 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
    _Done:_ you know which providers are easy and which are hard. Anthropic and OpenAI are markdown tables. Google is static HTML (always fetch with `?hl=en`). No Playwright. Witnesses (models.dev, LiteLLM) never publish a price. Merged as PR #3.
 6. **Wayback live check.** Write `scripts/spike-wayback.ts`: try Save Page Now on one pricing URL by hand, and note the request flow, timing, and whether the archived copy is readable.  
    _Done:_ a written answer to "does Wayback work well enough as Tier 3?"
-7. **Parsers and witness adapters.** One letter per branch. Open questions in `docs/source-spike.md` section 7 (OpenAI `cache_write`, Google price schedules, SQL `NULL` uniqueness) stay open until the step that needs them.
+7. **Parsers and witness adapters.** One letter per branch. Open questions in `docs/source-spike.md` section 7 (Google price schedules, SQL `NULL` uniqueness) stay open until the step that needs them.
    - **7a.** Anthropic parser: header-based, fixture tests, fail-closed cases (missing column, bad unit, empty table, 0 or 2 matching tables, unparseable tier parenthetical).
      _Done:_ `parseAnthropicPricing()` in `src/core/pricing/anthropic.ts`. Tests in `src/core/pricing/anthropic.test.ts` pass against `tests/fixtures/anthropic-pricing.md`.
    - **7b.** models.dev witness adapter, compared against Anthropic only. Decide here whether a later "verify mode" fallback is worth it.
      _Done:_ `parseModelsDevAnthropic()` in `src/core/pricing/models-dev.ts`. Comparison in `src/core/pricing/compare-anthropic-witness.ts`. Verify-mode fallback deferred until Phase 5 has a measured `parser_suspect` rate.
    - **7c.** OpenAI parser, Standard section only. Assert `Prices per 1M tokens.` Skip `-` cells. Do not guess a 272K long-context threshold.
+     _Done:_ `parseOpenAiPricing()` in `src/core/pricing/openai.ts`. Tests in `src/core/pricing/openai.test.ts` pass against `tests/fixtures/openai-pricing.md`. OpenAI's single cache-write column maps to `cache_write`.
    - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
    - **7e.** LiteLLM witness adapter. Filter `litellm_provider` + `mode == "chat"`. Convert per-token costs with `decimal.js`, never float math.
    _Done:_ parser tests pass against the fixture for that letter.
