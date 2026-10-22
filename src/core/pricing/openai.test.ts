@@ -142,6 +142,17 @@ describe("parseOpenAiPricing", () => {
     expect(() => parseOpenAiPricing(markdown)).toThrow(/2 Standard pricing data headings/i);
   });
 
+  it("throws when the Standard section has no table but a later section does", () => {
+    const markdown = [
+      "Prices per 1M tokens.",
+      "### Standard pricing data",
+      "### Batch pricing data",
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-test")]),
+    ].join("\n\n");
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/empty table/i);
+  });
+
   it("throws when a required column is missing", () => {
     const markdown = standardPage(
       markdownTable(
@@ -151,6 +162,17 @@ describe("parseOpenAiPricing", () => {
     );
 
     expect(() => parseOpenAiPricing(markdown)).toThrow(/missing required column/i);
+  });
+
+  it("throws when a required column appears twice", () => {
+    const markdown = standardPage(
+      markdownTable(
+        [...REQUIRED_HEADERS, "Short context output"],
+        [[...validRow("gpt-test"), "$9.00"]],
+      ),
+    );
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/duplicate required column/i);
   });
 
   it("throws when a cell is not a dollar amount or dash", () => {
@@ -174,6 +196,17 @@ describe("parseOpenAiPricing", () => {
 
   it("throws when the Standard table has no model rows", () => {
     const markdown = standardPage(markdownTable(REQUIRED_HEADERS, []));
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/empty table/i);
+  });
+
+  it("throws when every price cell is a dash", () => {
+    const markdown = standardPage(
+      markdownTable(
+        REQUIRED_HEADERS,
+        [validRow("gpt-test", ["-", "-", "-", "-", "-", "-", "-", "-"])],
+      ),
+    );
 
     expect(() => parseOpenAiPricing(markdown)).toThrow(/empty table/i);
   });

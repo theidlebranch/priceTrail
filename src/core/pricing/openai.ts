@@ -64,7 +64,14 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
     );
   }
 
-  const tables = parseMarkdownTables(lines.slice(headingIndexes[0] + 1).join("\n"));
+  const sectionStart = headingIndexes[0] + 1;
+  const sectionEnd = lines.findIndex(
+    (line, index) => index >= sectionStart && /^#{1,6}\s/.test(line.trim()),
+  );
+  const section = lines
+    .slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd)
+    .join("\n");
+  const tables = parseMarkdownTables(section);
   if (tables.length === 0) {
     throw new Error("empty table: no table after Standard pricing data heading");
   }
@@ -78,6 +85,12 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
   }
   if (!table.headers.includes(MODEL_HEADER)) {
     throw new Error(`missing required column: ${MODEL_HEADER}`);
+  }
+  const duplicates = [MODEL_HEADER, ...REQUIRED_PRICE_HEADERS].filter(
+    (header) => table.headers.filter((candidate) => candidate === header).length > 1,
+  );
+  if (duplicates.length > 0) {
+    throw new Error(`duplicate required column: ${duplicates.join(", ")}`);
   }
   if (table.rows.length === 0) {
     throw new Error("empty table: OpenAI Standard pricing table has no rows");
@@ -122,6 +135,10 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
         }),
       );
     }
+  }
+
+  if (rows.length === 0) {
+    throw new Error("empty table: OpenAI Standard pricing table has no price rows");
   }
 
   return { rows, warnings };
