@@ -19,6 +19,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
    _Done:_ a written answer to "does Wayback work well enough as Tier 3?"
 7. **Parsers and witness adapters.** One letter per branch. Open questions in `docs/source-spike.md` section 7 (OpenAI `cache_write`, Google price schedules, SQL `NULL` uniqueness) stay open until the step that needs them.
    - **7a.** Anthropic parser: header-based, fixture tests, fail-closed cases (missing column, bad unit, empty table, 0 or 2 matching tables, unparseable tier parenthetical).
+     _Done:_ `parseAnthropicPricing()` in `src/core/pricing/anthropic.ts`. Tests in `src/core/pricing/anthropic.test.ts` pass against `tests/fixtures/anthropic-pricing.md`.
    - **7b.** models.dev witness adapter, compared against Anthropic only. Decide here whether a later "verify mode" fallback is worth it.
    - **7c.** OpenAI parser, Standard section only. Assert `Prices per 1M tokens.` Skip `-` cells. Do not guess a 272K long-context threshold.
    - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
