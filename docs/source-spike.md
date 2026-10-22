@@ -114,7 +114,7 @@ Strip trailing asterisks before matching labels. Any other label is reported as 
 - JSON: `provider -> models -> model`. `cost: { input, output, cache_read, cache_write }` in USD per 1M tokens.
 - `release_date` and `last_updated` are **model** dates, not price-change dates. No price history.
 - `cache_write` only maps to the 5-minute price. Compare only dimensions both sides have.
-- Model names differ from official pages (`claude-haiku-4-5` vs "Claude Haiku 4.5" vs dated API IDs). This is what `model_aliases` is for.
+- Model names differ from official pages (`claude-haiku-4-5` vs "Claude Haiku 4.5" vs dated API IDs). This is what `model_aliases` is for. Step 7b matches Anthropic by cleaning the display name (strip a trailing `(latest)` only) and using the same page-label slug as the official parser (`claude-haiku-4.5`). API ids are not the join key. The alias table is still a later step.
 - 5.6 MB: gitignored, never committed.
 
 ### 3.5 LiteLLM (witness)
@@ -204,7 +204,7 @@ We cannot make a scraper that never breaks. The goal is that a break is **loud, 
 1. **Locate by meaning.** Survives reordering, restyling and extra rows.
 2. **Fail closed.** A structural change becomes `parser_suspect` plus an alert. Nothing is diffed or published from a suspect parse, and the site keeps the last confirmed price with a banner.
 3. **Strict where it matters.** A parse failure on a **tracked** model fails the run. The same failure on an untracked model is only a warning, so an exotic section elsewhere on the page cannot take the whole source down.
-4. **Cross-check with witnesses (proposed, to decide in stage 2).** When the parser breaks, a fallback "verify mode" can still ask: for each tracked model, does the official snapshot still contain the price we believe is current, near the model name? If yes, nothing changed and we only lost extraction for now. If no, flag for a human. Limits: it cannot know dimensions, tiers, schedules or dates, it only confirms a number appears, and witnesses lag after real changes, so it detects and does not replace extraction.
+4. **Cross-check with witnesses (deferred).** A fallback "verify mode" that only asks whether a current price still appears near a model name is not worth building yet. It cannot know dimensions, tiers, schedules, or dates, and witnesses lag after real changes. Revisit in Phase 5 if `parser_suspect` is common. Until then, a break is `parser_suspect` plus a fixture update (item 5).
 5. **Fix workflow:** save the new page as a dated fixture, write a failing test, adjust the adapter, ship. Keep dated fixtures (`google-pricing.2026-10-18.html`); the Dec 1 change gives a free real-world sample.
 
 We will measure the real break rate from `fetch_log` before adding heavier machinery (LLM second extractor, review chat). Add those when the specific pain shows up, not before.
@@ -214,7 +214,7 @@ We will measure the real break rate from `fetch_log` before adding heavier machi
 ## 6. Plan (stages replacing step 7)
 
 1. Anthropic parser, header-based, tested against the fixture. **Done:** `src/core/pricing/anthropic.ts` (`parseAnthropicPricing`). Fail-closed tests: `src/core/pricing/anthropic.test.ts`.
-2. models.dev adapter + a comparison script for Anthropic's models (decide the verify-mode fallback here).
+2. models.dev adapter + a comparison script for Anthropic's models. **Done:** `src/core/pricing/models-dev.ts` (`parseModelsDevAnthropic`) and `scripts/compare-models-dev-anthropic.ts`. Fail-closed tests: `src/core/pricing/models-dev.test.ts`. **Verify-mode decision:** do not build it now. It cannot see dimensions, tiers, schedules, or dates; witnesses lag after real changes; and there is no `fetch_log` yet so there is no measured break rate. Revisit in Phase 5 if `parser_suspect` shows up.
 3. OpenAI parser (Standard section only).
 4. Google parser (largest job; cell grammar for 4 formats).
 5. LiteLLM adapter as a third witness.
