@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "spike:sources": "tsx scripts/spike-sources.ts",
-    "spike:wayback": "tsx --env-file=.env scripts/spike-wayback.ts"
+    "spike:wayback": "tsx --env-file=.env scripts/spike-wayback.ts",
+    "compare:models-dev-anthropic": "tsx scripts/compare-models-dev-anthropic.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
