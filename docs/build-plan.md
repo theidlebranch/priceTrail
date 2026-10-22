@@ -27,6 +27,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
    - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
      _Done:_ `parseGooglePricing()` in `src/core/pricing/google.ts`. Tests in `src/core/pricing/google.test.ts` pass against `tests/fixtures/google-pricing.2026-10-18.html`. Standard text prices only. A schedule stays as separate `validFrom` / `validUntil` rows. Storage and modality prices are warnings, not rows. A heading with two model codes emits no rows.
    - **7e.** LiteLLM witness adapter. Filter `litellm_provider` + `mode == "chat"`. Convert per-token costs with `decimal.js`, never float math.
+     _Done:_ `parseLiteLLM()` in `src/core/pricing/litellm.ts`. Tests in `src/core/pricing/litellm.test.ts` pass against `tests/fixtures/litellm-sample.json`. Chat rows for Anthropic, OpenAI, and Gemini only. Per-token costs convert with `decimal.js`. Context-tier and other cost fields are warnings, not rows. A dated snapshot that disagrees omits that dimension. No comparison script: API ids do not join official page-label slugs until the alias table exists.
 
 ### Phase 3: Data foundation
 
