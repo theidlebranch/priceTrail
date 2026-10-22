@@ -99,12 +99,13 @@ Strip trailing asterisks before matching labels. Any other label is reported as 
 
 - **Cell formats (four seen):**
   1. Plain: `$X`.
-  2. **Context tiers:** `$2.00, prompts <= 200k tokens$4.00, prompts > 200k tokens` (seen on `gemini-3.1-pro-preview`, `gemini-2.5-pro`). The two tiers are glued together because `.text()` joins nested nodes without separators.
+  2. **Context tiers:** `$2.00, prompts <= 200k tokens$4.00, prompts > 200k tokens` (seen on `gemini-3.1-pro-preview`, `gemini-2.5-pro`). The two tiers are glued together because `.text()` joins nested nodes without separators. The second tier sometimes omits the word `tokens` (`prompts > 200k`). Accept that. Do not accept `<`. That is a different boundary from `<=`.
   3. **Price schedule:** `$2.00 through November 30, 2026.$4.00 starting December 1, 2026.` (seen on `gemini-4-argon`, `gemini-3.8-flash`). This is a published future price change.
-  4. **Mixed dimensions:** `Context caching price` can contain a cache-read price **and** a storage price (`$0.50 / 1,000,000 tokens per hour (storage price)`). Split into segments and map each by its text. Storage maps to `cache_storage` (out of MVP). Taking every `$` in the cell would put storage in the wrong dimension.
+  4. **Mixed dimensions:** `Context caching price` can contain a cache-read price **and** a storage price (`$0.50 / 1,000,000 tokens per hour (storage price)`). Split into segments and map each by its text. **Decided in 7d:** the storage segment is a warning. It is not a `cache_read` row, and `cache_storage` is not added to the shared shape yet. Taking every `$` in the cell would put storage in the wrong dimension.
 - **Rules:**
   - Cell grammar is strict. An unknown pattern for a **tracked** model throws. For an untracked model it is a warning (section 5).
-  - Sections with more than one model code under one `h2` (the "Live" section lists 3) cannot attribute a table to one model. Flag as out of MVP.
+  - Sections with more than one model code under one `h2` (the "Live" section lists 3) cannot attribute a table to one model. Flag as out of MVP. **Decided in 7d:** this also includes `gemini-3.1-pro-preview`, because that heading lists a second code, `gemini-3.1-pro-preview-customtools`. The parser emits no rows for that heading. The tier grammar is covered by Gemini 2.5 Pro, which has one code.
+  - **Decided in 7d:** a storage amount inside a cache cell is a warning, not a `cache_read` row, and `cache_storage` is not added to the shared shape. A modality parenthetical such as `(text)` or `(audio)` is also a warning, not `input` or `output`. A plain price on the same model can still become a row.
   - `Free of charge` and `Not available` are not prices. Do not read the Free column.
   - Audio and transcription models are not per-token text pricing. Flag as out of MVP dimensions.
 - **Hash the parsed schedule, not the "current" price** (section 4), so the hash does not change on Dec 1 when the page did not.
@@ -216,7 +217,7 @@ We will measure the real break rate from `fetch_log` before adding heavier machi
 1. Anthropic parser, header-based, tested against the fixture. **Done:** `src/core/pricing/anthropic.ts` (`parseAnthropicPricing`). Fail-closed tests: `src/core/pricing/anthropic.test.ts`.
 2. models.dev adapter + a comparison script for Anthropic's models. **Done:** `src/core/pricing/models-dev.ts` (`parseModelsDevAnthropic`) and `scripts/compare-models-dev-anthropic.ts`. Fail-closed tests: `src/core/pricing/models-dev.test.ts`. **Verify-mode decision:** do not build it now. It cannot see dimensions, tiers, schedules, or dates; witnesses lag after real changes; and there is no `fetch_log` yet so there is no measured break rate. Revisit in Phase 5 if `parser_suspect` shows up.
 3. OpenAI parser (Standard section only). **Done:** `src/core/pricing/openai.ts` (`parseOpenAiPricing`). Fail-closed tests: `src/core/pricing/openai.test.ts`. OpenAI's single cache-write column maps to `cache_write`.
-4. Google parser (largest job; cell grammar for 4 formats).
+4. Google parser (largest job; cell grammar for 4 formats). **Done:** `src/core/pricing/google.ts` (`parseGooglePricing`). Fail-closed tests: `src/core/pricing/google.test.ts`. Standard text prices only. Schedules are `validFrom` / `validUntil` rows. Storage and modality prices are warnings.
 5. LiteLLM adapter as a third witness.
 6. Later: new-model detection, deprecation detection (missing on N consecutive checks), hash-based change detection (Phase 5).
 
@@ -227,7 +228,7 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 ## 7. Decisions still open (confirm during the parser stages)
 
 - OpenAI single cache-write price: **Decided in 7c.** Map it to dimension `cache_write`. Do not treat it as a 5-minute or 1-hour price.
-- Published price schedules (Google): keep as segments with `validFrom`/`validUntil` (proposed). Sales and promo periods remain out of scope, but a schedule written inside the price cell is in the data and must be parsed.
+- Published price schedules (Google): **Decided in 7d.** Keep each segment as its own row with `validFrom` / `validUntil`. Do not collapse a schedule to today's price. Sales and promo periods remain out of scope.
 - Postgres: `unique(price_version_id, dimension, condition)` treats NULL conditions as distinct. Use `NOT NULL DEFAULT '{}'` or `NULLS NOT DISTINCT` (Postgres 15+). Put this in the step-10 note.
 - Google: do the Batch, Flex, Priority and Contributor modes matter? Out of MVP for now.
 - Do we need a modality-specific input dimension (audio, image) later? Out of MVP.
