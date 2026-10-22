@@ -12,6 +12,8 @@ const dimensionSchema = z.enum([
 const conditionSchema = z.object({
   promptTokensOver: z.number().int().positive().optional(),
   promptTokensAtMost: z.number().int().positive().optional(),
+  promptTokensUnder: z.number().int().positive().optional(),
+  promptTokensAtLeast: z.number().int().positive().optional(),
 });
 
 export const normalizedPriceSchema = z.object({
