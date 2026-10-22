@@ -25,8 +25,8 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
    - **7c.** OpenAI parser, Standard section only. Assert `Prices per 1M tokens.` Skip `-` cells. Do not guess a 272K long-context threshold.
      _Done:_ `parseOpenAiPricing()` in `src/core/pricing/openai.ts`. Tests in `src/core/pricing/openai.test.ts` pass against `tests/fixtures/openai-pricing.md`. OpenAI's single cache-write column maps to `cache_write`.
    - **7d.** Google parser (largest job): four cell formats, English-only, Paid column, unmapped labels as warnings.
+     _Done:_ `parseGooglePricing()` in `src/core/pricing/google.ts`. Tests in `src/core/pricing/google.test.ts` pass against `tests/fixtures/google-pricing.2026-10-18.html`. Standard text prices only. A schedule stays as separate `validFrom` / `validUntil` rows. Storage and modality prices are warnings, not rows. A heading with two model codes emits no rows.
    - **7e.** LiteLLM witness adapter. Filter `litellm_provider` + `mode == "chat"`. Convert per-token costs with `decimal.js`, never float math.
-   _Done:_ parser tests pass against the fixture for that letter.
 
 ### Phase 3: Data foundation
 
