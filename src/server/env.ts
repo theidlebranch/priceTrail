@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readPostgresUrl } from "@/server/postgres-url";
 
 /**
  * Runtime check for DATABASE_URL.
@@ -29,7 +30,7 @@ function isPostgresUrl(value: string): boolean {
   }
 
   try {
-    return new URL(value).hostname.length > 0;
+    return readPostgresUrl(value).hosts.some((host) => host.length > 0);
   } catch {
     return false;
   }

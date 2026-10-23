@@ -18,6 +18,15 @@ describe("parseDatabaseEnv", () => {
     });
   });
 
+  it("accepts a postgres URL with more than one host and port", () => {
+    const databaseUrl =
+      "postgresql://price_trail:secret@host1:5432,host2:5433/price_trail?sslmode=require";
+
+    expect(parseDatabaseEnv({ DATABASE_URL: databaseUrl })).toEqual({
+      databaseUrl,
+    });
+  });
+
   it("throws when DATABASE_URL is missing", () => {
     expect(() => parseDatabaseEnv({})).toThrow(/DATABASE_URL/);
   });

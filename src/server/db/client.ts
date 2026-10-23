@@ -1,26 +1,48 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/server/db/schema";
+import { readPostgresUrl } from "@/server/postgres-url";
 
 /**
  * Settings for one short-lived script connection.
  *
  * max: 1 means one connection, not a pool. A ping script does not need more,
  * and a hosted database has a small connection limit.
- * ssl is set only when the URL asks for it. Hosted Postgres (Neon) rejects
- * a connection that is not encrypted. A local database usually does not
- * send sslmode=require, so we leave SSL off in that case.
+ *
+ * When TLS is on, ssl is an object with certificate checks enabled.
+ * Postgres.js treats the string "require" as "encrypt, but skip the
+ * certificate check", so that string is not used here.
+ *
+ * sslmode=require always turns the check on. If sslmode is missing, a
+ * remote host gets the same check, and a local host does not. Local means
+ * an empty host, localhost, 127.0.0.1, or ::1. Any other sslmode is left
+ * for Postgres.js to read from the URL.
  */
+const verifiedTls = { rejectUnauthorized: true } as const;
+
 export function connectionOptions(databaseUrl: string): {
   max: number;
-  ssl?: "require";
+  ssl?: { rejectUnauthorized: true };
 } {
-  const sslmode = new URL(databaseUrl).searchParams.get("sslmode");
+  const { hosts, sslmode } = readPostgresUrl(databaseUrl);
+  const remote = hosts.some((host) => !isLocalHost(host));
 
-  return {
-    max: 1,
-    ...(sslmode === "require" ? { ssl: "require" as const } : {}),
-  };
+  if (sslmode === "require" || (sslmode === null && remote)) {
+    return { max: 1, ssl: verifiedTls };
+  }
+
+  return { max: 1 };
+}
+
+function isLocalHost(host: string): boolean {
+  const name = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+
+  return (
+    name.length === 0 ||
+    name.toLowerCase() === "localhost" ||
+    name === "127.0.0.1" ||
+    name === "::1"
+  );
 }
 
 /**
