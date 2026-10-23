@@ -34,19 +34,19 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 8. **Database setup.** Local Postgres (Docker) or a hosted free tier, plus Drizzle config and an env file validated with Zod.  
    _Done:_ Neon, via a normal Postgres URL. `parseDatabaseEnv()` in `src/server/env.ts` rejects a missing or non-postgres URL. `pnpm db:ping` runs `select 1` and prints `1`. No tables yet.
 9. **First tables.** `providers`, `models`, `model_aliases`. Generate and run the first migration.  
-   _Done:_ tables exist and Drizzle Studio shows them.
+   _Done:_ `providers`, `models`, and `model_aliases` in `src/server/db/schema.ts`. Migration `drizzle/0000_identity_tables.sql`. `pnpm db:migrate` applied it, and those three tables are in the public schema. Ids are bigint identity columns. `model_alias_kind` is a Postgres enum. No rows yet.
 10. **Price tables.** `price_components` (dimension, unit, amount, condition) and `price_versions` (the bracket fields, `supersedes_id`).  
-    _Done:_ migration runs. Write a short note on why you chose components over fixed price columns. The `NULL` uniqueness question from the spike belongs in that note.
+    _Done when:_ migration runs. Write a short note on why you chose components over fixed price columns. The `NULL` uniqueness question from the spike belongs in that note.
 11. **Evidence tables.** `observations`, `observation_items`, `fetch_log`.  
-    _Done:_ migration runs.
+    _Done when:_ migration runs.
 12. **Repository layer.** Define repository interfaces in `src/server/db/repositories`, with a Drizzle implementation.  
-    _Done:_ a test reads and writes through a repository.
+    _Done when:_ a test reads and writes through a repository.
 13. **`publishPriceVersion()`.** The only function allowed to write prices, with tests for the happy path, corrections via `supersedes_id`, and precision labeling.  
-    _Done:_ tests pass.
+    _Done when:_ tests pass.
 14. **Architecture test.** Write a test that fails if any file other than the publish module writes to the price tables.  
-    _Done:_ the test passes, and fails when you deliberately break the rule.
+    _Done when:_ the test passes, and fails when you deliberately break the rule.
 15. **Seed.** Write a seed script with a few real models and hand-verified prices, published through `publishPriceVersion()`.  
-    _Done:_ `npm run seed` fills the database.
+    _Done when:_ `npm run seed` fills the database.
 
 ### Phase 4: Public pages with seeded data
 

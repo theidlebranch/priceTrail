@@ -13,7 +13,9 @@
     "spike:sources": "tsx scripts/spike-sources.ts",
     "spike:wayback": "tsx --env-file=.env scripts/spike-wayback.ts",
     "compare:models-dev-anthropic": "tsx scripts/compare-models-dev-anthropic.ts",
-    "db:ping": "tsx --env-file=.env scripts/db-ping.ts"
+    "db:ping": "tsx --env-file=.env scripts/db-ping.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
