@@ -32,7 +32,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 ### Phase 3: Data foundation
 
 8. **Database setup.** Local Postgres (Docker) or a hosted free tier, plus Drizzle config and an env file validated with Zod.  
-   _Done:_ a script connects and runs `select 1`.
+   _Done:_ Neon, via a normal Postgres URL. `parseDatabaseEnv()` in `src/server/env.ts` rejects a missing or non-postgres URL. `pnpm db:ping` runs `select 1` and prints `1`. No tables yet.
 9. **First tables.** `providers`, `models`, `model_aliases`. Generate and run the first migration.  
    _Done:_ tables exist and Drizzle Studio shows them.
 10. **Price tables.** `price_components` (dimension, unit, amount, condition) and `price_versions` (the bracket fields, `supersedes_id`).  
