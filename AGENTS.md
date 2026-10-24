@@ -1,6 +1,6 @@
 # Project Instructions
 
-PriceTrail is an open, source-backed history of AI model API prices. Every published number must trace back to evidence. The design lives in [docs/architecture.md](docs/architecture.md). The order of work lives in [docs/build-plan.md](docs/build-plan.md). Source findings live in [docs/source-spike.md](docs/source-spike.md). If the sequence and the design disagree, the build plan wins.
+PriceTrail is an open, source-backed history of AI model API prices. Every published number must trace back to evidence. The design lives in [docs/architecture.md](docs/architecture.md). The order of work lives in [docs/build-plan.md](docs/build-plan.md). Source findings live in [docs/source-spike.md](docs/source-spike.md). If the sequence and the design disagree, the build plan wins. When a step adds a database table, update [docs/price-tables.md](docs/price-tables.md) in that same branch with the new table on the diagram and a filled example of every column, and keep the earlier tables.
 
 ## Stack
 

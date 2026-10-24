@@ -35,7 +35,7 @@ Signal sources:
 
 - **LiteLLM** `model_prices_and_context_window.json`, plus the GitHub commits Atom feed for that file (a timestamped "something changed in the cost map" signal without diffing the whole JSON ourselves).
 - **OpenRouter** `/models` API (the one aggregator that includes prices directly).
-- **Provider changelogs / release notes** (RSS or plain pages). A new entry matching pricing-related keywords enqueues a fetch of the official pricing source. These often carry real announcement dates, which feed `effective_from`.
+- **Provider changelogs / release notes** (RSS or plain pages). A new entry matching pricing-related keywords enqueues a fetch of the official pricing source. These often carry real announcement dates, which feed `announced_on`.
 - **Provider `/models` endpoints** (official, authenticated, no prices): the best source for discovering new models.
 
 Diff logic:
@@ -58,13 +58,13 @@ For each active source:
    - Marketing-style page that resists clean parsing → LLM extraction allowed, but only with the grounding check below.
 3. **Sanity-check the parse before trusting any diff.** Expected models present? Prices within a plausible range (e.g. no value changed by >10x without going to review)? Row count not suddenly zero? If it fails, record `parser_suspect` in `fetch_log` and alert. **A parser break is not a price change.** Nothing is diffed or published from a suspect parse.
 4. **Hash** `parsed_data` (`content_hash`) and compare it to the latest observation for this source.
-   - **Same hash:** write a `fetch_log` row, bump `sources.last_checked_at`, bump `price_versions.last_confirmed_at` for the offerings on this page. No new observation, no raw copy stored, no Wayback call.
+   - **Same hash:** write a `fetch_log` row and bump `sources.last_checked_at`. The open price version stays open, so `last_seen_at` stays blank. No new observation, no raw copy stored, no Wayback call.
    - **Different hash:** create an `observations` row (page-level), store `raw_content` and `raw_content_hash`, create one `observation_items` row per model on the page, and trigger Tier 3.
 5. **Per item:** run grounding (below). Items that pass get `review_status = ok`; items that fail get `flagged`. Then call `publishPriceVersion()` for `ok` items (it opens/closes versions and records the evidence link).
 
 **Grounding check (column-aware):** it is not enough that a number appears near a model name; a $3 cache price would pass as an input price. For every extracted value, the check must locate it in the raw text (or parsed table) _in the same row as the model name and under the header matching the dimension being claimed_. The result (matched snippet, location, or the reason for failure) is stored on the item in `grounding_result`. Structured-table parses get the same check as a cheap assertion.
 
-**Effective dates:** when a change is detected, the new version records the bracket `[previous observation's fetched_at, this observation's fetched_at]`. If a changelog/announcement source supplies a date, store it as `announced_effective_at` and prefer it for display.
+**Effective dates:** when a change is detected, set `last_seen_at` on the older row to the last fetch that still showed the old price, and set `first_seen_at` on the new row to this fetch. The change sits between those two times. If a changelog or announcement supplies a date, store it as `announced_on` and prefer it for the chart start.
 
 ### Tier 3 — Archive (evidence capture, same fetch as Tier 2)
 
@@ -83,20 +83,22 @@ This isn't a background job with a log file; it's a page the reviewer looks at. 
 
 **What the public site shows while something is pending:** the last confirmed price plus a banner such as "A possible change is under review." Never silently show stale data, and never show the unreviewed number.
 
-**Corrections are new rows, not edits.** If a published version turns out to be wrong, close it and insert a correction version (`supersedes_id` points to the wrong one, `kind = 'correction'`), so the history stays honest and auditable.
+**Corrections are new rows, not edits.** If a published version turns out to be wrong, set `retracted_at` on that row and insert a fix row. `replaces_version_id` on the fix points at the wrong row. Public pages skip a retracted row. A trust view can follow the link. The wrong row stays in the table.
 
 ---
 
 ## Data model (v3)
 
 ```sql
-providers (id, name, slug)
+labs (id, name, slug)
+  -- The company that released the model. A later host such as Azure is
+  -- offerings.platform, not a row in this table.
 
-models (id, provider_id, name, slug, deprecated_at)   -- unique(provider_id, slug)
+models (id, lab_id, name, slug, deprecated_at)   -- unique(lab_id, slug)
 
 model_aliases (id, model_id, alias, kind)
   -- kind: 'latest_pointer' | 'dated_snapshot' | 'former_name' | 'aggregator_slug'
-  -- Resolves provider aliases and renames to ONE model so a rename never
+  -- Resolves lab aliases and renames to ONE model so a rename never
   -- splits a price history in two. Tier 1 resolves slugs through this table
   -- before deciding something is a new candidate. unique(alias).
 
@@ -143,20 +145,18 @@ observation_items (id, observation_id, offering_id, parsed_item,
   -- only 'ok' and 'confirmed' items may be passed to publishPriceVersion()
 
 -- One version = the full set of price components valid for a period.
--- ANY component change closes the version and opens a new one.
+-- ANY component change fills last_seen_at on the open row and opens a new one.
 price_versions (id, offering_id,
-                effective_from, effective_until,
-                effective_basis,
-                changed_after, first_observed_at, announced_effective_at,
-                kind, supersedes_id,
-                primary_item_id, last_confirmed_at)
-  -- effective_basis: 'announced' | 'observed'
-  -- 'observed' means: changed on or before first_observed_at and after
-  -- changed_after (the last observation that still showed the old price).
-  -- effective_from is the best single date for display/charting (announced
-  -- date if known, else first_observed_at); the bracket is kept alongside
-  -- so the UI can say "changed on or before Oct 3".
-  -- kind: 'regular' | 'correction'
+                first_seen_at, announced_on, last_seen_at,
+                retracted_at, replaces_version_id)
+  -- Chart start is announced_on when that is filled, otherwise first_seen_at.
+  -- last_seen_at blank means this row is still the current price. Once
+  -- filled, it is the last fetch that still showed this price.
+  -- The change window is the older row's last_seen_at through the newer
+  -- row's first_seen_at. A normal change does not point at its neighbor.
+  -- retracted_at filled means public pages skip this row. The row stays.
+  -- replaces_version_id is only for a trust view. It points at the
+  -- retracted row this fix replaced.
 
 price_components (id, price_version_id, dimension, unit, amount, condition)
   -- dimension: 'input' | 'output' | 'cache_read' | 'cache_write_5m'
@@ -176,7 +176,7 @@ price_version_evidence (price_version_id, observation_item_id)
 
 -- Tier 1 output: brand-new model slugs seen in an aggregator or official
 -- /models endpoint that we don't track yet (after alias resolution).
-candidate_models (id, provider_id, raw_name, raw_slug, source_id,
+candidate_models (id, lab_id, raw_name, raw_slug, source_id,
                   first_seen_at, status, resolved_model_id,
                   reviewed_by, reviewed_at, review_note)
   -- status: 'pending_review' | 'approved' | 'rejected'
