@@ -8,6 +8,20 @@
       "when": 1792751913319,
       "tag": "0000_identity_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792838333222,
+      "tag": "0001_price_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792839600000,
+      "tag": "0002_simpler_labs_and_price_versions",
+      "breakpoints": true
     }
   ]
 }

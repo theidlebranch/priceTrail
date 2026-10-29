@@ -34,14 +34,14 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 8. **Database setup.** Local Postgres (Docker) or a hosted free tier, plus Drizzle config and an env file validated with Zod.  
    _Done:_ Neon, via a normal Postgres URL. `parseDatabaseEnv()` in `src/server/env.ts` rejects a missing or non-postgres URL. `pnpm db:ping` runs `select 1` and prints `1`. No tables yet.
 9. **First tables.** `providers`, `models`, `model_aliases`. Generate and run the first migration.  
-   _Done:_ `providers`, `models`, and `model_aliases` in `src/server/db/schema.ts`. Migration `drizzle/0000_identity_tables.sql`. `pnpm db:migrate` applied it, and those three tables are in the public schema. Ids are bigint identity columns. `model_alias_kind` is a Postgres enum. No rows yet.
+   _Done:_ `providers`, `models`, and `model_aliases` in `src/server/db/schema.ts`. Migration `drizzle/0000_identity_tables.sql`. `pnpm db:migrate` applied it, and those three tables are in the public schema. Ids are bigint identity columns. `model_alias_kind` is a Postgres enum. No rows yet. A later pass on this branch renamed `providers` to `labs` and `provider_id` to `lab_id` in `drizzle/0002_simpler_labs_and_price_versions.sql`. `pnpm db:migrate` applied that file. A lab is the company that released the model. A host stays on `offerings.platform`.
 10. **Price tables.** `price_components` (dimension, unit, amount, condition) and `price_versions` (the bracket fields, `supersedes_id`).  
-    _Done when:_ migration runs. Write a short note on why you chose components over fixed price columns. The `NULL` uniqueness question from the spike belongs in that note.
+    _Done:_ `offerings`, `price_versions`, and `price_components` in `src/server/db/schema.ts`. Migration `drizzle/0001_price_tables.sql`. `pnpm db:migrate` applied it. Those three tables are in the public schema and have no rows. `offerings` is included because a price version must point at one. A price is a set of component rows, not fixed columns such as `input_price`: a new kind of price is a new row, plus a new enum value, not a new column. `condition` is `jsonb NOT NULL DEFAULT '{}'`, and `region` is `text NOT NULL DEFAULT 'global'`. Postgres treats two NULLs as different, so a nullable unique key would allow two "no tier" input prices, or two global offerings, for the same parent. `{}` means no tier. The same later pass cut `price_versions` down to `first_seen_at`, `announced_on`, `last_seen_at`, `retracted_at`, and `replaces_version_id`. Public history filters `retracted_at IS NULL` and does not follow `replaces_version_id`. The filled picture is [docs/price-tables.md](price-tables.md).
 11. **Evidence tables.** `observations`, `observation_items`, `fetch_log`.  
     _Done when:_ migration runs.
 12. **Repository layer.** Define repository interfaces in `src/server/db/repositories`, with a Drizzle implementation.  
     _Done when:_ a test reads and writes through a repository.
-13. **`publishPriceVersion()`.** The only function allowed to write prices, with tests for the happy path, corrections via `supersedes_id`, and precision labeling.  
+13. **`publishPriceVersion()`.** The only function allowed to write prices, with tests for the happy path, a retracted row plus `replaces_version_id`, and precision labeling.  
     _Done when:_ tests pass.
 14. **Architecture test.** Write a test that fails if any file other than the publish module writes to the price tables.  
     _Done when:_ the test passes, and fails when you deliberately break the rule.
@@ -60,7 +60,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 
 21. **Provider source interface.** `ProviderSource` (fetch + parse), wired around the Anthropic parser from 7a. Do not write a new parser here.
 22. **Sanity checks.** Pure functions in `core/verification` for "did the parse break?", with tests built from broken fixtures.
-23. **Hash and store.** Hash `parsed_data`; on a changed hash store an observation and items, otherwise only update `fetch_log` and `last_confirmed_at`.
+23. **Hash and store.** Hash `parsed_data`; on a changed hash store an observation and items, otherwise only update `fetch_log` and `sources.last_checked_at`. The open price version stays open.
 24. **Archive step.** Turn the Wayback spike into `wayback-client.ts` with a fake-fetch test suite, and fall back to stored `raw_content` on failure.
 25. **Run script.** Chain these into `scripts/run-verify.ts` for one provider.
 26. **Wire OpenAI, then Google.** One step each, using the parsers from 7c and 7d. This proves the plugin shape works.
@@ -87,8 +87,9 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 38. **Docs and ADRs cleanup.**
 39. **Post-MVP backlog:** RSS/JSON change feed, Wayback backfill, cloud platform APIs.
 
-Three tips:
+Tips:
 
 - Phases 1 to 4 give you a **live, real-looking site** early, which keeps motivation up. The hard pipeline work comes after you already have something to show.
 - The source spike changed parser order (Anthropic first, then OpenAI, then Google) and confirmed no Playwright and no LLM extraction for the MVP. The rest of Phases 5 to 8 stays as written.
 - Treat each step as one small branch and PR, even if you're alone. That's a habit worth building.
+- When a step adds a table, update [docs/price-tables.md](price-tables.md) in that same branch. Add the table to the diagram and add a filled example with every column. Keep the earlier tables and their rows. Do not start a second diagram.
