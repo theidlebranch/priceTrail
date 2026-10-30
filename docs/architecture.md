@@ -27,6 +27,70 @@ scheduled poll (every ~6h)    ────────────────�
                                                           (flagged items → review queue)
 ```
 
+## How a check is filed
+
+The program is the visit. The tables are where each ending is filed. The poller does not exist yet (build-plan step 23).
+
+A visit always writes `fetch_log`. It writes `observations` and `observation_items` only when the download worked, the mechanical checks passed, and the fingerprint of `parsed_data` is new. `raw_content` and `parsed_data` are both kept on that snapshot. Public pages do not load `raw_content`. Only the evidence view for one price reads it.
+
+```mermaid
+flowchart TD
+  startNode[Check one page] --> download[Download the page]
+  download -->|timeout or network error| logError[fetch_log fetch_error]
+  download -->|403 or 429 or 5xx| logBlocked[fetch_log fetch_error with HTTP status]
+  download -->|200| parse[Run our parser function]
+  parse -->|mechanical checks fail| logSuspect[fetch_log parser_suspect]
+  parse -->|checks pass| hashStep[Fingerprint the parsed prices]
+  hashStep -->|same as last snapshot| logSame[fetch_log unchanged]
+  hashStep -->|different or first snapshot| saveSnap[Save snapshot and one item per tracked offering]
+  saveSnap --> logChanged[fetch_log changed pointing at that snapshot]
+  logChanged --> wayback[Ask Wayback for a permalink]
+  wayback --> cellCheck[Cell check each item]
+```
+
+The cell check runs only after a snapshot exists, and only for offerings we already track. A model on the page with no offering is not an item. Its numbers stay inside `observations.parsed_data`.
+
+```mermaid
+flowchart TD
+  saved[Snapshot already saved] --> eachModel[For each tracked offering on it]
+  eachModel --> cell[Code looks for that number in the matching row and column]
+  cell -->|found| autoOk[review_status ok]
+  cell -->|not found| waitHuman[review_status flagged]
+  autoOk --> publishOk[publishPriceVersion may write the price]
+  waitHuman --> person[Review page]
+  person -->|confirm| publishHuman[review_status confirmed then publish]
+  person -->|reject| stopPrice[review_status rejected and publish nothing]
+```
+
+Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `sources`, `fetch_log`, `observations`, and `observation_items`. `fetch_triggers`, `candidate_models`, `verification_flags`, and `price_version_evidence` are not created yet. They are on the diagram so the path is visible. The row picture of the tables that exist is [price-tables.md](price-tables.md).
+
+```mermaid
+flowchart TD
+  labs --> models
+  models --> model_aliases
+  models --> offerings
+  offerings --> price_versions
+  price_versions --> price_components
+
+  sources --> fetch_log
+  sources --> observations
+  fetch_log -->|"only when changed"| observations
+  observations --> observation_items
+  offerings --> observation_items
+  observation_items -->|"ok or confirmed"| publishPriceVersion
+  publishPriceVersion --> price_versions
+  publishPriceVersion --> price_version_evidence_later["price_version_evidence (later)"]
+
+  witnesses[LiteLLM changelog OpenRouter] --> fetch_triggers_later["fetch_triggers (later)"]
+  witnesses --> candidate_models_later["candidate_models (later)"]
+  witnesses --> verification_flags_later["verification_flags (later)"]
+  fetch_triggers_later --> sources
+  candidate_models_later -->|"person approves"| models
+  verification_flags_later --> offerings
+```
+
+When something looks wrong, start at the table for that step. A failed download or `parser_suspect` is only a `fetch_log` row, and the page text was not kept. A waiting model is an `observation_items` row with `review_status` `flagged`. A wrong published number starts at `price_versions`, then the item that was allowed to publish, then the snapshot's `raw_content`.
+
 ### Tier 1 — Triggers (detection only, never writes a price)
 
 Cheap signals that tell Tier 2 _where to look sooner_. Every signal does one thing: enqueue a row in `fetch_triggers`, or raise a candidate/flag for review. None of them touches `price_versions`, `price_components`, or `observations`.
@@ -52,14 +116,14 @@ Runs on a schedule (every ~6 hours; cheap, it's a handful of HTTP GETs) and when
 
 For each active source:
 
-1. **Fetch** the page. Use conditional requests (`ETag` / `If-Modified-Since`) where the server supports them. If the page is JS-rendered, prefer fetching the underlying JSON the page loads; fall back to Playwright only when no such JSON exists.
+1. **Fetch** the page. If the page is JS-rendered, prefer fetching the underlying JSON the page loads; fall back to Playwright only when no such JSON exists. The parser is chosen from a map in code, keyed by the source URL.
 2. **Parse** into normalized, Zod-validated `parsed_data` (all models on the page):
    - Structured docs table → a hand-written parser, plain code, nothing to distrust.
    - Marketing-style page that resists clean parsing → LLM extraction allowed, but only with the grounding check below.
 3. **Sanity-check the parse before trusting any diff.** Expected models present? Prices within a plausible range (e.g. no value changed by >10x without going to review)? Row count not suddenly zero? If it fails, record `parser_suspect` in `fetch_log` and alert. **A parser break is not a price change.** Nothing is diffed or published from a suspect parse.
 4. **Hash** `parsed_data` (`content_hash`) and compare it to the latest observation for this source.
    - **Same hash:** write a `fetch_log` row and bump `sources.last_checked_at`. The open price version stays open, so `last_seen_at` stays blank. No new observation, no raw copy stored, no Wayback call.
-   - **Different hash:** create an `observations` row (page-level), store `raw_content` and `raw_content_hash`, create one `observation_items` row per model on the page, and trigger Tier 3.
+   - **Different hash:** create an `observations` row (page-level), store `raw_content` and `raw_content_hash`, create one `observation_items` row per tracked offering, and trigger Tier 3. A model with no offering stays inside `parsed_data` only.
 5. **Per item:** run grounding (below). Items that pass get `review_status = ok`; items that fail get `flagged`. Then call `publishPriceVersion()` for `ok` items (it opens/closes versions and records the evidence link).
 
 **Grounding check (column-aware):** it is not enough that a number appears near a model name; a $3 cache price would pass as an input price. For every extracted value, the check must locate it in the raw text (or parsed table) _in the same row as the model name and under the header matching the dimension being claimed_. The result (matched snippet, location, or the reason for failure) is stored on the item in `grounding_result`. Structured-table parses get the same check as a cheap assertion.
@@ -107,19 +171,19 @@ offerings (id, model_id, platform, region)
   -- migration when Azure/Bedrock/Vertex and regional pricing arrive).
   -- unique(model_id, platform, region).
 
-sources (id, url, type, adapter, active,
-         last_checked_at, last_changed_at, etag, last_modified)
-  -- type: 'official_current' | 'official_pdf' | 'wayback' | 'aggregator'
+sources (id, url, type, active, last_checked_at)
+  -- type: 'official' | 'wayback' | 'aggregator'
   --       | 'announcement' | 'changelog_feed' | 'platform_api'
-  -- adapter: 'markdown-docs-table' | 'json-api' | 'pdf-rate-card'
-  --          | 'html-marketing-page' | 'rss-feed'
+  -- Which parser runs for a url is a map in the fetcher, not a column.
+  -- last_checked_at is the latest check, including one where nothing changed.
 
 -- Operational log of EVERY fetch (including unchanged ones). Cheap, tiny,
 -- and the place where "parser broke" and "site blocked us" are visible.
 fetch_log (id, source_id, fetched_at, http_status,
            outcome, observation_id, note)
   -- outcome: 'unchanged' | 'changed' | 'parser_suspect' | 'fetch_error'
-  -- observation_id: set only when outcome = 'changed'
+  -- observation_id: set only when outcome = 'changed', and unique.
+  -- One snapshot belongs to one changed row. Many blank links stay allowed.
 
 -- Tier 1 -> Tier 2 work queue.
 fetch_triggers (id, source_id, reason, created_at, processed_at)
@@ -132,15 +196,17 @@ observations (id, source_id, fetched_at, content_hash, raw_content,
               raw_content_hash, parsed_data, archive_url, archive_status)
   -- content_hash is over parsed_data (not raw HTML, which changes for
   -- unrelated reasons: timestamps, ads, A/B markup, causing false diffs).
+  -- raw_content and parsed_data are both stored, and only on this row.
+  -- Public pages do not load raw_content.
   -- raw_content_hash is over the stored raw text, so the stored copy and
   -- the archive.org copy can be independently verified.
   -- archive_status: 'pending' | 'archived' | 'failed'
 
--- PER-MODEL extraction from one observation. Review status lives here,
--- because one page contains many models and each is checked on its own.
-observation_items (id, observation_id, offering_id, parsed_item,
-                   grounding_result, review_status,
-                   reviewed_by, reviewed_at, review_note)
+-- One tracked offering on one observation. The price JSON lives in
+-- observations.parsed_data. This row is the offering, the cell check,
+-- and the review stamp.
+observation_items (id, observation_id, offering_id, grounding_result,
+                   review_status, reviewed_by, reviewed_at, review_note)
   -- review_status: 'ok' | 'flagged' | 'confirmed' | 'rejected'
   -- only 'ok' and 'confirmed' items may be passed to publishPriceVersion()
 

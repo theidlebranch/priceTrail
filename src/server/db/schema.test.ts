@@ -2,15 +2,23 @@ import type { InferSelectModel } from "drizzle-orm";
 import { getTableConfig, type PgColumn } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
+  archiveStatus,
+  fetchOutcome,
+  fetchLog,
   labs,
   modelAliasKind,
   modelAliases,
   models,
+  observationItems,
+  observations,
   offerings,
   priceComponents,
   priceDimension,
   priceUnit,
   priceVersions,
+  reviewStatus,
+  sourceType,
+  sources,
 } from "@/server/db/schema";
 
 /**
@@ -300,5 +308,259 @@ describe("price tables", () => {
     expect(getTableConfig(reference.foreignTable).name).toBe("price_versions");
     expect(reference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
     expect(foreignKey.onDelete).toBe("restrict");
+  });
+});
+
+/**
+ * Turn a Drizzle check expression into the words it will send to Postgres.
+ * Column objects stay as their names. String pieces stay as written.
+ */
+function checkText(value: { queryChunks: readonly unknown[] }): string {
+  return value.queryChunks
+    .map((chunk) => {
+      if (typeof chunk === "string") {
+        return chunk;
+      }
+      if (
+        chunk &&
+        typeof chunk === "object" &&
+        "value" in chunk &&
+        Array.isArray(chunk.value) &&
+        chunk.value.every((part) => typeof part === "string")
+      ) {
+        return chunk.value.join("");
+      }
+      if (chunk && typeof chunk === "object" && "name" in chunk && typeof chunk.name === "string") {
+        return chunk.name;
+      }
+      return "";
+    })
+    .join("");
+}
+
+describe("evidence tables", () => {
+  it("defines a source as one page, with a closed set of types", () => {
+    const config = getTableConfig(sources);
+
+    expect(config.name).toBe("sources");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "url",
+      "type",
+      "active",
+      "last_checked_at",
+    ]);
+    expect(config.foreignKeys).toEqual([]);
+
+    const id = column(config.columns, "id");
+    expect(id.columnType).toBe("PgBigInt53");
+    expect(id.primary).toBe(true);
+    expect(id.generatedIdentity?.type).toBe("always");
+
+    const url = column(config.columns, "url");
+    expect(url.notNull).toBe(true);
+    expect(url.isUnique).toBe(true);
+
+    const type = column(config.columns, "type");
+    expect(type.notNull).toBe(true);
+    expect(type.enumValues).toEqual([
+      "official",
+      "wayback",
+      "aggregator",
+      "announcement",
+      "changelog_feed",
+      "platform_api",
+    ]);
+    expect(sourceType.enumName).toBe("source_type");
+    expect(sourceType.enumValues).toEqual(type.enumValues);
+
+    const active = column(config.columns, "active");
+    expect(active.notNull).toBe(true);
+    expect(active.getSQLType()).toBe("boolean");
+    expect(active.default).toBe(true);
+
+    const lastCheckedAt = column(config.columns, "last_checked_at");
+    expect(lastCheckedAt.notNull).toBe(false);
+    expect(lastCheckedAt.getSQLType()).toBe("timestamp with time zone");
+  });
+
+  it("defines an observation as one changed fetch of one source", () => {
+    const config = getTableConfig(observations);
+
+    expect(config.name).toBe("observations");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "source_id",
+      "fetched_at",
+      "content_hash",
+      "raw_content",
+      "raw_content_hash",
+      "parsed_data",
+      "archive_url",
+      "archive_status",
+    ]);
+
+    const id = column(config.columns, "id");
+    expect(id.columnType).toBe("PgBigInt53");
+    expect(id.primary).toBe(true);
+    expect(id.generatedIdentity?.type).toBe("always");
+
+    expect(column(config.columns, "source_id").notNull).toBe(true);
+
+    const fetchedAt = column(config.columns, "fetched_at");
+    expect(fetchedAt.notNull).toBe(true);
+    expect(fetchedAt.getSQLType()).toBe("timestamp with time zone");
+
+    for (const name of ["content_hash", "raw_content", "raw_content_hash"] as const) {
+      expect(column(config.columns, name).notNull).toBe(true);
+    }
+
+    const parsedData = column(config.columns, "parsed_data");
+    expect(parsedData.notNull).toBe(true);
+    expect(parsedData.getSQLType()).toBe("jsonb");
+
+    expect(column(config.columns, "archive_url").notNull).toBe(false);
+
+    const archive = column(config.columns, "archive_status");
+    expect(archive.notNull).toBe(true);
+    expect(archive.default).toBe("pending");
+    expect(archive.enumValues).toEqual(["pending", "archived", "failed"]);
+    expect(archiveStatus.enumName).toBe("archive_status");
+    expect(archiveStatus.enumValues).toEqual(archive.enumValues);
+
+    const foreignKey = foreignKeyTo(config, "source_id");
+    const reference = foreignKey.reference();
+    expect(getTableConfig(reference.foreignTable).name).toBe("sources");
+    expect(reference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
+    expect(foreignKey.onDelete).toBe("restrict");
+  });
+
+  it("defines one observation item per tracked offering, and defaults review to flagged", () => {
+    const config = getTableConfig(observationItems);
+
+    expect(config.name).toBe("observation_items");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "observation_id",
+      "offering_id",
+      "grounding_result",
+      "review_status",
+      "reviewed_by",
+      "reviewed_at",
+      "review_note",
+    ]);
+
+    const id = column(config.columns, "id");
+    expect(id.columnType).toBe("PgBigInt53");
+    expect(id.primary).toBe(true);
+    expect(id.generatedIdentity?.type).toBe("always");
+
+    expect(column(config.columns, "observation_id").notNull).toBe(true);
+    expect(column(config.columns, "offering_id").notNull).toBe(true);
+
+    const groundingResult = column(config.columns, "grounding_result");
+    expect(groundingResult.notNull).toBe(false);
+    expect(groundingResult.getSQLType()).toBe("jsonb");
+
+    const status = column(config.columns, "review_status");
+    expect(status.notNull).toBe(true);
+    expect(status.default).toBe("flagged");
+    expect(status.enumValues).toEqual(["ok", "flagged", "confirmed", "rejected"]);
+    expect(reviewStatus.enumName).toBe("review_status");
+    expect(reviewStatus.enumValues).toEqual(status.enumValues);
+
+    expect(column(config.columns, "reviewed_by").notNull).toBe(false);
+    const reviewedAt = column(config.columns, "reviewed_at");
+    expect(reviewedAt.notNull).toBe(false);
+    expect(reviewedAt.getSQLType()).toBe("timestamp with time zone");
+    expect(column(config.columns, "review_note").notNull).toBe(false);
+
+    expect(config.uniqueConstraints).toHaveLength(1);
+    expect(config.uniqueConstraints[0]?.name).toBe(
+      "observation_items_observation_id_offering_id",
+    );
+    expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
+      "observation_id",
+      "offering_id",
+    ]);
+
+    const observationKey = foreignKeyTo(config, "observation_id");
+    const observationReference = observationKey.reference();
+    expect(getTableConfig(observationReference.foreignTable).name).toBe("observations");
+    expect(observationReference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
+    expect(observationKey.onDelete).toBe("restrict");
+
+    const offeringKey = foreignKeyTo(config, "offering_id");
+    const offeringReference = offeringKey.reference();
+    expect(getTableConfig(offeringReference.foreignTable).name).toBe("offerings");
+    expect(offeringReference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
+    expect(offeringKey.onDelete).toBe("restrict");
+  });
+
+  it("requires an observation only when the fetch outcome is changed", () => {
+    const config = getTableConfig(fetchLog);
+
+    expect(config.name).toBe("fetch_log");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "source_id",
+      "fetched_at",
+      "http_status",
+      "outcome",
+      "observation_id",
+      "note",
+    ]);
+
+    const id = column(config.columns, "id");
+    expect(id.columnType).toBe("PgBigInt53");
+    expect(id.primary).toBe(true);
+    expect(id.generatedIdentity?.type).toBe("always");
+
+    expect(column(config.columns, "source_id").notNull).toBe(true);
+
+    const fetchedAt = column(config.columns, "fetched_at");
+    expect(fetchedAt.notNull).toBe(true);
+    expect(fetchedAt.getSQLType()).toBe("timestamp with time zone");
+
+    const httpStatus = column(config.columns, "http_status");
+    expect(httpStatus.notNull).toBe(false);
+    expect(httpStatus.getSQLType()).toBe("integer");
+
+    const outcome = column(config.columns, "outcome");
+    expect(outcome.notNull).toBe(true);
+    expect(outcome.enumValues).toEqual(["unchanged", "changed", "parser_suspect", "fetch_error"]);
+    expect(fetchOutcome.enumName).toBe("fetch_outcome");
+    expect(fetchOutcome.enumValues).toEqual(outcome.enumValues);
+
+    expect(column(config.columns, "observation_id").notNull).toBe(false);
+    expect(column(config.columns, "note").notNull).toBe(false);
+
+    const sourceKey = foreignKeyTo(config, "source_id");
+    const sourceReference = sourceKey.reference();
+    expect(getTableConfig(sourceReference.foreignTable).name).toBe("sources");
+    expect(sourceReference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
+    expect(sourceKey.onDelete).toBe("restrict");
+
+    const observationKey = foreignKeyTo(config, "observation_id");
+    const observationReference = observationKey.reference();
+    expect(getTableConfig(observationReference.foreignTable).name).toBe("observations");
+    expect(observationReference.foreignColumns.map((entry) => entry.name)).toEqual(["id"]);
+    expect(observationKey.onDelete).toBe("restrict");
+
+    expect(config.uniqueConstraints).toHaveLength(1);
+    expect(config.uniqueConstraints[0]?.name).toBe("fetch_log_observation_id");
+    expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
+      "observation_id",
+    ]);
+
+    expect(config.checks).toHaveLength(1);
+    const linkCheck = config.checks[0];
+    expect(linkCheck).toBeDefined();
+    expect(linkCheck!.name).toBe("fetch_log_observation_matches_outcome");
+    const text = checkText(linkCheck!.value).replace(/\s+/g, " ");
+    expect(text).toContain("outcome = 'changed'");
+    expect(text).toContain("observation_id IS NOT NULL");
+    expect(text).toContain("outcome <> 'changed'");
+    expect(text).toContain("observation_id IS NULL");
   });
 });
