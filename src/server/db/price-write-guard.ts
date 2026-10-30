@@ -11,7 +11,7 @@ import path from "node:path";
  *
  * The method name and the table name live in separate lists. This file must
  * not contain a real write, or the check would fail on itself. A renamed
- * import is not seen. The call has to sit on one line.
+ * import is not seen. A write may span lines.
  */
 
 const PUBLISH_MODULE = "src/server/db/publish-price-version.ts";
@@ -78,14 +78,35 @@ function sqlPatterns(): RegExp[] {
 
 const WRITE_PATTERNS = [...drizzlePatterns(), ...sqlPatterns()];
 
-function firstWrite(line: string): string | null {
-  for (const pattern of WRITE_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match?.[0] !== undefined) {
-      return match[0];
+function lineNumberAt(source: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index; i++) {
+    if (source.charCodeAt(i) === 10) {
+      line += 1;
     }
   }
-  return null;
+  return line;
+}
+
+function globalPattern(pattern: RegExp): RegExp {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  return new RegExp(pattern.source, flags);
+}
+
+function firstWrite(source: string, from: number): { index: number; text: string } | null {
+  let best: { index: number; text: string } | null = null;
+  for (const pattern of WRITE_PATTERNS) {
+    const regex = globalPattern(pattern);
+    regex.lastIndex = from;
+    const match = regex.exec(source);
+    if (match?.index === undefined || match[0] === undefined) {
+      continue;
+    }
+    if (best === null || match.index < best.index) {
+      best = { index: match.index, text: match[0] };
+    }
+  }
+  return best;
 }
 
 export function findForbiddenPriceWrites(file: PriceWriteFile): PriceWriteFinding[] {
@@ -94,17 +115,22 @@ export function findForbiddenPriceWrites(file: PriceWriteFile): PriceWriteFindin
   }
 
   const findings: PriceWriteFinding[] = [];
-  const lines = file.source.split(/\r?\n/);
-  for (const [index, line] of lines.entries()) {
-    const text = firstWrite(line);
-    if (text === null) {
-      continue;
+  let from = 0;
+  while (from <= file.source.length) {
+    const hit = firstWrite(file.source, from);
+    if (hit === null) {
+      break;
     }
     findings.push({
       path: normalizedPath(file.path),
-      line: index + 1,
-      text,
+      line: lineNumberAt(file.source, hit.index),
+      text: hit.text,
     });
+    const next = hit.index + hit.text.length;
+    if (next <= from) {
+      break;
+    }
+    from = next;
   }
   return findings;
 }

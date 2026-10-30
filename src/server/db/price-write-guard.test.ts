@@ -73,6 +73,49 @@ describe("price write guard", () => {
     expectWriteRejected("scripts/seed.sql", source, "DELETE FROM price_versions");
   });
 
+  it("throws when the price table is on the line after insert", () => {
+    const source = [
+      "const ready = true;",
+      "await db.insert(",
+      "  priceVersions",
+      ").values({});",
+    ].join("\n");
+
+    expect(
+      findForbiddenPriceWrites({
+        path: OTHER_FILE,
+        source,
+      }),
+    ).toEqual([
+      {
+        path: OTHER_FILE,
+        line: 2,
+        text: ".insert(\n  priceVersions\n)",
+      },
+    ]);
+  });
+
+  it("throws when the SQL table is on the line after INSERT INTO", () => {
+    const source = [
+      "-- seed",
+      "INSERT INTO",
+      "price_versions (offering_id) VALUES (1);",
+    ].join("\n");
+
+    expect(
+      findForbiddenPriceWrites({
+        path: "scripts/seed.sql",
+        source,
+      }),
+    ).toEqual([
+      {
+        path: "scripts/seed.sql",
+        line: 2,
+        text: "INSERT INTO\nprice_versions",
+      },
+    ]);
+  });
+
   it("allows the publish module to insert a price version", () => {
     expect(
       findForbiddenPriceWrites({
