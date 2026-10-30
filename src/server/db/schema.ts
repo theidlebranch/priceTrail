@@ -236,9 +236,8 @@ export const observations = pgTable("observations", {
  * offering is not a row here.
  *
  * review_status defaults to flagged. A forgotten status must not look
- * ready to publish. Only ok and confirmed may later be passed to
- * publishPriceVersion(). That function does not exist yet, and this table
- * does not write a price.
+ * ready to publish. Only ok and confirmed may be passed to
+ * publishPriceVersion(). This table does not write a price.
  */
 export const reviewStatus = pgEnum("review_status", ["ok", "flagged", "confirmed", "rejected"]);
 

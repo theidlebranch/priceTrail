@@ -19,8 +19,8 @@ import { labs, modelAliases, models, offerings } from "@/server/db/schema";
  * This file only loads and saves catalog rows. It does not parse a page,
  * set review_status, or open a price period. A new job gets a new file.
  * It does not grow this one. Nothing under repositories/ inserts into
- * price_versions or price_components. publishPriceVersion() is that writer,
- * and it does not exist yet.
+ * price_versions or price_components. publishPriceVersion() is that writer.
+ * It lives in src/server/db/publish-price-version.ts.
  *
  * A missing row is null. A duplicate or a broken foreign key throws. Those
  * errors come from Postgres (23505 and 23503). This file does not catch

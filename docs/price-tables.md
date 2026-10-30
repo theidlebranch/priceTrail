@@ -1,6 +1,6 @@
 # How the price tables fit together
 
-This file is a picture of the database as it exists today. The rows below are a reading aid. They are not inserted. The real seed is build-plan step 15, and it must go through `publishPriceVersion()`, which does not exist yet. Do not turn this file into SQL and run it. Only that function may write prices.
+This file is a picture of the database as it exists today. The rows below are a reading aid. They are not inserted. The real seed is build-plan step 15, and it must go through `publishPriceVersion()`. Do not turn this file into SQL and run it. Only that function may write prices.
 
 When a later step adds a table, update this file in that same branch. Add the table to the diagram, and add a filled example that includes every column. Keep the earlier tables and their filled rows. Do not open a second file.
 
@@ -107,7 +107,7 @@ One item is offering 1 on observation 1. The Haiku input price lives once, in ob
 
 `review_status` is `ok` so you can see a row a later publish function would be allowed to accept. The database default is `flagged` when a writer forgets to set a status. This example sets `ok` on purpose. `reviewed_by`, `reviewed_at`, and `review_note` are blank because no person reviewed it.
 
-An `ok` item still does not insert a price. Only `publishPriceVersion()` can do that, and it does not exist yet.
+An `ok` item still does not insert a price. Only `publishPriceVersion()` can do that. This picture does not call it.
 
 ### fetch_log
 
@@ -158,7 +158,7 @@ WHERE offering_id = $1
   AND last_seen_at IS NULL;
 ```
 
-There should be one such row per offering. `publishPriceVersion()` (step 13) keeps that true. This file does not write that function.
+There should be one such row per offering. `publishPriceVersion()` keeps that true. This file does not call it.
 
 ## Example 1: a normal price change
 
