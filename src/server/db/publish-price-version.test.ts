@@ -4,6 +4,8 @@
  * Input checks run without a database, so CI still sees them fail on purpose.
  * The writes talk to Neon. They skip when DATABASE_URL is missing. Each
  * database test rolls its transaction back, so a passing run leaves no rows.
+ * The two lock tests are the exception: they commit, use a second connection,
+ * and delete their rows before they finish.
  *
  * Local run:
  * node --env-file=.env ./node_modules/vitest/vitest.mjs run src/server/db/publish-price-version.test.ts
@@ -12,7 +14,7 @@
  * The empty object only lets the snapshot row exist. The later pipeline fills it.
  */
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "@/server/db/client";
 import {
@@ -26,8 +28,11 @@ import {
   requireInsertedRow,
 } from "@/server/db/repositories/catalog";
 import {
+  labs,
+  models,
   observationItems,
   observations,
+  offerings,
   priceComponents,
   priceVersions,
   sources,
@@ -684,6 +689,134 @@ describe.skipIf(databaseUrl.length === 0)("publishPriceVersion", () => {
     });
   });
 
+  it(
+    "waits for the offering lock before writing a first price",
+    async () => {
+      await withLockClients(async ({ holder, publisher, probe }) => {
+        const seed = await seedCommitted(probe);
+        let release = () => {};
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let markLocked = () => {};
+        const locked = new Promise<void>((resolve) => {
+          markLocked = resolve;
+        });
+        // FOR SHARE blocks FOR UPDATE. It does not block the foreign-key
+        // check on insert. Waiting only at insert is too late: both publishes
+        // can already have read zero open rows.
+        const holderTask = holdRow(
+          holder,
+          async (tx) => {
+            await tx
+              .select({ id: offerings.id })
+              .from(offerings)
+              .where(eq(offerings.id, seed.offeringId))
+              .for("share");
+            markLocked();
+          },
+          async () => {
+            await released;
+            throw new RolledBack();
+          },
+        );
+        let publishTask: ReturnType<typeof publishPriceVersion> | undefined;
+
+        try {
+          await expectLockHeld(locked, holderTask);
+          publishTask = publishPriceVersion(
+            publisher,
+            priceInput({
+              observationItemId: seed.itemId,
+              firstSeenAt: FIRST_SEEN,
+            }),
+          );
+          const publishState = settleState(publishTask);
+          await waitForLockWait(probe, "offerings", publishState);
+          expect(await versionsFor(probe, seed.offeringId)).toHaveLength(0);
+
+          release();
+          await holderTask;
+          const published = await publishTask;
+          const versions = await versionsFor(probe, seed.offeringId);
+          expect(versions).toHaveLength(1);
+          expect(versions[0]).toMatchObject({
+            id: published.priceVersionId,
+            lastSeenAt: null,
+            retractedAt: null,
+          });
+        } finally {
+          release();
+          await holderTask.catch(() => undefined);
+          await publishTask?.catch(() => undefined);
+          await deleteSeed(probe, seed);
+        }
+      });
+    },
+    25_000,
+  );
+
+  it(
+    "refuses to publish when the locked item is rejected",
+    async () => {
+      await withLockClients(async ({ holder, publisher, probe }) => {
+        const seed = await seedCommitted(probe);
+        let release = () => {};
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let markLocked = () => {};
+        const locked = new Promise<void>((resolve) => {
+          markLocked = resolve;
+        });
+        const holderTask = holdRow(
+          holder,
+          async (tx) => {
+            await tx
+              .select({ id: observationItems.id })
+              .from(observationItems)
+              .where(eq(observationItems.id, seed.itemId))
+              .for("update");
+            markLocked();
+          },
+          async (tx) => {
+            await released;
+            await tx
+              .update(observationItems)
+              .set({ reviewStatus: "rejected" })
+              .where(eq(observationItems.id, seed.itemId));
+          },
+        );
+        let publishTask: ReturnType<typeof publishPriceVersion> | undefined;
+
+        try {
+          await expectLockHeld(locked, holderTask);
+          publishTask = publishPriceVersion(
+            publisher,
+            priceInput({
+              observationItemId: seed.itemId,
+              firstSeenAt: FIRST_SEEN,
+            }),
+          );
+          const publishState = settleState(publishTask);
+          await waitForLockWait(probe, "observation_items", publishState);
+          expect(await versionsFor(probe, seed.offeringId)).toHaveLength(0);
+
+          release();
+          await holderTask;
+          await expect(publishTask).rejects.toThrow(/review_status rejected/);
+          expect(await versionsFor(probe, seed.offeringId)).toHaveLength(0);
+        } finally {
+          release();
+          await holderTask.catch(() => undefined);
+          await publishTask?.catch(() => undefined);
+          await deleteSeed(probe, seed);
+        }
+      });
+    },
+    25_000,
+  );
+
   async function withPublish(run: (tx: PublishDb) => Promise<void>): Promise<void> {
     try {
       await db.transaction(async (tx) => {
@@ -813,4 +946,204 @@ async function amountsFor(tx: PublishDb, priceVersionId: number) {
     amount: row.amount,
     condition: row.condition,
   }));
+}
+
+type SeededPublish = {
+  labId: number;
+  modelId: number;
+  offeringId: number;
+  sourceId: number;
+  observationId: number;
+  itemId: number;
+};
+
+const LOCK_WAIT_MS = 8_000;
+
+async function withLockClients(
+  run: (clients: { holder: PublishDb; publisher: PublishDb; probe: PublishDb }) => Promise<void>,
+): Promise<void> {
+  const parsed = parseDatabaseEnv({ DATABASE_URL: databaseUrl });
+  const holder = createDb(parsed.databaseUrl);
+  const publisher = createDb(parsed.databaseUrl);
+  const probe = createDb(parsed.databaseUrl);
+  try {
+    await run({
+      holder: holder.db,
+      publisher: publisher.db,
+      probe: probe.db,
+    });
+  } finally {
+    await holder.close();
+    await publisher.close();
+    await probe.close();
+  }
+}
+
+async function seedCommitted(db: PublishDb): Promise<SeededPublish> {
+  const seed: Partial<SeededPublish> = {};
+  try {
+    const offering = await seedOffering(db);
+    seed.modelId = offering.modelId;
+    seed.offeringId = offering.id;
+    const modelRows = await db
+      .select({ labId: models.labId })
+      .from(models)
+      .where(eq(models.id, offering.modelId))
+      .limit(1);
+    const model = modelRows[0];
+    if (model === undefined) {
+      throw new Error("seeded model does not exist");
+    }
+    seed.labId = model.labId;
+
+    const item = await seedItem(db, offering.id, "ok");
+    seed.itemId = item.id;
+    seed.observationId = item.observationId;
+    const observationRows = await db
+      .select({ sourceId: observations.sourceId })
+      .from(observations)
+      .where(eq(observations.id, item.observationId))
+      .limit(1);
+    const observation = observationRows[0];
+    if (observation === undefined) {
+      throw new Error("seeded observation does not exist");
+    }
+    seed.sourceId = observation.sourceId;
+
+    return {
+      labId: model.labId,
+      modelId: offering.modelId,
+      offeringId: offering.id,
+      sourceId: observation.sourceId,
+      observationId: item.observationId,
+      itemId: item.id,
+    };
+  } catch (error) {
+    await deleteSeed(db, seed);
+    throw error;
+  }
+}
+
+async function deleteSeed(db: PublishDb, seed: Partial<SeededPublish>): Promise<void> {
+  if (seed.offeringId !== undefined) {
+    const versions = await db
+      .select({ id: priceVersions.id })
+      .from(priceVersions)
+      .where(eq(priceVersions.offeringId, seed.offeringId));
+    for (const version of versions) {
+      await db.delete(priceComponents).where(eq(priceComponents.priceVersionId, version.id));
+    }
+    await db.delete(priceVersions).where(eq(priceVersions.offeringId, seed.offeringId));
+  }
+  if (seed.itemId !== undefined) {
+    await db.delete(observationItems).where(eq(observationItems.id, seed.itemId));
+  }
+  if (seed.observationId !== undefined) {
+    await db.delete(observations).where(eq(observations.id, seed.observationId));
+  }
+  if (seed.sourceId !== undefined) {
+    await db.delete(sources).where(eq(sources.id, seed.sourceId));
+  }
+  if (seed.offeringId !== undefined) {
+    await db.delete(offerings).where(eq(offerings.id, seed.offeringId));
+  }
+  if (seed.modelId !== undefined) {
+    await db.delete(models).where(eq(models.id, seed.modelId));
+  }
+  if (seed.labId !== undefined) {
+    await db.delete(labs).where(eq(labs.id, seed.labId));
+  }
+}
+
+function holdRow(
+  db: PublishDb,
+  lock: (tx: PublishDb) => Promise<void>,
+  afterLock: (tx: PublishDb) => Promise<void>,
+): Promise<void> {
+  return db
+    .transaction(async (tx) => {
+      await lock(tx);
+      await afterLock(tx);
+    })
+    .then(
+      () => undefined,
+      (error: unknown) => {
+        if (error instanceof RolledBack) {
+          return;
+        }
+        throw error;
+      },
+    );
+}
+
+async function expectLockHeld(locked: Promise<void>, holderTask: Promise<void>): Promise<void> {
+  const holderEnded = holderTask.then(
+    () => "ended" as const,
+    () => "ended" as const,
+  );
+  const outcome = await Promise.race([locked.then(() => "held" as const), holderEnded]);
+  if (outcome === "ended") {
+    throw new Error("holder ended before the lock was taken");
+  }
+}
+
+function settleState(promise: Promise<unknown>): () => "pending" | "settled" {
+  let state: "pending" | "settled" = "pending";
+  void promise.then(
+    () => {
+      state = "settled";
+    },
+    () => {
+      state = "settled";
+    },
+  );
+  return () => state;
+}
+
+async function waitForLockWait(
+  probe: PublishDb,
+  tableName: string,
+  publishState: () => "pending" | "settled",
+): Promise<void> {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (publishState() === "settled") {
+      throw new Error(`publish finished while ${tableName} was locked`);
+    }
+    if (await isWaitingToLock(probe, tableName)) {
+      if (publishState() === "settled") {
+        throw new Error(`publish finished while ${tableName} was locked`);
+      }
+      return;
+    }
+    await sleep(100);
+  }
+  if (publishState() === "settled") {
+    throw new Error(`publish finished while ${tableName} was locked`);
+  }
+  throw new Error(`publish did not wait on ${tableName}`);
+}
+
+async function isWaitingToLock(probe: PublishDb, tableName: string): Promise<boolean> {
+  // A row lock shows up as a transaction wait. The waiting query is the
+  // select ... for update, which names the table. An insert can also wait
+  // on the offering row because of the foreign key, and that wait is too late.
+  const rows = await probe.execute(sql`
+    select query
+    from pg_stat_activity
+    where datname = current_database()
+      and pid <> pg_backend_pid()
+      and wait_event_type = 'Lock'
+  `);
+  return Array.from(rows).some((row) => {
+    const queryValue = row.query;
+    const query = typeof queryValue === "string" ? queryValue.toLowerCase() : "";
+    return query.includes(tableName) && query.includes("for update");
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

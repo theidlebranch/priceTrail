@@ -5,7 +5,7 @@ import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/p
 import { pricePrecisionLabel, type PricePrecision } from "@/core/pricing/precision";
 import type { Condition } from "@/core/pricing/shape";
 import * as schema from "@/server/db/schema";
-import { observationItems, priceComponents, priceVersions } from "@/server/db/schema";
+import { observationItems, offerings, priceComponents, priceVersions } from "@/server/db/schema";
 
 /**
  * The only function that may insert price_versions and price_components.
@@ -18,6 +18,14 @@ import { observationItems, priceComponents, priceVersions } from "@/server/db/sc
  * marks the open row retracted and adds a fix that points at it. The two
  * paths cannot be combined. Both writes share one transaction, so a failure
  * keeps the previous current price.
+ *
+ * Two publishes can run at once. Postgres read committed lets both read the
+ * same open version, then each insert another. This transaction locks the
+ * observation item first, then the offering, and holds both until it ends.
+ * The item lock keeps the review status from changing after the read. The
+ * offering lock lets one publish through at a time, including the first
+ * price, when no open version row exists yet. The item comes first so two
+ * publishes queue on the offering.
  *
  * price_version_evidence is not written here. That table does not exist yet.
  */
@@ -107,6 +115,15 @@ export async function publishPriceVersion(
       throw new Error(
         `observation item ${item.id} has review_status ${item.reviewStatus}; only ok and confirmed can publish`,
       );
+    }
+
+    const lockedOfferings = await tx
+      .select({ id: offerings.id })
+      .from(offerings)
+      .where(eq(offerings.id, item.offeringId))
+      .for("update");
+    if (lockedOfferings.length === 0) {
+      throw new Error(`offering ${item.offeringId} does not exist`);
     }
 
     const openVersions = await findOpenVersions(tx, item.offeringId);
@@ -328,7 +345,8 @@ async function loadItem(tx: PublishDb, observationItemId: number) {
     .select()
     .from(observationItems)
     .where(eq(observationItems.id, observationItemId))
-    .limit(1);
+    .limit(1)
+    .for("update");
   return rows[0];
 }
 
