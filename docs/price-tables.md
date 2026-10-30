@@ -16,9 +16,18 @@ erDiagram
   offerings ||--o{ price_versions : "offering_id"
   price_versions ||--o{ price_components : "price_version_id"
   price_versions ||--o| price_versions : "replaces_version_id"
+  sources ||--o{ observations : "source_id"
+  sources ||--o{ fetch_log : "source_id"
+  observations |o--o| fetch_log : "observation_id"
+  observations ||--o{ observation_items : "observation_id"
+  offerings ||--o{ observation_items : "offering_id"
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
+
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version does not point at an item. That link is a later table, so it is not on this diagram.
+
+How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
 ## One story: Claude Haiku 4.5
 
@@ -59,6 +68,57 @@ One row is one company that released the model. A host such as Azure can sell th
 | 1 | 1 | official-api | global |
 
 One offering is one way the model is sold. It stays one row when the price changes. `official-api` means Anthropic's own API. `global` means we are not tracking a region yet. Region is never blank, so two "no region" rows cannot both exist.
+
+## The page behind the 2 June price
+
+The price rows below say we last saw the old price on 20 May and first saw the new price on 2 June. These rows are the checks behind that story. They are still a reading aid. They are not inserted.
+
+A source is the page. The lab row is the company. They are not the same thing.
+
+### sources
+
+| id | url | type | active | last_checked_at |
+| --- | --- | --- | --- | --- |
+| 1 | https://platform.claude.com/docs/en/about-claude/pricing.md | official | true | 2026-06-02T16:00:00Z |
+
+`url` is the Anthropic pricing page. `official` means the vendor's live pricing page. It is not an archive and not a witness. `active` true means we still check it. `last_checked_at` is the latest check, 2 June. The parser for this URL is chosen in code when the fetcher exists. It is not a column on this row.
+
+### observations
+
+| id | source_id | fetched_at | content_hash | raw_content | raw_content_hash | parsed_data | archive_url | archive_status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 2026-06-02T16:00:00Z | example-parsed-hash | Claude Haiku 4.5 base input $1 / MTok | example-raw-hash | [{"provider":"anthropic","modelName":"Claude Haiku 4.5","modelSlug":"claude-haiku-4.5","dimension":"input","usdPer1M":"1","source":"official"}] |  | pending |
+
+This row exists because the parsed page changed on 2 June. The 20 May check does not get an observation. `fetched_at` is the same clock time as version 2's `first_seen_at`. There is still no foreign key between those two tables. The times match in this picture only.
+
+`content_hash` is a label for the hash of `parsed_data`. `raw_content_hash` is a label for the hash of the stored page text. Both strings are made up for this picture. They are not computed from the fixture. `raw_content` is one stand-in line, not the fixture file.
+
+`parsed_data` is a tiny JSON array with only the current Haiku input price, `$1` per million tokens, and no tier. The real page has more prices. This cell is only big enough to show the shape. `source` inside that JSON means the number came from the official page. It is not `sources.id`.
+
+`archive_url` is blank. `archive_status` is `pending`, so Wayback has not stored a permalink yet.
+
+### observation_items
+
+| id | observation_id | offering_id | grounding_result | review_status | reviewed_by | reviewed_at | review_note |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 1 |  | ok |  |  |  |
+
+One item is offering 1 on observation 1. The Haiku input price lives once, in observation 1's `parsed_data`. `grounding_result` is blank because this step does not define that JSON yet.
+
+`review_status` is `ok` so you can see a row a later publish function would be allowed to accept. The database default is `flagged` when a writer forgets to set a status. This example sets `ok` on purpose. `reviewed_by`, `reviewed_at`, and `review_note` are blank because no person reviewed it.
+
+An `ok` item still does not insert a price. Only `publishPriceVersion()` can do that, and it does not exist yet.
+
+### fetch_log
+
+| id | source_id | fetched_at | http_status | outcome | observation_id | note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 2026-05-20T16:00:00Z | 200 | unchanged |  |  |
+| 2 | 1 | 2026-06-02T16:00:00Z | 200 | changed | 1 |  |
+
+Row 1 is the 20 May check. The page answered HTTP 200 and the parsed content was the same, so `observation_id` is blank. That blank is why version 1 can record `last_seen_at` without a new observation. Row 2 is the 2 June check. The outcome is `changed`, so it must point at observation 1.
+
+`changed` must point at an observation. `unchanged`, `parser_suspect`, and `fetch_error` must not. This picture has no `parser_suspect` row. `note` is blank on both rows.
 
 ## How to read a price version
 
