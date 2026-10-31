@@ -1,4 +1,5 @@
 import { Clock3, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { PricePreviewCard } from "@/components/landing-page/price-preview-card";
 
@@ -21,9 +22,9 @@ export function HeroSection() {
             backed by provider sources and archived evidence.
           </p>
           <div className="mb-8 flex flex-wrap items-center gap-3">
-            <a href="/models" className={buttonVariants({ size: "lg" })}>
+            <Link href="/models" className={buttonVariants({ size: "lg" })}>
               Browse models
-            </a>
+            </Link>
             <a
               href="#how-it-works"
               className={buttonVariants({ variant: "outline", size: "lg" })}

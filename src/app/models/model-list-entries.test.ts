@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toModelListEntries, type ModelListRow } from "./model-list-entries";
+import { assertPublicSlug, toModelListEntries, type ModelListRow } from "./model-list-entries";
 
 function row(overrides: Partial<ModelListRow> = {}): ModelListRow {
   return {
@@ -61,6 +61,7 @@ describe("toModelListEntries", () => {
     expect(() => toModelListEntries([row({ slug: ".." })])).toThrow(/model slug/);
     expect(() => toModelListEntries([row({ labSlug: "." })])).toThrow(/lab slug/);
     expect(() => toModelListEntries([row({ labSlug: ".." })])).toThrow(/lab slug/);
+    expect(() => assertPublicSlug("..", "model")).toThrow(/model slug/);
   });
 
   it("throws when two rows would share one public path", () => {

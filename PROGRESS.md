@@ -17,10 +17,11 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Phase 3 step 15: `pnpm seed` runs `scripts/seed.ts`. Merged as pull request #20. The hand-checked list is Claude Fable 5.1, Claude Mythos 5.1, and the four gpt-6 Standard rows. Amounts must match the saved fixtures or the seed throws. Prices are published only through `publishPriceVersion()`. Each item is `confirmed`. There is no `fetch_log` row. Google is not seeded. A second run throws and does not open another current price. The Neon tests roll back. They read `TEST_DATABASE_URL` and skip when it is missing. `pnpm seed` was run once against `DATABASE_URL` and wrote 2 labs, 6 models, and 6 price versions. A schema-only branch URL is not in `.env` yet, so those two database tests have not been run against an empty database.
 - Small dependency updates on `master` (`9ffbc5b`): React and React DOM 19.3.1, lucide-react 1.60.0, shadcn 4.22.1. TypeScript stays at 5.9.3. The Dependabot major update (TypeScript 7, ESLint 10, `@types/node` 26) was left unmerged. Revisit TypeScript after 7.1 is stable (target 24 Nov 2026) and typescript-eslint publishes support.
 - Phase 4 step 16: `PageShell` wraps every page. Merged as pull request #21.
+- Phase 4 step 17: `/models` lists tracked models from `listModels()`. Merged as pull request #22. Each link is `/models/<lab slug>/<model slug>`. The page shows the lab and the model name. It does not show prices.
 
 ## In progress
 
-- Phase 4 step 17, on this branch and not merged yet: `/models` lists tracked models from `listModels()`. Each link is `/models/<lab slug>/<model slug>`, with each slug encoded as one path segment. `.` and `..` are rejected. The page shows the lab and the model name. It does not show prices. The detail page is step 18, so those links 404 until then.
+- Phase 4 step 18, on this branch and not merged yet: `/models/<lab slug>/<model slug>` shows the one open price, its component rows, and a link to the official pricing page. The page uses the landing receipt card: price tiles, the effective date, and the official link. The query only selects. It does not read `raw_content`. A missing model is a 404. Two current prices, or a price with not exactly one official URL, throws. The chart is step 19.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked
