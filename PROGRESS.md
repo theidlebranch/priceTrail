@@ -20,7 +20,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 ## In progress
 
-- Phase 4 step 17, on this branch and not merged yet: `/models` lists tracked models from `listModels()`. Each link is `/models/<lab slug>/<model slug>`. The page shows the lab and the model name. It does not show prices. The detail page is step 18, so those links 404 until then.
+- Phase 4 step 17, on this branch and not merged yet: `/models` lists tracked models from `listModels()`. Each link is `/models/<lab slug>/<model slug>`, with each slug encoded as one path segment. `.` and `..` are rejected. The page shows the lab and the model name. It does not show prices. The detail page is step 18, so those links 404 until then.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked

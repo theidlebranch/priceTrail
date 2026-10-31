@@ -3,8 +3,12 @@
  *
  * The public address is /models/<lab slug>/<model slug>. A slash inside a
  * slug would add another path piece, so the link would miss the detail
- * route. Two rows with the same address would look like one model. Both
- * cases throw. An empty array is a real empty catalog, not an error.
+ * route. A "#" or "?" would start a fragment or a query, so the browser
+ * would open a shorter path. "." and ".." are path steps, and encoding
+ * does not change them. Those slugs throw. Every other slug is encoded as
+ * one path segment. Two rows with the same address would look like one
+ * model. That throws too. An empty array is a real empty catalog, not an
+ * error.
  */
 
 export type ModelListRow = {
@@ -42,12 +46,14 @@ export function toModelListEntries(rows: readonly ModelListRow[]): ModelListEntr
 }
 
 function modelHref(labSlug: string, modelSlug: string): string {
-  return `/models/${publicSlug(labSlug, "lab")}/${publicSlug(modelSlug, "model")}`;
+  const lab = publicSlug(labSlug, "lab");
+  const model = publicSlug(modelSlug, "model");
+  return `/models/${lab}/${model}`;
 }
 
 function publicSlug(slug: string, kind: "lab" | "model"): string {
-  if (slug.length === 0 || slug.includes("/")) {
-    throw new Error(`${kind} slug is empty or contains a slash`);
+  if (slug.length === 0 || slug.includes("/") || slug === "." || slug === "..") {
+    throw new Error(`${kind} slug is empty, contains a slash, or is "." or ".."`);
   }
-  return slug;
+  return encodeURIComponent(slug);
 }

@@ -47,6 +47,22 @@ describe("toModelListEntries", () => {
     expect(() => toModelListEntries([row({ slug: "claude/fable" })])).toThrow(/model slug/);
   });
 
+  it("encodes a hash or question mark so it stays one path segment", () => {
+    expect(toModelListEntries([row({ slug: "model#draft" })])[0]?.href).toBe(
+      "/models/anthropic/model%23draft",
+    );
+    expect(toModelListEntries([row({ labSlug: "lab?draft" })])[0]?.href).toBe(
+      "/models/lab%3Fdraft/claude-fable-5.1",
+    );
+  });
+
+  it('throws when a slug is "." or ".."', () => {
+    expect(() => toModelListEntries([row({ slug: "." })])).toThrow(/model slug/);
+    expect(() => toModelListEntries([row({ slug: ".." })])).toThrow(/model slug/);
+    expect(() => toModelListEntries([row({ labSlug: "." })])).toThrow(/lab slug/);
+    expect(() => toModelListEntries([row({ labSlug: ".." })])).toThrow(/lab slug/);
+  });
+
   it("throws when two rows would share one public path", () => {
     expect(() =>
       toModelListEntries([
