@@ -204,6 +204,51 @@ describe.skipIf(databaseUrl.length === 0)("catalog repository", () => {
     });
   });
 
+  it("lists models with their lab, lab name first then model name", async () => {
+    await withCatalog(async (catalog) => {
+      const laterLab = await catalog.insertLab({
+        name: "Zulu List Lab",
+        slug: uniqueSlug("lab"),
+      });
+      const earlierLab = await catalog.insertLab({
+        name: "Alpha List Lab",
+        slug: uniqueSlug("lab"),
+      });
+      const laterModel = await catalog.insertModel({
+        labId: laterLab.id,
+        name: "Zulu Model",
+        slug: uniqueSlug("model"),
+      });
+      const earlierModel = await catalog.insertModel({
+        labId: earlierLab.id,
+        name: "Alpha Model",
+        slug: uniqueSlug("model"),
+      });
+
+      const listed = await catalog.listModels();
+      const ours = listed.filter(
+        (item) => item.slug === earlierModel.slug || item.slug === laterModel.slug,
+      );
+
+      expect(ours).toEqual([
+        {
+          labName: "Alpha List Lab",
+          labSlug: earlierLab.slug,
+          name: "Alpha Model",
+          slug: earlierModel.slug,
+          deprecatedAt: null,
+        },
+        {
+          labName: "Zulu List Lab",
+          labSlug: laterLab.slug,
+          name: "Zulu Model",
+          slug: laterModel.slug,
+          deprecatedAt: null,
+        },
+      ]);
+    });
+  });
+
   it("throws 23503 when an offering points at a missing model", async () => {
     await withCatalog(async (catalog) => {
       await expectSqlState(

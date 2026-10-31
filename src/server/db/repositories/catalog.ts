@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   eq,
   type ExtractTablesWithRelations,
   type InferInsertModel,
@@ -13,8 +14,8 @@ import { labs, modelAliases, models, offerings } from "@/server/db/schema";
 /**
  * Catalog door: labs, models, aliases, and offerings.
  *
- * A repository is the storage door for one job. Callers ask insertLab or
- * findModelByLabAndSlug. The SQL stays in this file.
+ * A repository is the storage door for one job. Callers ask insertLab,
+ * findModelByLabAndSlug, or listModels. The SQL stays in this file.
  *
  * This file only loads and saves catalog rows. It does not parse a page,
  * set review_status, or open a price period. A new job gets a new file.
@@ -43,6 +44,18 @@ type ModelAliasRow = InferSelectModel<typeof modelAliases>;
 type OfferingRow = InferSelectModel<typeof offerings>;
 type ModelAliasKind = InferInsertModel<typeof modelAliases>["kind"];
 
+/**
+ * One tracked model plus the lab that released it.
+ * deprecatedAt stays null until the model is retired.
+ */
+export type ListedModel = {
+  labName: string;
+  labSlug: string;
+  name: string;
+  slug: string;
+  deprecatedAt: Date | null;
+};
+
 export type CatalogRepository = {
   insertLab(input: { name: string; slug: string }): Promise<LabRow>;
   findLabBySlug(slug: string): Promise<LabRow | null>;
@@ -60,6 +73,7 @@ export type CatalogRepository = {
     region?: string;
   }): Promise<OfferingRow>;
   findOffering(modelId: number, platform: string, region: string): Promise<OfferingRow | null>;
+  listModels(): Promise<ListedModel[]>;
 };
 
 /**
@@ -139,6 +153,20 @@ export function createCatalogRepository(db: CatalogDb): CatalogRepository {
         )
         .limit(1);
       return rows[0] ?? null;
+    },
+
+    async listModels() {
+      return db
+        .select({
+          labName: labs.name,
+          labSlug: labs.slug,
+          name: models.name,
+          slug: models.slug,
+          deprecatedAt: models.deprecatedAt,
+        })
+        .from(models)
+        .innerJoin(labs, eq(models.labId, labs.id))
+        .orderBy(asc(labs.name), asc(models.name));
     },
   };
 }
