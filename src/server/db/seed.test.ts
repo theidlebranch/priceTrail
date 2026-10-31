@@ -2,10 +2,14 @@
 
 /**
  * The checker tests do not open a database. A wrong list must throw before
- * any insert. The Neon tests skip when DATABASE_URL is missing, which is
- * what CI does. They roll the transaction back, so a passing run leaves
+ * any insert. The Neon tests skip when TEST_DATABASE_URL is missing, which
+ * is what CI does. They roll the transaction back, so a passing run leaves
  * no rows. Each publish is several round trips, so those tests allow 30
  * seconds.
+ *
+ * Point TEST_DATABASE_URL at a schema-only Neon branch. Do not reuse
+ * DATABASE_URL after pnpm seed. That database already has the anthropic
+ * and openai labs, and runSeed refuses to seed again.
  *
  * Local run:
  * node --env-file=.env ./node_modules/vitest/vitest.mjs run src/server/db/seed.test.ts
@@ -39,7 +43,7 @@ import {
 } from "@/server/db/seed";
 import { parseDatabaseEnv } from "@/server/env";
 
-const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
+const testDatabaseUrl = process.env.TEST_DATABASE_URL?.trim() ?? "";
 
 describe("hand-checked seed list", () => {
   it("matches the parsers for the six current models", () => {
@@ -188,15 +192,25 @@ describe("redactDatabaseUrl", () => {
   });
 });
 
-describe.skipIf(databaseUrl.length === 0)("runSeed", () => {
+describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
   let close: (() => Promise<void>) | undefined;
   let db: ReturnType<typeof createDb>["db"];
 
-  beforeAll(() => {
-    const parsed = parseDatabaseEnv({ DATABASE_URL: databaseUrl });
+  beforeAll(async () => {
+    const parsed = parseDatabaseEnv({ DATABASE_URL: testDatabaseUrl });
     const opened = createDb(parsed.databaseUrl);
     db = opened.db;
     close = () => opened.close();
+
+    const existing = await db
+      .select({ slug: labs.slug })
+      .from(labs)
+      .where(inArray(labs.slug, ["anthropic", "openai"]));
+    if (existing.length > 0) {
+      throw new Error(
+        "TEST_DATABASE_URL already has a seed lab. Use a schema-only branch, not the database pnpm seed writes to.",
+      );
+    }
   });
 
   afterAll(async () => {
