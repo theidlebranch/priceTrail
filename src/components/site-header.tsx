@@ -1,20 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 const links = [
   { label: "Browse models", href: "/models" },
-  { label: "Receipts", href: "#receipts" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Honest by design", href: "#honest" },
+  { label: "Receipts", href: "/#receipts" },
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Honest by design", href: "/#honest" },
 ];
 
 function Logo() {
   return (
-    <a
-      href="#top"
+    <Link
+      href="/#top"
       aria-label="PriceTrail home"
       className="flex items-center gap-2"
     >
@@ -40,7 +41,7 @@ function Logo() {
       <span className="text-sm font-semibold uppercase tracking-tight">
         PriceTrail
       </span>
-    </a>
+    </Link>
   );
 }
 
@@ -54,23 +55,23 @@ export function SiteHeader() {
 
         <nav aria-label="Primary" className="hidden items-center gap-8 lg:flex">
           {links.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className="py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
         <div className="flex items-center gap-2">
-          <a
+          <Link
             href="/models"
             className={`${buttonVariants({ size: "sm" })} hidden sm:inline-flex`}
           >
             Browse models
-          </a>
+          </Link>
           <Button
             variant="outline"
             size="icon"
@@ -92,14 +93,14 @@ export function SiteHeader() {
           className="flex flex-col gap-1 border-t border-border bg-card px-4 py-3 lg:hidden"
         >
           {links.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               onClick={() => setMenuOpen(false)}
               className="rounded-md px-2 py-2 text-sm text-foreground hover:bg-muted"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
       )}
