@@ -51,6 +51,7 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 ### Phase 4: Public pages with seeded data
 
 16. **Install shadcn/ui and build the layout.** Header, footer, and page shell.
+    _Done:_ shadcn was already installed for the landing page (`components.json`, button, card, input). `PageShell` in `src/components/page-shell.tsx` wraps every page from `src/app/layout.tsx`: header, `<main id="top">`, footer. The home page renders only its sections. Header and footer section links use `/#...` so they still work from a later page. The sentence "All prices shown on this page are examples." stays on the landing call-to-action, not in the shared footer. `/models` is still a link with no page yet.
 17. **Model list page.** Server component reading from the repository.
 18. **Model detail page.** Current price, components table, evidence links.
 19. **Price history chart.** Recharts, with "changed on or before" wording where the date is not announced.

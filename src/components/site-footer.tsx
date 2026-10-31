@@ -1,7 +1,9 @@
+import Link from "next/link"
+
 const footerLinks = [
-  { label: "Receipts", href: "#receipts" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Honest by design", href: "#honest" },
+  { label: "Receipts", href: "/#receipts" },
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Honest by design", href: "/#honest" },
 ]
 
 export function SiteFooter() {
@@ -17,15 +19,14 @@ export function SiteFooter() {
           </div>
           <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs">
             {footerLinks.map((link) => (
-              <a key={link.href} href={link.href} className="text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground">
+              <Link key={link.href} href={link.href} className="text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground">
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
         </div>
-        <div className="flex flex-col gap-2 pt-4 font-mono text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="pt-4 font-mono text-xs text-muted-foreground">
           <span>© 2026 PriceTrail</span>
-          <span>All prices shown on this page are examples.</span>
         </div>
       </div>
     </footer>

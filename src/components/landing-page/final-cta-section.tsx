@@ -16,6 +16,7 @@ export function FinalCtaSection() {
             <a href="/models" className={buttonVariants({ size: "lg" })}>Browse the pricing history</a>
             <a href="#how-it-works" className={buttonVariants({ variant: "ghost", size: "lg" })}>How verification works <ArrowRight className="ml-1 size-4" /></a>
           </div>
+          <p className="pt-8 font-mono text-xs text-muted-foreground">All prices shown on this page are examples.</p>
         </div>
       </div>
     </section>

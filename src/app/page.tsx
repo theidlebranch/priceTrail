@@ -1,5 +1,3 @@
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
 import { HeroSection } from "@/components/landing-page/hero-section";
 import { ProblemStrip } from "@/components/landing-page/problem-strip";
 import { ReceiptsSection } from "@/components/landing-page/receipts-section";
@@ -13,19 +11,15 @@ import { FinalCtaSection } from "@/components/landing-page/final-cta-section";
 export default function HomePage() {
   return (
     <>
-      <SiteHeader />
-      <main id="top" className="min-h-screen pt-14">
-        <HeroSection />
-        <ProblemStrip />
-        <ReceiptsSection />
-        <HowItWorksSection />
-        <ReviewSection />
-        <HonestSection />
-        <PositioningCallout />
-        <ChangeFeedSection />
-        <FinalCtaSection />
-      </main>
-      <SiteFooter />
+      <HeroSection />
+      <ProblemStrip />
+      <ReceiptsSection />
+      <HowItWorksSection />
+      <ReviewSection />
+      <HonestSection />
+      <PositioningCallout />
+      <ChangeFeedSection />
+      <FinalCtaSection />
     </>
   );
 }
