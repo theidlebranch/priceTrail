@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react"
+import Link from "next/link"
 import { buttonVariants } from "@/components/ui/button"
 
 export function FinalCtaSection() {
@@ -13,7 +14,7 @@ export function FinalCtaSection() {
           <h2 className="text-2xl font-semibold tracking-tight">Ready to look at the pricing history?</h2>
           <p className="text-sm leading-6 text-muted-foreground">Browse current prices and how they changed, each with its sources.</p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <a href="/models" className={buttonVariants({ size: "lg" })}>Browse the pricing history</a>
+            <Link href="/models" className={buttonVariants({ size: "lg" })}>Browse the pricing history</Link>
             <a href="#how-it-works" className={buttonVariants({ variant: "ghost", size: "lg" })}>How verification works <ArrowRight className="ml-1 size-4" /></a>
           </div>
           <p className="pt-8 font-mono text-xs text-muted-foreground">All prices shown on this page are examples.</p>
