@@ -19,7 +19,8 @@
     "compare:models-dev-anthropic": "tsx scripts/compare-models-dev-anthropic.ts",
     "db:ping": "tsx --env-file=.env scripts/db-ping.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "seed": "tsx --env-file=.env scripts/seed.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
