@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "@/server/db/client";
 import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-version";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
-import { findModelDetail } from "@/server/db/repositories/model-detail";
+import { findModelDetail, hasTrackedModel } from "@/server/db/repositories/model-detail";
 import { observationItems, observations, sources } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -47,6 +47,25 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
   it("returns null when the lab and model slug are missing", async () => {
     await withDetail(async (tx) => {
       expect(await findModelDetail(tx, uniqueSlug("lab"), uniqueSlug("model"))).toBeNull();
+    });
+  });
+
+  it("says a model is tracked when the row exists, even with no price", async () => {
+    await withDetail(async (tx) => {
+      expect(await hasTrackedModel(tx, uniqueSlug("lab"), uniqueSlug("model"))).toBe(false);
+
+      const planted = await plantModel(tx);
+      await plantPublished(tx, planted.offeringId, "10");
+      expect(await hasTrackedModel(tx, planted.labSlug, planted.modelSlug)).toBe(true);
+
+      const catalog = createCatalogRepository(tx);
+      const lab = await catalog.insertLab({ name: "OpenAI", slug: uniqueSlug("lab") });
+      const model = await catalog.insertModel({
+        labId: lab.id,
+        name: "No price yet",
+        slug: uniqueSlug("model"),
+      });
+      expect(await hasTrackedModel(tx, lab.slug, model.slug)).toBe(true);
     });
   });
 

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { toModelDetailView } from "@/app/models/model-detail-view";
@@ -24,9 +23,11 @@ export const metadata: Metadata = {
  *
  * A slug that is empty, contains a slash, or is "." or ".." throws
  * before the database opens. That is bad data, not a missing model.
- * An unknown lab or model is a 404. A failed query, or two current
- * prices, still throws. The empty sentence is only for a model that
- * exists and has no open price.
+ * An unknown lab or model is an HTTP 404 from src/proxy.ts, before
+ * this page renders. If that row is gone by the time this loader reads
+ * it, the read failed and this function throws. A failed query, or two
+ * current prices, still throws. The empty sentence is only for a model
+ * that exists and has no open price.
  *
  * connection() runs before the database client opens, for the same
  * reason as the model list: the postgres driver calls Math.random()
@@ -63,7 +64,7 @@ async function ModelDetailLoader({
   try {
     const row = await findModelDetail(db, labSlug, modelSlug);
     if (row === null) {
-      notFound();
+      throw new Error("tracked model disappeared before the page could read it");
     }
     return <ModelDetail view={toModelDetailView(row)} />;
   } finally {

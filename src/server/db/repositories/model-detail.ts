@@ -61,6 +61,28 @@ export type ModelDetailRead = {
   offerings: ModelDetailOffering[];
 };
 
+/**
+ * True when this lab and model are tracked.
+ *
+ * The request proxy calls this before the page shell starts, so an
+ * unknown model can answer 404. It does not read offerings, prices, or
+ * sources. A model with no open price is still tracked.
+ */
+export async function hasTrackedModel(
+  db: ModelDetailDb,
+  labSlug: string,
+  modelSlug: string,
+): Promise<boolean> {
+  const modelRows = await db
+    .select({ modelId: models.id })
+    .from(models)
+    .innerJoin(labs, eq(models.labId, labs.id))
+    .where(and(eq(labs.slug, labSlug), eq(models.slug, modelSlug)))
+    .limit(1);
+
+  return modelRows.length > 0;
+}
+
 export async function findModelDetail(
   db: ModelDetailDb,
   labSlug: string,
