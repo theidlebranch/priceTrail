@@ -20,10 +20,13 @@ export type { ModelDetailRead } from "@/server/db/repositories/model-detail";
  * would turn 0.10 into 0.1.
  */
 
+// The page renders this list as given. Cache read sits with the leading
+// prices, in the same order as the landing receipt. Each cache-write
+// tier has its own rank so those rows stay grouped.
 const DIMENSION_ORDER = [
   "input",
-  "output",
   "cache_read",
+  "output",
   "cache_write",
   "cache_write_5m",
   "cache_write_1h",

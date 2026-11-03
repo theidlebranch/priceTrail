@@ -64,13 +64,62 @@ describe("toModelDetailView", () => {
         sourceLabel: "Official pricing page",
         components: [
           { dimensionLabel: "Input", amountText: "$10", conditionLabel: "" },
-          { dimensionLabel: "Output", amountText: "$50", conditionLabel: "" },
           { dimensionLabel: "Cache read", amountText: "$0.25", conditionLabel: "" },
+          { dimensionLabel: "Output", amountText: "$50", conditionLabel: "" },
           { dimensionLabel: "Cache write (5 minutes)", amountText: "$12.5", conditionLabel: "" },
           { dimensionLabel: "Cache write (1 hour)", amountText: "$20", conditionLabel: "" },
         ],
       },
     });
+  });
+
+  it("keeps cache-write tiers grouped when a condition label would sort between them", () => {
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [
+              version({
+                components: [
+                  component({
+                    dimension: "cache_write_1h",
+                    amount: "2",
+                  }),
+                  component({
+                    dimension: "cache_write_5m",
+                    amount: "1.25",
+                    condition: { promptTokensOver: 200000 },
+                  }),
+                  component({
+                    dimension: "cache_write_5m",
+                    amount: "1",
+                    condition: { promptTokensAtMost: 200000 },
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(view.price?.components).toEqual([
+      {
+        dimensionLabel: "Cache write (5 minutes)",
+        amountText: "$1.25",
+        conditionLabel: "prompts over 200,000 tokens",
+      },
+      {
+        dimensionLabel: "Cache write (5 minutes)",
+        amountText: "$1",
+        conditionLabel: "prompts up to 200,000 tokens",
+      },
+      {
+        dimensionLabel: "Cache write (1 hour)",
+        amountText: "$2",
+        conditionLabel: "",
+      },
+    ]);
   });
 
   it("keeps a trailing zero in the decimal string", () => {

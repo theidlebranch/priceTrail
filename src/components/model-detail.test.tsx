@@ -50,6 +50,52 @@ describe("ModelDetail", () => {
     expect(screen.queryByText("No current price is published.")).toBeNull();
   });
 
+  it("renders rows in the order the view gave them", () => {
+    const { container } = render(
+      <ModelDetail
+        view={view({
+          price: {
+            dateLine: "Changed on or before 2026-10-18.",
+            sourceUrl: SOURCE,
+            sourceLabel: "Official pricing page",
+            components: [
+              {
+                dimensionLabel: "Cache write (5 minutes)",
+                amountText: "$1.25",
+                conditionLabel: "prompts over 200,000 tokens",
+              },
+              {
+                dimensionLabel: "Cache write (5 minutes)",
+                amountText: "$1.00",
+                conditionLabel: "prompts up to 200,000 tokens",
+              },
+              {
+                dimensionLabel: "Cache write (1 hour)",
+                amountText: "$2",
+                conditionLabel: "",
+              },
+            ],
+          },
+        })}
+      />,
+    );
+
+    const labels = [...container.querySelectorAll("p")].map((node) => node.textContent);
+    expect(labels).toEqual([
+      "Cache write (5 minutes)",
+      "$1.25",
+      "/ 1M tokens",
+      "prompts over 200,000 tokens",
+      "Cache write (5 minutes)",
+      "$1.00",
+      "/ 1M tokens",
+      "prompts up to 200,000 tokens",
+      "Cache write (1 hour)",
+      "$2",
+      "/ 1M tokens",
+    ]);
+  });
+
   it("shows a tier next to the amount it belongs to", () => {
     render(
       <ModelDetail

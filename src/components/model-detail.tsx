@@ -77,15 +77,13 @@ function PriceCard({
   modelName: string;
   price: NonNullable<ModelDetailView["price"]>;
 }) {
-  const tiles = tileOrder(price.components);
-
   return (
     <Card className="gap-0 overflow-hidden rounded-md border-border bg-card py-0 shadow-sm">
       <CardTitleRow labName={labName} modelName={modelName} />
 
       <div className="space-y-4 p-4">
         <div className="grid grid-cols-3 gap-2 border-b border-border pb-3 text-center">
-          {tiles.map((row) => (
+          {price.components.map((row) => (
             <PriceTile
               key={`${row.dimensionLabel}\t${row.conditionLabel}\t${row.amountText}`}
               row={row}
@@ -133,21 +131,4 @@ function PriceTile({ row }: { row: ModelDetailPriceRow }) {
       ) : null}
     </div>
   );
-}
-
-const LEADING_TILES = ["Input", "Cache read", "Output"];
-
-function tileOrder(rows: readonly ModelDetailPriceRow[]): ModelDetailPriceRow[] {
-  return [...rows].sort((left, right) => {
-    const byLabel = leadIndex(left.dimensionLabel) - leadIndex(right.dimensionLabel);
-    if (byLabel !== 0) {
-      return byLabel;
-    }
-    return left.conditionLabel.localeCompare(right.conditionLabel);
-  });
-}
-
-function leadIndex(label: string): number {
-  const index = LEADING_TILES.indexOf(label);
-  return index === -1 ? LEADING_TILES.length : index;
 }
