@@ -12,8 +12,11 @@ import { parseDatabaseEnv } from "@/server/env";
  * inside the loader cannot change the status. This check is one slug
  * lookup. The price read stays in the page.
  *
- * A bad slug still throws. A database error still throws. Neither
- * becomes a 404. A tracked model with no price continues to the page.
+ * The pathname keeps percent-encoding. The page receives decoded
+ * params, so this lookup decodes each segment once before it checks
+ * the slug or reads the database. A bad slug still throws. A database
+ * error still throws. Neither becomes a 404. A tracked model with no
+ * price continues to the page.
  */
 export async function proxy(request: NextRequest) {
   const slugs = modelSlugs(request.nextUrl.pathname);
@@ -49,7 +52,7 @@ export const config = {
   matcher: "/models/:labSlug/:modelSlug",
 };
 
-function modelSlugs(pathname: string): { labSlug: string; modelSlug: string } | null {
+export function modelSlugs(pathname: string): { labSlug: string; modelSlug: string } | null {
   const parts = pathname.split("/");
   if (parts.length !== 4 || parts[1] !== "models") {
     return null;
@@ -66,5 +69,19 @@ function modelSlugs(pathname: string): { labSlug: string; modelSlug: string } | 
     return null;
   }
 
-  return { labSlug, modelSlug };
+  return {
+    labSlug: decodeSlug(labSlug, "lab"),
+    modelSlug: decodeSlug(modelSlug, "model"),
+  };
+}
+
+function decodeSlug(segment: string, kind: "lab" | "model"): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new Error(`${kind} slug is not a valid encoded path segment`);
+    }
+    throw error;
+  }
 }

@@ -21,7 +21,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 ## In progress
 
-- Phase 4 step 18, on this branch and not merged yet: `/models/<lab slug>/<model slug>` shows the one open price, its component rows, and a link to the official pricing page. The page uses the landing receipt card: price tiles, the effective date, and the official link. The query only selects. It does not read `raw_content`. A missing model is a 404. Two current prices, or a price with not exactly one official URL, throws. The chart is step 19. Tile order is decided once in `toModelDetailView()`: Input, Cache read, Output, then each cache-write tier. The page renders that list as given. An unknown model is HTTP 404 from `src/proxy.ts` before the page shell.
+- Phase 4 step 18, on this branch and not merged yet: `/models/<lab slug>/<model slug>` shows the one open price, its component rows, and a link to the official pricing page. The page uses the landing receipt card: price tiles, the effective date, and the official link. The query only selects. It does not read `raw_content`. A missing model is a 404. Two current prices, or a price with not exactly one official URL, throws. The chart is step 19. Tile order is decided once in `toModelDetailView()`: Input, Cache read, Output, then each cache-write tier. The page renders that list as given. An unknown model is HTTP 404 from `src/proxy.ts` before the page shell. The proxy decodes the path before it looks up the model.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked
