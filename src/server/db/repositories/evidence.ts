@@ -19,13 +19,18 @@ import {
 } from "@/server/db/schema";
 
 /**
- * Evidence door: one check of one official page.
+ * Evidence door: one check of one official page, and the archive stamp
+ * on a snapshot that check already stored.
  *
  * A repository is the storage door for one job. Callers pass the download
  * and the parsed rows. This file does not fetch the page, parse it, ask
  * Wayback, or open a price period. publishPriceVersion() is the only price
  * writer, and this file does not call it. A new hash is stored as flagged.
  * flagged means the cell check has not run yet. The open price stays open.
+ *
+ * recordArchiveResult() writes only archive_url and archive_status. The
+ * page text stays where recordSourceCheck() put it. A failed capture does
+ * not delete that text.
  *
  * The caller passes fetchedAt. This file does not call new Date(), so a
  * test can use a fixed clock. The seed does not use this door. A seed row
@@ -124,6 +129,126 @@ export async function recordSourceCheck(
 
     return filed;
   });
+}
+
+type ObservationArchive = {
+  id: number;
+  pageUrl: string;
+  archiveStatus: "pending" | "archived" | "failed";
+  archiveUrl: string | null;
+};
+
+type ArchiveStamp =
+  | { kind: "archived"; permalink: string }
+  | { kind: "failed" };
+
+type RecordedArchive =
+  | { kind: "archived"; permalink: string }
+  | { kind: "failed" }
+  | { kind: "unchanged"; permalink: string };
+
+/**
+ * Read the archive columns for one snapshot, plus the page URL to send
+ * to Save Page Now. A missing row is null. This does not call Wayback.
+ */
+export async function findObservationArchive(
+  db: EvidenceDb,
+  observationId: number,
+): Promise<ObservationArchive | null> {
+  assertObservationId(observationId);
+  const rows = await db
+    .select({
+      id: observations.id,
+      pageUrl: sources.url,
+      archiveStatus: observations.archiveStatus,
+      archiveUrl: observations.archiveUrl,
+    })
+    .from(observations)
+    .innerJoin(sources, eq(sources.id, observations.sourceId))
+    .where(eq(observations.id, observationId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Stamp one snapshot as archived or failed.
+ *
+ * The permalink must be an https web.archive.org URL. A blank or foreign
+ * URL throws before the update, and the row stays as it was. A row that
+ * is already archived is left alone, so a later failure cannot wipe a
+ * permalink. raw_content is not in the update.
+ */
+export async function recordArchiveResult(
+  db: EvidenceDb,
+  input: { observationId: number; result: ArchiveStamp },
+): Promise<RecordedArchive> {
+  assertObservationId(input.observationId);
+  const permalink =
+    input.result.kind === "archived" ? readPermalink(input.result.permalink) : null;
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: observations.id,
+        archiveStatus: observations.archiveStatus,
+        archiveUrl: observations.archiveUrl,
+      })
+      .from(observations)
+      .where(eq(observations.id, input.observationId))
+      .for("update");
+    const row = rows[0];
+    if (row === undefined) {
+      throw new Error(`observation ${input.observationId} does not exist`);
+    }
+    if (row.archiveStatus === "archived") {
+      if (row.archiveUrl === null || row.archiveUrl.trim() === "") {
+        throw new Error(`observation ${row.id} is archived without a permalink`);
+      }
+      return { kind: "unchanged", permalink: row.archiveUrl };
+    }
+
+    if (permalink === null) {
+      await tx
+        .update(observations)
+        .set({ archiveUrl: null, archiveStatus: "failed" })
+        .where(eq(observations.id, row.id));
+      return { kind: "failed" };
+    }
+
+    await tx
+      .update(observations)
+      .set({ archiveUrl: permalink, archiveStatus: "archived" })
+      .where(eq(observations.id, row.id));
+    return { kind: "archived", permalink };
+  });
+}
+
+function assertObservationId(observationId: number): void {
+  if (!Number.isInteger(observationId) || observationId <= 0) {
+    throw new Error("observation id must be a positive whole number");
+  }
+}
+
+function readPermalink(permalink: string): string {
+  const trimmed = permalink.trim();
+  if (trimmed === "") {
+    throw new Error("an archived observation needs a permalink");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error("archive permalink is not a URL");
+  }
+  if (url.protocol !== "https:" || url.hostname !== "web.archive.org") {
+    throw new Error("archive permalink must be an https web.archive.org URL");
+  }
+  const match = /^\/web\/([^/]+)\/(.+)$/.exec(url.pathname);
+  if (match === null) {
+    throw new Error("archive permalink is missing a timestamp or original URL");
+  }
+  return trimmed;
 }
 
 function prepareCheck(input: RecordSourceCheckInput): PreparedCheck {

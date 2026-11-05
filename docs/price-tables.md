@@ -95,7 +95,7 @@ This row exists because the parsed page changed on 2 June. The 20 May check does
 
 `parsed_data` is a tiny JSON array with only the current Haiku input price, `$1` per million tokens, and no tier. The real page has more prices. This cell is only big enough to show the shape. `source` inside that JSON means the number came from the official page. It is not `sources.id`.
 
-`archive_url` is blank. `archive_status` is `pending`, so Wayback has not stored a permalink yet.
+`archive_url` is blank. `archive_status` is `pending`, so Wayback has not stored a permalink yet. A later capture can fill `archive_url` with a `https://web.archive.org/web/...` permalink and set `archive_status` to `archived`. If Save Page Now fails or times out, `archive_status` becomes `failed`, `archive_url` stays blank, and `raw_content` stays the stored copy. This example row is still pending.
 
 ### observation_items
 

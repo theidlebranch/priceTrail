@@ -3,7 +3,7 @@ import {
   interpretWaybackStatus,
   parseCaptureSubmit,
   requireIaKeys,
-} from "./wayback-status";
+} from "@/server/archive/wayback-status";
 
 /**
  * One-URL Save Page Now spike. This is not the production archive client
