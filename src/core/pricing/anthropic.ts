@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import { anthropicCacheMultiplierWarnings } from "./anthropic-cache";
 import {
   normalizedPriceSchema,
   type Condition,
@@ -24,9 +25,6 @@ const PRICE_HEADER_SET = new Set<string>(REQUIRED_PRICE_HEADERS);
 const PRICE_PATTERN = /^\$(\d+(?:\.\d+)?)\s*\/\s*MTok$/;
 const TIER_PATTERN = /^for prompts (up to|over) ([\d,]+) tokens$/i;
 const TIER_LIKE_PATTERN = /^for prompts\b/i;
-
-const CACHE_WRITE_5M_MULTIPLIER = new Decimal("1.25");
-const CACHE_WRITE_1H_MULTIPLIER = new Decimal("2");
 
 type MarkdownTable = {
   headers: string[];
@@ -86,7 +84,9 @@ export function parseAnthropicPricing(markdown: string): AnthropicParseResult {
       );
     }
 
-    warnings.push(...checkMultipliers(model.modelName, amounts));
+    // A mismatch stays a warning. The parser still returns the rows.
+    // checkParsedPrices is what reports the parse as suspect.
+    warnings.push(...anthropicCacheMultiplierWarnings(model.modelName, amounts));
 
     for (const column of PRICE_COLUMNS) {
       rows.push(
@@ -249,35 +249,3 @@ function pageLabelSlug(modelName: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function cacheReadMultiplier(modelName: string): Decimal {
-  if (modelName === "Claude Fable 5.1" || modelName === "Claude Mythos 5.1") {
-    return new Decimal("0.025");
-  }
-  if (modelName === "Claude Opus 5.5" || modelName === "Claude Sonnet 5.5") {
-    return new Decimal("0.05");
-  }
-  return new Decimal("0.1");
-}
-
-function checkMultipliers(modelName: string, amounts: AnthropicAmounts): string[] {
-  const input = new Decimal(amounts.input);
-  const expectedByDimension: Partial<Record<AnthropicDimension, Decimal>> = {
-    cache_write_5m: input.mul(CACHE_WRITE_5M_MULTIPLIER),
-    cache_write_1h: input.mul(CACHE_WRITE_1H_MULTIPLIER),
-    cache_read: input.mul(cacheReadMultiplier(modelName)),
-  };
-
-  const warnings: string[] = [];
-  for (const [dimension, expected] of Object.entries(expectedByDimension) as [
-    AnthropicDimension,
-    Decimal,
-  ][]) {
-    const actual = new Decimal(amounts[dimension]);
-    if (!actual.equals(expected)) {
-      warnings.push(
-        `multiplier mismatch for ${modelName} ${dimension}: expected ${expected.toFixed()}, got ${actual.toFixed()}`,
-      );
-    }
-  }
-  return warnings;
-}
