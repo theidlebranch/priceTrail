@@ -6,7 +6,9 @@
  * writes nothing. Do not type a price that is not in the fixture.
  *
  * These six models are the top of each saved page: Claude 5.1, and the
- * gpt-6 Standard rows. Older models stay out. Google stays out.
+ * gpt-6 Standard rows. Older models stay out. Google prices stay out.
+ * The Google lab is planted by plantGoogleCatalog(), and that function
+ * does not publish a price.
  *
  * OpenAI's long-context cells for these models have no token cutoff, so
  * the parser emits no row for them. Do not add those amounts here.
