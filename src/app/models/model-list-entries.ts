@@ -51,9 +51,18 @@ function modelHref(labSlug: string, modelSlug: string): string {
   return `/models/${lab}/${model}`;
 }
 
-function publicSlug(slug: string, kind: "lab" | "model"): string {
+/**
+ * A slug that is empty, contains "/", or is "." or ".." is not one path
+ * segment. The list uses this before it builds a link. The detail page
+ * uses it before it opens the database. Encoding does not fix "." or "..".
+ */
+export function assertPublicSlug(slug: string, kind: "lab" | "model"): void {
   if (slug.length === 0 || slug.includes("/") || slug === "." || slug === "..") {
     throw new Error(`${kind} slug is empty, contains a slash, or is "." or ".."`);
   }
+}
+
+function publicSlug(slug: string, kind: "lab" | "model"): string {
+  assertPublicSlug(slug, kind);
   return encodeURIComponent(slug);
 }
