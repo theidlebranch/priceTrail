@@ -28,8 +28,8 @@ import {
   failureNote,
   filedNote,
   requireChangedObservationId,
-  verifyAnthropicSource,
-} from "@/server/pipeline/verify-anthropic";
+  verifyOfficialSource,
+} from "@/server/pipeline/verify-official-source";
 import type { FetchLike, ProviderSource } from "@/server/sources/provider-source";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
@@ -70,7 +70,7 @@ describe("verify result checks", () => {
   });
 });
 
-describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
+describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
   let close: (() => Promise<void>) | undefined;
   let db: ReturnType<typeof createDb>["db"];
 
@@ -90,7 +90,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const pageUrl = uniquePageUrl();
       const network = forbiddenFetch();
       await expect(
-        verifyAnthropicSource(tx, {
+        verifyOfficialSource(tx, {
           source: testSource({
             labSlug: uniqueSlug("lab"),
             pageUrl,
@@ -111,7 +111,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
     await withEvidence(async (tx) => {
       const planted = await plantSource(tx, { active: false });
       const network = forbiddenFetch();
-      await expect(verifyAnthropicSource(tx, visit(planted, network.fetchImpl))).rejects.toThrow(
+      await expect(verifyOfficialSource(tx, visit(planted, network.fetchImpl))).rejects.toThrow(
         /inactive/,
       );
       expect(network.calls()).toBe(0);
@@ -122,7 +122,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
     await withEvidence(async (tx) => {
       const planted = await plantSource(tx, { type: "aggregator" });
       const network = forbiddenFetch();
-      await expect(verifyAnthropicSource(tx, visit(planted, network.fetchImpl))).rejects.toThrow(
+      await expect(verifyOfficialSource(tx, visit(planted, network.fetchImpl))).rejects.toThrow(
         /not an official page/,
       );
       expect(network.calls()).toBe(0);
@@ -136,7 +136,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
         error: new Error("getaddrinfo ENOTFOUND example.test"),
       });
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result).toEqual({
         kind: "fetch_error",
@@ -161,7 +161,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const planted = await plantTracked(tx);
       const network = pageFetch(planted.pageUrl, { status: 403, body: fixture });
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result.kind).toBe("fetch_error");
       if (result.kind !== "fetch_error") {
@@ -192,7 +192,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
         },
       });
 
-      const result = await verifyAnthropicSource(tx, {
+      const result = await verifyOfficialSource(tx, {
         ...visit(planted, network.fetchImpl),
         source,
       });
@@ -208,7 +208,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const planted = await plantTracked(tx);
       const network = pageFetch(planted.pageUrl, { body: "not a pricing page" });
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result.kind).toBe("parser_suspect");
       if (result.kind !== "parser_suspect") {
@@ -232,7 +232,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const planted = await plantTracked(tx, { modelSlug: uniqueSlug("missing-model") });
       const network = pageFetch(planted.pageUrl, { body: fixture });
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result.kind).toBe("parser_suspect");
       if (result.kind !== "parser_suspect") {
@@ -259,7 +259,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       });
 
       await expect(
-        verifyAnthropicSource(tx, {
+        verifyOfficialSource(tx, {
           ...visit(planted, network.fetchImpl),
           source,
         }),
@@ -275,7 +275,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
       const before = await priceCount(tx, planted.offeringId);
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result.kind).toBe("changed");
       if (result.kind !== "changed") {
@@ -318,14 +318,14 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
     await withEvidence(async (tx) => {
       const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
       const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
-      const first = await verifyAnthropicSource(tx, {
+      const first = await verifyOfficialSource(tx, {
         ...visit(planted, network.fetchImpl),
         fetchedAt: FIRST_SEEN,
       });
       expect(first.kind).toBe("changed");
       const waybackAfterFirst = network.waybackCalls();
 
-      const second = await verifyAnthropicSource(tx, {
+      const second = await verifyOfficialSource(tx, {
         ...visit(planted, network.fetchImpl),
         fetchedAt: NEXT_SEEN,
       });
@@ -341,7 +341,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
       const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "error" });
 
-      const result = await verifyAnthropicSource(tx, visit(planted, network.fetchImpl));
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
       expect(result.kind).toBe("changed");
       if (result.kind !== "changed") {
@@ -367,7 +367,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyAnthropicSource", () => {
       const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
 
       await expect(
-        verifyAnthropicSource(tx, {
+        verifyOfficialSource(tx, {
           ...visit(planted, network.fetchImpl),
           env: {},
         }),
@@ -472,7 +472,7 @@ async function plantTracked(
   };
 }
 
-function visit(planted: PlantedSource, fetchImpl: FetchLike): Parameters<typeof verifyAnthropicSource>[1] {
+function visit(planted: PlantedSource, fetchImpl: FetchLike): Parameters<typeof verifyOfficialSource>[1] {
   return {
     source: testSource({
       labSlug: planted.labSlug,
