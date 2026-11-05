@@ -16,9 +16,11 @@ import { pricePrecisionLabel } from "@/core/pricing/precision";
  * still saw that price. The dashed gap runs from that day to the next
  * fetch that published the same dimension, even when a source named an
  * earlier start. A period that omits the dimension is not a point. The
- * gap connects the periods that have it. changeCount is how many times
- * that amount actually changed. "1.0" and "1" are one price. Retracted
- * rows never reach this function. The reader drops them first.
+ * gap connects the periods that have it. Drawing follows the chart day,
+ * and the open-period check follows publication order. changeCount is
+ * how many times that amount actually changed. "1.0" and "1" are one
+ * price. Retracted rows never reach this function. The reader drops
+ * them first.
  */
 
 export const PRICE_DIMENSIONS = [
@@ -135,9 +137,14 @@ export function toPriceHistories(
 
   const asOfDay = utcDay(asOf);
   const prepared = periods.map((period) => prepareTimeline(period));
-  prepared.sort((left, right) => left.chartStart.localeCompare(right.chartStart));
+  const byChart = [...prepared].sort((left, right) =>
+    left.chartStart.localeCompare(right.chartStart),
+  );
+  const byPublication = [...prepared].sort(
+    (left, right) => left.firstSeenAt.getTime() - right.firstSeenAt.getTime(),
+  );
 
-  for (const period of prepared) {
+  for (const period of byChart) {
     for (const component of period.components) {
       if (!isPriceDimension(component.dimension)) {
         throw new Error(`dimension ${component.dimension} is not a known price dimension`);
@@ -146,13 +153,14 @@ export function toPriceHistories(
     }
   }
 
-  assertTimeline(prepared, asOfDay);
+  assertChartDays(byChart, asOfDay);
+  assertPublicationOrder(byPublication);
 
   const series: PriceHistorySeries[] = [];
   const skipped: PriceHistorySkipped[] = [];
 
   for (const dimension of PRICE_DIMENSIONS) {
-    const classified = classifyDimension(dimension, prepared);
+    const classified = classifyDimension(dimension, byChart);
     if (classified === null) {
       continue;
     }
@@ -206,7 +214,7 @@ function prepareTimeline(period: PriceHistoryPeriod): TimelinePeriod {
   };
 }
 
-function assertTimeline(periods: readonly TimelinePeriod[], asOfDay: string): void {
+function assertChartDays(periods: readonly TimelinePeriod[], asOfDay: string): void {
   for (const period of periods) {
     if (asOfDay < period.chartStart) {
       throw new Error("asOf is before the chart start");
@@ -225,6 +233,16 @@ function assertTimeline(periods: readonly TimelinePeriod[], asOfDay: string): vo
     }
     if (previous.chartStart === current.chartStart) {
       throw new Error("two periods start on the same day");
+    }
+  }
+}
+
+function assertPublicationOrder(periods: readonly TimelinePeriod[]): void {
+  for (let index = 1; index < periods.length; index += 1) {
+    const previous = periods[index - 1];
+    const current = periods[index];
+    if (previous === undefined || current === undefined) {
+      continue;
     }
     if (previous.lastSeenAt === null) {
       throw new Error("an earlier period is still open");

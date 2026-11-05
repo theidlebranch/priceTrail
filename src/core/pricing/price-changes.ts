@@ -12,9 +12,9 @@ import { pricePrecisionLabel } from "@/core/pricing/precision";
  *
  * This file does not open a database and does not call new Date().
  * The first period is the starting price, not a change. Later periods
- * are compared to the one before them. Amounts are decimals, so "0.10"
- * and "0.1" are the same price. A percent is blank when the old amount
- * is missing or zero.
+ * are compared in publication order, which is firstSeenAt. Amounts are
+ * decimals, so "0.10" and "0.1" are the same price. A percent is blank
+ * when the old amount is missing or zero.
  *
  * Retracted rows never reach this function. The reader drops them first.
  */
@@ -54,6 +54,7 @@ const AMOUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 type PreparedPeriod = {
+  firstSeenAt: Date;
   chartStart: string;
   dateLine: string;
   components: Map<string, PriceHistoryComponent>;
@@ -70,13 +71,15 @@ export function toPriceChanges(periods: readonly PriceHistoryPeriod[]): PriceCha
   }
 
   const prepared = periods.map(preparePeriod);
-  prepared.sort((left, right) => left.chartStart.localeCompare(right.chartStart));
-
-  for (let index = 1; index < prepared.length; index += 1) {
-    if (prepared[index - 1]?.chartStart === prepared[index]?.chartStart) {
+  const chartDays = new Set<string>();
+  for (const period of prepared) {
+    if (chartDays.has(period.chartStart)) {
       throw new Error("two periods start on the same day");
     }
+    chartDays.add(period.chartStart);
   }
+
+  prepared.sort((left, right) => left.firstSeenAt.getTime() - right.firstSeenAt.getTime());
 
   const events: PriceChangeEvent[] = [];
   for (let index = 1; index < prepared.length; index += 1) {
@@ -138,6 +141,7 @@ function preparePeriod(period: PriceHistoryPeriod): PreparedPeriod {
       : `Changed on or before ${precision.chartStart}.`;
 
   return {
+    firstSeenAt: period.firstSeenAt,
     chartStart: precision.chartStart,
     dateLine,
     components: indexComponents(period.components),

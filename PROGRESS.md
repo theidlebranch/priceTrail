@@ -22,7 +22,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 ## In progress
 
-- Phase 4 step 19, on `step-19-price-history-chart` and not merged yet: the model page is one column. Headline cards show untiered input and output. Component rows show the multiplier against input and the last change. One tabbed chart draws the selected price. `toPriceChanges()` lists real changes, newest first. The first version is not a change. A dashed gap still means the price was not seen between checks. A tier stays off the chart and on the table. Seeded models have one period, so the live page has a flat line and no percent badge. The pending-change banner is step 20.
+- Phase 4 step 19, on `step-19-price-history-chart` and not merged yet: the model page is one column. Headline cards show untiered input and output. Component rows show the multiplier against input and the last change. One tabbed chart draws the selected price. `toPriceChanges()` lists real changes, newest first. The first version is not a change. A dashed gap still means the price was not seen between checks. A tier stays off the chart and on the table. Seeded models have one period, so the live page has a flat line and no percent badge. The pending-change banner is step 20. Chart lines stay in chart-start order. The open-period check and the change list follow `firstSeenAt`, so a later version with an earlier announced day does not look like the older open price.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked

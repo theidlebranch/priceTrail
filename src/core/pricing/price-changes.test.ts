@@ -340,6 +340,51 @@ describe("toPriceChanges", () => {
     ]);
   });
 
+  it("compares a backdated announcement after the version published first", () => {
+    const changes = toPriceChanges([
+      period({
+        firstSeenAt: NEXT_SEEN,
+        announcedOn: "2025-11-01",
+        lastSeenAt: null,
+        components: [row("input", "1"), row("output", "5")],
+      }),
+      period(),
+    ]);
+
+    expect(changes.sinceDay).toBe("2026-01-15");
+    expect(changes.events).toEqual([
+      {
+        dateLine: "Announced for 2025-11-01.",
+        previousDateLine: "Changed on or before 2026-01-15.",
+        changes: [
+          {
+            dimension: "input",
+            condition: {},
+            fromAmount: "1.25",
+            toAmount: "1",
+            direction: "down",
+            pctText: "20",
+          },
+        ],
+      },
+    ]);
+    expect(changes.latest).toEqual(changes.events[0]);
+  });
+
+  it("throws when two fetches share one chart day", () => {
+    expect(() =>
+      toPriceChanges([
+        period({ lastSeenAt: LAST_SEEN }),
+        period({
+          firstSeenAt: NEXT_SEEN,
+          announcedOn: "2026-01-15",
+          lastSeenAt: null,
+          components: [row("input", "1")],
+        }),
+      ]),
+    ).toThrow(/same day/);
+  });
+
   it("rounds a repeating percent to two decimal places", () => {
     const changes = toPriceChanges([
       period({ components: [row("input", "3")] }),

@@ -470,6 +470,52 @@ describe("toPriceHistories", () => {
     ).toThrow(/firstSeenAt/);
   });
 
+  it("draws a backdated open version before the older closed version", () => {
+    expect(
+      toPriceHistories(
+        [
+          period(),
+          period({
+            firstSeenAt: NEXT_SEEN,
+            announcedOn: "2025-11-01",
+            lastSeenAt: null,
+            components: [input("1")],
+          }),
+        ],
+        AS_OF,
+      ),
+    ).toEqual({
+      series: [
+        series(
+          "input",
+          "Input",
+          "1.25",
+          [
+            {
+              kind: "known",
+              from: "2025-11-01",
+              to: "2026-06-10",
+              amountText: "1",
+              amount: 1,
+              label: "Announced for 2025-11-01.",
+            },
+            {
+              kind: "known",
+              from: "2026-01-15",
+              to: "2026-05-20",
+              amountText: "1.25",
+              amount: 1.25,
+              label: "Changed on or before 2026-01-15.",
+            },
+          ],
+          1,
+        ),
+        OLD_OUTPUT,
+      ],
+      skipped: [],
+    });
+  });
+
   it("throws when an earlier period is still open", () => {
     expect(() =>
       toPriceHistories(
