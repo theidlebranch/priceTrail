@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, type ExtractTablesWithRelations } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, type ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import * as schema from "@/server/db/schema";
@@ -20,10 +20,13 @@ import {
  * publishPriceVersion() stays the only writer of price rows.
  *
  * The current price is the open version: last_seen_at blank and
- * retracted_at blank. A region other than global is left out. The
- * evidence link is sources.url where type is official. raw_content,
- * parsed_data, and archive_url are not selected. A public page does
- * not load the stored page text.
+ * retracted_at blank. historyVersions is every version with
+ * retracted_at blank, including closed ones, so the chart can draw
+ * the older prices. A retracted row stays out of both lists.
+ * A region other than global is left out. The evidence link is
+ * sources.url where type is official. raw_content, parsed_data, and
+ * archive_url are not selected. A public page does not load the
+ * stored page text.
  */
 
 type Schema = typeof schema;
@@ -49,8 +52,13 @@ type ModelDetailVersion = {
   components: ModelDetailComponent[];
 };
 
+type ModelDetailHistoryVersion = ModelDetailVersion & {
+  lastSeenAt: Date | null;
+};
+
 export type ModelDetailOffering = {
   openVersions: ModelDetailVersion[];
+  historyVersions: ModelDetailHistoryVersion[];
   officialSourceUrls: string[];
 };
 
@@ -126,15 +134,11 @@ export async function findModelDetail(
       offeringId: priceVersions.offeringId,
       firstSeenAt: priceVersions.firstSeenAt,
       announcedOn: priceVersions.announcedOn,
+      lastSeenAt: priceVersions.lastSeenAt,
     })
     .from(priceVersions)
-    .where(
-      and(
-        inArray(priceVersions.offeringId, offeringIds),
-        isNull(priceVersions.lastSeenAt),
-        isNull(priceVersions.retractedAt),
-      ),
-    );
+    .where(and(inArray(priceVersions.offeringId, offeringIds), isNull(priceVersions.retractedAt)))
+    .orderBy(asc(priceVersions.firstSeenAt), asc(priceVersions.id));
 
   const versionIds = versionRows.map((version) => version.id);
   const componentRows =
@@ -178,6 +182,7 @@ function offeringDetail(
     offeringId: number;
     firstSeenAt: Date;
     announcedOn: string | null;
+    lastSeenAt: Date | null;
   }[],
   componentRows: {
     priceVersionId: number;
@@ -188,11 +193,12 @@ function offeringDetail(
   }[],
   sourceRows: { offeringId: number; url: string }[],
 ): ModelDetailOffering {
-  const openVersions = versionRows
+  const historyVersions = versionRows
     .filter((version) => version.offeringId === offeringId)
     .map((version) => ({
       firstSeenAt: version.firstSeenAt,
       announcedOn: version.announcedOn,
+      lastSeenAt: version.lastSeenAt,
       components: componentRows
         .filter((component) => component.priceVersionId === version.id)
         .map((component) => ({
@@ -203,11 +209,19 @@ function offeringDetail(
         })),
     }));
 
+  const openVersions = historyVersions
+    .filter((version) => version.lastSeenAt === null)
+    .map((version) => ({
+      firstSeenAt: version.firstSeenAt,
+      announcedOn: version.announcedOn,
+      components: version.components,
+    }));
+
   const officialSourceUrls = [
     ...new Set(
       sourceRows.filter((source) => source.offeringId === offeringId).map((source) => source.url),
     ),
   ].sort();
 
-  return { openVersions, officialSourceUrls };
+  return { openVersions, historyVersions, officialSourceUrls };
 }
