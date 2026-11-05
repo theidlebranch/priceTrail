@@ -29,7 +29,7 @@ scheduled poll (every ~6h)    ────────────────�
 
 ## How a check is filed
 
-The program is the visit. The tables are where each ending is filed. `pnpm verify:anthropic` runs that visit for the Anthropic page. `pnpm verify:openai` runs the same visit for the OpenAI page. `verifyOfficialSource()` stops after the archive call. The cell check below is not built yet, and these scripts do not call `publishPriceVersion()`.
+The program is the visit. The tables are where each ending is filed. `pnpm verify:anthropic`, `pnpm verify:openai`, and `pnpm verify:google` each run that visit for one official page. `.github/workflows/verify.yml` runs those three about every 6 hours, and the cell check is still not part of that visit. `verifyOfficialSource()` stops after the archive call. These scripts do not call `publishPriceVersion()`.
 
 A visit always writes `fetch_log`. It writes `observations` and `observation_items` only when the download worked, the mechanical checks passed, and the fingerprint of `parsed_data` is new. `raw_content` and `parsed_data` are both kept on that snapshot. Public pages do not load `raw_content`. Only the evidence view for one price reads it.
 
