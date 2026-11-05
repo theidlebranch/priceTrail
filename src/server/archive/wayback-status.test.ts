@@ -3,7 +3,7 @@ import {
   interpretWaybackStatus,
   parseCaptureSubmit,
   requireIaKeys,
-} from "./wayback-status";
+} from "@/server/archive/wayback-status";
 
 describe("interpretWaybackStatus", () => {
   it("returns the permalink when the job succeeded", () => {
