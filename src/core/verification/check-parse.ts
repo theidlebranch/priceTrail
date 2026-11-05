@@ -6,8 +6,8 @@ import type { Condition, NormalizedPrice } from "@/core/pricing/shape";
  *
  * This function does not read a database, does not call new Date(), and
  * does not write fetch_log. A broken parse returns status "suspect".
- * The next step is what records that as parser_suspect. An amount that
- * is not a plain decimal throws, because comparing it would be a guess.
+ * recordSourceCheck() is what records that as parser_suspect. An amount
+ * that is not a plain decimal throws, because comparing it would be a guess.
  *
  * Anthropic cache rows are compared inside one model, one prompt tier,
  * and one schedule segment. Haiku's "up to 100,000" input is not checked
