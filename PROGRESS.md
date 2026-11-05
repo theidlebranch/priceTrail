@@ -21,10 +21,11 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Phase 4 step 18: `/models/<lab slug>/<model slug>` shows the open price. Merged as pull request #23.
 - Phase 4 step 19: the model page draws one tabbed price history and a change log. Merged as pull request #24. Chart lines stay in chart-start order. The open-period check and the change list follow `firstSeenAt`.
 - Phase 4 step 20: the model page shows "A possible change is under review." when an official observation item is `flagged`. Merged as pull request #25. The published price stays on the page. The unverified amount is not selected. Claude Mythos 5.1 is the seeded example. `pnpm seed:pending` adds that flagged row and does not call `publishPriceVersion()`.
+- Phase 5 step 21: `anthropicSource` downloads the Anthropic pricing page and runs `parseAnthropicPricing()`. Merged as pull request #26. A bad download throws. It does not write a price, a `fetch_log` row, or an observation.
 
 ## In progress
 
-- Phase 5 step 21, on `step-21-provider-source` and not merged yet: `anthropicSource` downloads the Anthropic pricing page and runs `parseAnthropicPricing()`. A bad download throws. It does not write a price, a `fetch_log` row, or an observation.
+- Phase 5 step 22, on `step-22-sanity-checks` and not merged yet: `checkParsedPrices()` says whether one successful parse looks broken. Zero rows, a missing tracked slug, or an Anthropic cache ratio that does not match the page's own rule is `suspect`. An unreadable amount throws. It does not write a price, a `fetch_log` row, or an observation. A jump of more than 10x stays later.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked

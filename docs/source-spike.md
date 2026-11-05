@@ -51,7 +51,7 @@ No source needs Playwright or a JS-rendered fetch. Every official page is parsea
   - **Tier lives in the model name, not in a column**: `Claude Haiku 5.5 (for prompts up to 100,000 tokens)` and `(... over 100,000 tokens)` are two rows. Parse the condition with a regex (`for prompts (up to|over) ([\d,]+) tokens`). If a parenthetical looks like a tier but the regex fails, throw.
   - Footnote 3 says a scheduled Sonnet 5 price increase "will not occur". **Announced future prices can be cancelled.**
   - Unknown extra columns go into an `unmappedColumns` warning, not silently ignored.
-- **Free sanity check (warning, not failure):** 5m write = 1.25x input, 1h write = 2x input, cache read = 0.1x input (0.05x for Opus 5.5 and Sonnet 5.5, 0.025x for Fable 5.1 and Mythos 5.1, per the footnotes). Checked by hand on several rows. A violation means `parser_suspect`, because a legitimate multiplier change is possible.
+- **Free sanity check (warning, not failure):** 5m write = 1.25x input, 1h write = 2x input, cache read = 0.1x input (0.05x for Opus 5.5 and Sonnet 5.5, 0.025x for Fable 5.1 and Mythos 5.1, per the footnotes). Checked by hand on several rows. `anthropicCacheMultiplierWarnings()` in `src/core/pricing/anthropic-cache.ts` returns that warning, and the parser still returns the rows. `checkParsedPrices()` in `src/core/verification/check-parse.ts` reports `suspect`. Step 23 is what writes `parser_suspect`. A legitimate multiplier change is possible, so this is not treated as a published price change.
 
 ### 3.2 OpenAI
 
