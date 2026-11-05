@@ -6,8 +6,9 @@
  * passing run leaves no rows.
  *
  * The price row is planted with publishPriceVersion(). This file does not
- * insert into the price tables. A closed or retracted version must not
- * come back as the current price.
+ * insert into the price tables. A closed version stays in the history
+ * list and must not come back as the current price. A retracted version
+ * stays out of both lists.
  *
  * Local run:
  * node --env-file=.env ./node_modules/vitest/vitest.mjs run src/server/db/repositories/model-detail.test.ts
@@ -97,6 +98,21 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
                 ],
               },
             ],
+            historyVersions: [
+              {
+                firstSeenAt: FIRST_SEEN,
+                announcedOn: null,
+                lastSeenAt: null,
+                components: [
+                  {
+                    dimension: "input",
+                    unit: "usd_per_1m_tokens",
+                    amount: "10",
+                    condition: {},
+                  },
+                ],
+              },
+            ],
             officialSourceUrls: [published.sourceUrl],
           },
         ],
@@ -112,7 +128,9 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
       const planted = await plantModel(tx);
       const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
 
-      expect(detail?.offerings).toEqual([{ openVersions: [], officialSourceUrls: [] }]);
+      expect(detail?.offerings).toEqual([
+        { openVersions: [], historyVersions: [], officialSourceUrls: [] },
+      ]);
     });
   });
 
@@ -140,6 +158,34 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
           condition: {},
         },
       ]);
+      expect(detail?.offerings[0]?.historyVersions).toEqual([
+        {
+          firstSeenAt: FIRST_SEEN,
+          announcedOn: null,
+          lastSeenAt: LAST_SEEN,
+          components: [
+            {
+              dimension: "input",
+              unit: "usd_per_1m_tokens",
+              amount: "1.25",
+              condition: {},
+            },
+          ],
+        },
+        {
+          firstSeenAt: NEXT_SEEN,
+          announcedOn: null,
+          lastSeenAt: null,
+          components: [
+            {
+              dimension: "input",
+              unit: "usd_per_1m_tokens",
+              amount: "1",
+              condition: {},
+            },
+          ],
+        },
+      ]);
     });
   });
 
@@ -161,6 +207,10 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
       );
 
       expect(amounts).toEqual(["1"]);
+      const historyAmounts = detail?.offerings[0]?.historyVersions.flatMap((version) =>
+        version.components.map((component) => component.amount),
+      );
+      expect(historyAmounts).toEqual(["1"]);
     });
   });
 

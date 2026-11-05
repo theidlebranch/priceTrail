@@ -66,7 +66,9 @@ async function ModelDetailLoader({
     if (row === null) {
       throw new Error("tracked model disappeared before the page could read it");
     }
-    return <ModelDetail view={toModelDetailView(row)} />;
+    // asOf is this request. The chart function does not read the clock itself,
+    // so a test can pass a fixed day and the open line still has an end.
+    return <ModelDetail view={toModelDetailView(row, new Date())} />;
   } finally {
     await close();
   }
