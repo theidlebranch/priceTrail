@@ -29,6 +29,10 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
+    "@opentelemetry/api": "~1.9.1",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/otel": "^2.3.0",
+    "@vercel/speed-insights": "^2.1.0",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
