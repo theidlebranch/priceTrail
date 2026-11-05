@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import { changeUnderReview } from "@/app/models/pending-review";
 import { toPriceChanges, type PriceChanges, type PriceLastChange } from "@/core/pricing/price-changes";
 import {
   isPriceDimension,
@@ -34,6 +35,10 @@ export type { ModelDetailRead } from "@/server/db/repositories/model-detail";
  * Amounts stay the decimal strings from the database. A JavaScript number
  * would turn 0.10 into 0.1. A multiplier and a percent use decimal.js
  * for the same reason. The first version is not a change.
+ *
+ * changeUnderReview is a yes or no from the official review statuses.
+ * It does not carry an unverified amount. The price on the page stays
+ * the open version.
  */
 
 // The page renders this list as given. Cache read sits with the leading
@@ -99,6 +104,7 @@ export type ModelDetailView = {
   } | null;
   history: PriceHistories;
   events: ModelDetailChangeEvent[];
+  changeUnderReview: boolean;
 };
 
 export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetailView {
@@ -127,6 +133,7 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
         ? { series: [], skipped: [] }
         : toPriceHistories(offering.historyVersions, asOf),
     events: changes === null ? [] : changes.events.map(toEvent),
+    changeUnderReview: offering === undefined ? false : changeUnderReview(offering.reviewStatuses),
   };
 }
 

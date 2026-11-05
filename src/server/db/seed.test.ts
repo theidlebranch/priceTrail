@@ -37,6 +37,7 @@ import { SEED_FIRST_SEEN_AT, SEED_LABS, type SeedModelSpec } from "@/server/db/s
 import {
   assertSeedMatchesRows,
   loadSeedPlan,
+  plantSeedPendingExample,
   redactDatabaseUrl,
   runSeed,
   type SeedPlanEntry,
@@ -254,8 +255,11 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
         .select()
         .from(observations)
         .where(inArray(observations.sourceId, sourceRows.map((source) => source.id)));
-      expect(observationRows).toHaveLength(2);
-      for (const observation of observationRows) {
+      const publishedObservations = observationRows.filter(
+        (observation) => observation.fetchedAt.getTime() === SEED_FIRST_SEEN_AT.getTime(),
+      );
+      expect(publishedObservations).toHaveLength(2);
+      for (const observation of publishedObservations) {
         const entry = plan.find((item) =>
           sourceRows.some((source) => source.id === observation.sourceId && source.url === item.lab.sourceUrl),
         );
@@ -270,17 +274,39 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
         expect(observation.fetchedAt).toEqual(SEED_FIRST_SEEN_AT);
       }
 
+      const pendingObservations = observationRows.filter(
+        (observation) => observation.fetchedAt.getTime() !== SEED_FIRST_SEEN_AT.getTime(),
+      );
+      expect(pendingObservations).toHaveLength(1);
+      const pending = pendingObservations[0];
+      expect(pending?.fetchedAt).toEqual(new Date("2026-11-01T00:00:00.000Z"));
+      expect(JSON.stringify(pending?.parsedData)).toContain("999");
+      expect(pending?.rawContent).toContain("Not a published price.");
+
       const itemRows = await tx
         .select()
         .from(observationItems)
         .where(inArray(observationItems.observationId, observationRows.map((observation) => observation.id)));
-      expect(itemRows).toHaveLength(6);
-      expect(itemRows.every((item) => item.reviewStatus === "confirmed" && item.reviewedBy === "seed")).toBe(
+      const confirmedItems = itemRows.filter((item) => item.reviewStatus === "confirmed");
+      const flaggedItems = itemRows.filter((item) => item.reviewStatus === "flagged");
+      expect(confirmedItems).toHaveLength(6);
+      expect(confirmedItems.every((item) => item.reviewedBy === "seed")).toBe(true);
+      expect(confirmedItems.every((item) => item.reviewedAt?.getTime() === SEED_FIRST_SEEN_AT.getTime())).toBe(
         true,
       );
-      expect(itemRows.every((item) => item.reviewedAt?.getTime() === SEED_FIRST_SEEN_AT.getTime())).toBe(
-        true,
-      );
+      expect(flaggedItems).toHaveLength(1);
+      expect(flaggedItems[0]?.reviewedBy).toBeNull();
+      expect(flaggedItems[0]?.reviewedAt).toBeNull();
+      const mythos = modelRows.find((model) => model.slug === "claude-mythos-5.1");
+      const mythosOffering = offeringRows.find((offering) => offering.modelId === mythos?.id);
+      expect(flaggedItems[0]?.offeringId).toBe(mythosOffering?.id);
+      const fable = modelRows.find((model) => model.slug === "claude-fable-5.1");
+      const fableOffering = offeringRows.find((offering) => offering.modelId === fable?.id);
+      expect(
+        itemRows
+          .filter((item) => item.offeringId === fableOffering?.id)
+          .every((item) => item.reviewStatus === "confirmed"),
+      ).toBe(true);
 
       const logRows = await tx
         .select()
@@ -350,6 +376,29 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
       expect(after).toEqual(before);
     });
   }, 30_000);
+
+  it("does not add a second pending snapshot when Mythos is already flagged", async () => {
+    await withSeed(async (tx) => {
+      await runSeed(tx);
+      const before = await tx.select({ id: observations.id }).from(observations);
+      const pricesBefore = await tx.select({ id: priceVersions.id }).from(priceVersions);
+
+      await expect(plantSeedPendingExample(tx)).resolves.toBe("already-present");
+
+      const after = await tx.select({ id: observations.id }).from(observations);
+      const pricesAfter = await tx.select({ id: priceVersions.id }).from(priceVersions);
+      expect(after).toEqual(before);
+      expect(pricesAfter).toEqual(pricesBefore);
+    });
+  }, 30_000);
+
+  it("throws when Claude Mythos 5.1 is not in the database", async () => {
+    await withSeed(async (tx) => {
+      await expect(plantSeedPendingExample(tx)).rejects.toThrow(
+        /claude-mythos-5.1 is not in the database/,
+      );
+    });
+  });
 
   async function withSeed(run: (tx: Parameters<typeof runSeed>[0]) => Promise<void>): Promise<void> {
     try {

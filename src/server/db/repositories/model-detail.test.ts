@@ -15,6 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createDb } from "@/server/db/client";
 import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-version";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
@@ -114,6 +115,7 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
               },
             ],
             officialSourceUrls: [published.sourceUrl],
+            reviewStatuses: ["confirmed"],
           },
         ],
       });
@@ -129,7 +131,7 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
       const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
 
       expect(detail?.offerings).toEqual([
-        { openVersions: [], historyVersions: [], officialSourceUrls: [] },
+        { openVersions: [], historyVersions: [], officialSourceUrls: [], reviewStatuses: [] },
       ]);
     });
   });
@@ -211,6 +213,69 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
         version.components.map((component) => component.amount),
       );
       expect(historyAmounts).toEqual(["1"]);
+    });
+  });
+
+  it("keeps the published amount when a later official item is flagged", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      const published = await plantPublished(tx, planted.offeringId, "10");
+      await plantItemOnSource(tx, planted.offeringId, published.sourceUrl, "flagged", {
+        usdPer1M: "999",
+        marker: PARSED_MARKER,
+      });
+
+      const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
+      const amounts = detail?.offerings[0]?.openVersions.flatMap((version) =>
+        version.components.map((component) => component.amount),
+      );
+
+      expect(amounts).toEqual(["10"]);
+      expect(detail?.offerings[0]?.reviewStatuses).toEqual(["confirmed", "flagged"]);
+      expect(detail?.offerings[0]?.officialSourceUrls).toEqual([published.sourceUrl]);
+      const packed = JSON.stringify(detail);
+      expect(packed).not.toContain("999");
+      expect(packed).not.toContain(PARSED_MARKER);
+      expect(packed).not.toContain(RAW_MARKER);
+    });
+  });
+
+  it("does not treat a rejected official item as under review", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      const published = await plantPublished(tx, planted.offeringId, "10");
+      await plantItemOnSource(tx, planted.offeringId, published.sourceUrl, "rejected", {
+        usdPer1M: "999",
+      });
+
+      const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
+      const amounts = detail?.offerings[0]?.openVersions.flatMap((version) =>
+        version.components.map((component) => component.amount),
+      );
+
+      expect(amounts).toEqual(["10"]);
+      expect(detail?.offerings[0]?.reviewStatuses).toEqual(["confirmed", "rejected"]);
+      expect(JSON.stringify(detail)).not.toContain("999");
+    });
+  });
+
+  it("ignores a flagged aggregator item", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      await plantPublished(tx, planted.offeringId, "10");
+      await plantItem(
+        tx,
+        planted.offeringId,
+        `https://example.test/witness/${randomUUID()}`,
+        "aggregator",
+        "flagged",
+        { usdPer1M: "999" },
+      );
+
+      const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
+
+      expect(detail?.offerings[0]?.reviewStatuses).toEqual(["confirmed"]);
+      expect(JSON.stringify(detail)).not.toContain("999");
     });
   });
 
@@ -327,6 +392,8 @@ async function plantItem(
   offeringId: number,
   url: string,
   type: "official" | "aggregator",
+  reviewStatus: "ok" | "flagged" | "confirmed" | "rejected" = "confirmed",
+  parsedData: unknown = { marker: PARSED_MARKER },
 ): Promise<number> {
   const source = requireInsertedRow(
     await tx
@@ -344,7 +411,7 @@ async function plantItem(
         contentHash: uniqueSlug("content"),
         rawContent: `${RAW_MARKER}-${randomUUID()}`,
         rawContentHash: uniqueSlug("raw"),
-        parsedData: { marker: PARSED_MARKER },
+        parsedData,
       })
       .returning(),
     "insert observation",
@@ -355,10 +422,55 @@ async function plantItem(
       .values({
         observationId: observation.id,
         offeringId,
-        reviewStatus: "confirmed",
+        reviewStatus,
       })
       .returning(),
     "insert observation item",
   );
   return item.id;
+}
+
+/** A later snapshot of a source the test already inserted. Same URL, so the page still has one official link. */
+async function plantItemOnSource(
+  tx: PublishDb,
+  offeringId: number,
+  sourceUrl: string,
+  reviewStatus: "ok" | "flagged" | "confirmed" | "rejected",
+  parsedData: unknown,
+): Promise<void> {
+  const sourceRows = await tx
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.url, sourceUrl))
+    .limit(1);
+  const source = sourceRows[0];
+  if (source === undefined) {
+    throw new Error("test source is missing");
+  }
+
+  const observation = requireInsertedRow(
+    await tx
+      .insert(observations)
+      .values({
+        sourceId: source.id,
+        fetchedAt: NEXT_SEEN,
+        contentHash: uniqueSlug("content"),
+        rawContent: `${RAW_MARKER}-${randomUUID()}`,
+        rawContentHash: uniqueSlug("raw"),
+        parsedData,
+      })
+      .returning(),
+    "insert observation",
+  );
+  requireInsertedRow(
+    await tx
+      .insert(observationItems)
+      .values({
+        observationId: observation.id,
+        offeringId,
+        reviewStatus,
+      })
+      .returning(),
+    "insert observation item",
+  );
 }

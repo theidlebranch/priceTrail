@@ -20,7 +20,8 @@
     "db:ping": "tsx --env-file=.env scripts/db-ping.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "seed": "tsx --env-file=.env scripts/seed.ts"
+    "seed": "tsx --env-file=.env scripts/seed.ts",
+    "seed:pending": "tsx --env-file=.env scripts/seed-pending-example.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

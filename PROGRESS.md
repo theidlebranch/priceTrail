@@ -19,10 +19,11 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Phase 4 step 16: `PageShell` wraps every page. Merged as pull request #21.
 - Phase 4 step 17: `/models` lists tracked models from `listModels()`. Merged as pull request #22. Each link is `/models/<lab slug>/<model slug>`. The page shows the lab and the model name. It does not show prices.
 - Phase 4 step 18: `/models/<lab slug>/<model slug>` shows the open price. Merged as pull request #23.
+- Phase 4 step 19: the model page draws one tabbed price history and a change log. Merged as pull request #24. Chart lines stay in chart-start order. The open-period check and the change list follow `firstSeenAt`.
 
 ## In progress
 
-- Phase 4 step 19, on `step-19-price-history-chart` and not merged yet: the model page is one column. Headline cards show untiered input and output. Component rows show the multiplier against input and the last change. One tabbed chart draws the selected price. `toPriceChanges()` lists real changes, newest first. The first version is not a change. A dashed gap still means the price was not seen between checks. A tier stays off the chart and on the table. Seeded models have one period, so the live page has a flat line and no percent badge. The pending-change banner is step 20. Chart lines stay in chart-start order. The open-period check and the change list follow `firstSeenAt`, so a later version with an earlier announced day does not look like the older open price.
+- Phase 4 step 20, on `step-20-pending-change-banner` and not merged yet: the model page shows "A possible change is under review." when an official observation item is `flagged`. The published price stays on the page. The unverified amount is not selected. Claude Mythos 5.1 is the seeded example. Claude Fable 5.1 stays quiet. `pnpm seed:pending` adds that flagged row to a database that was already seeded. It does not call `publishPriceVersion()`.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked

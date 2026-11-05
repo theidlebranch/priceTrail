@@ -76,6 +76,7 @@ function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
     ],
     events: [],
     history: HISTORY,
+    changeUnderReview: false,
     price: {
       dateLine: "Changed on or before 2026-10-18.",
       sourceUrl: SOURCE,
@@ -113,6 +114,7 @@ describe("ModelDetail", () => {
     expect(link.getAttribute("href")).toBe(SOURCE);
     expect(screen.queryByText("All prices shown on this page are examples.")).toBeNull();
     expect(screen.queryByText("No current price is published.")).toBeNull();
+    expect(screen.queryByText("A possible change is under review.")).toBeNull();
   });
 
   it("renders component rows in the order the view gave them", () => {
@@ -305,5 +307,13 @@ describe("ModelDetail", () => {
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("link", { name: "Official pricing page" })).toBeNull();
     expect(screen.queryByText("All prices shown on this page are examples.")).toBeNull();
+  });
+
+  it("shows the review banner and keeps the published price", () => {
+    render(<ModelDetail view={view({ changeUnderReview: true })} />);
+
+    expect(screen.getByRole("status").textContent).toBe("A possible change is under review.");
+    expect(screen.getAllByText("$10").length).toBeGreaterThan(0);
+    expect(screen.queryByText("999")).toBeNull();
   });
 });

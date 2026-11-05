@@ -26,6 +26,7 @@ function offering(
     openVersions: [open],
     historyVersions: [{ ...open, lastSeenAt: null }],
     officialSourceUrls: [SOURCE],
+    reviewStatuses: ["confirmed"],
     ...overrides,
   };
 }
@@ -133,6 +134,7 @@ describe("toModelDetailView", () => {
         ],
         skipped: [],
       },
+      changeUnderReview: false,
     });
   });
 
@@ -680,5 +682,34 @@ describe("toModelDetailView", () => {
         AS_OF,
       ),
     ).toThrow(/announcedOn/);
+  });
+
+  it("keeps the published amounts when a change is flagged", () => {
+    const view = toModelDetailView(
+      read({
+        offerings: [offering({ reviewStatuses: ["confirmed", "flagged"] })],
+      }),
+      AS_OF,
+    );
+
+    expect(view.changeUnderReview).toBe(true);
+    expect(view.price?.components.map((row) => row.amountText)).toEqual([
+      "$10",
+      "$0.25",
+      "$50",
+      "$12.5",
+      "$20",
+    ]);
+  });
+
+  it("throws when a review status is not known", () => {
+    expect(() =>
+      toModelDetailView(
+        read({
+          offerings: [offering({ reviewStatuses: ["maybe"] })],
+        }),
+        AS_OF,
+      ),
+    ).toThrow(/review status maybe is not known/);
   });
 });
