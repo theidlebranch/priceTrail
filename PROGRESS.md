@@ -18,10 +18,11 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Small dependency updates on `master` (`9ffbc5b`): React and React DOM 19.3.1, lucide-react 1.60.0, shadcn 4.22.1. TypeScript stays at 5.9.3. The Dependabot major update (TypeScript 7, ESLint 10, `@types/node` 26) was left unmerged. Revisit TypeScript after 7.1 is stable (target 24 Nov 2026) and typescript-eslint publishes support.
 - Phase 4 step 16: `PageShell` wraps every page. Merged as pull request #21.
 - Phase 4 step 17: `/models` lists tracked models from `listModels()`. Merged as pull request #22. Each link is `/models/<lab slug>/<model slug>`. The page shows the lab and the model name. It does not show prices.
+- Phase 4 step 18: `/models/<lab slug>/<model slug>` shows the open price. Merged as pull request #23.
 
 ## In progress
 
-- Phase 4 step 18, on this branch and not merged yet: `/models/<lab slug>/<model slug>` shows the one open price, its component rows, and a link to the official pricing page. The page uses the landing receipt card: price tiles, the effective date, and the official link. The query only selects. It does not read `raw_content`. A missing model is a 404. Two current prices, or a price with not exactly one official URL, throws. The chart is step 19. Tile order is decided once in `toModelDetailView()`: Input, Cache read, Output, then each cache-write tier. The page renders that list as given. An unknown model is HTTP 404 from `src/proxy.ts` before the page shell. The proxy decodes the path before it looks up the model.
+- Phase 4 step 19, on `step-19-price-history-chart` and not merged yet: the model page is one column. Headline cards show untiered input and output. Component rows show the multiplier against input and the last change. One tabbed chart draws the selected price. `toPriceChanges()` lists real changes, newest first. The first version is not a change. A dashed gap still means the price was not seen between checks. A tier stays off the chart and on the table. Seeded models have one period, so the live page has a flat line and no percent badge. The pending-change banner is step 20.
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 
 ## Blocked
