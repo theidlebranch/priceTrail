@@ -25,11 +25,13 @@ export type ParsedOfficialPrices = {
  * One official pricing page: where it lives, how to download it, and
  * which parser reads the text.
  *
- * Anthropic is the only source in this step. OpenAI and Google stay
- * later, so this type is not a registry yet.
+ * lab is the labs.slug this page is checked against. The only production
+ * page today uses "anthropic". A test passes its own slug so it does not
+ * touch that lab. OpenAI and Google stay later, so this type is not a
+ * registry yet.
  */
 export type ProviderSource = {
-  lab: "anthropic";
+  lab: string;
   url: string;
   fetchPage: (fetchImpl: FetchLike) => Promise<FetchedPage>;
   parse: (rawContent: string) => ParsedOfficialPrices;
