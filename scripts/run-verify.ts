@@ -2,16 +2,16 @@ import { createDb } from "@/server/db/client";
 import { redactDatabaseUrl } from "@/server/db/seed";
 import { parseDatabaseEnv } from "@/server/env";
 import {
-  verifyAnthropicSource,
-  type VerifyAnthropicResult,
-} from "@/server/pipeline/verify-anthropic";
+  verifyOfficialSource,
+  type VerifyOfficialResult,
+} from "@/server/pipeline/verify-official-source";
 import { anthropicSource } from "@/server/sources/anthropic-source";
 
 /**
  * Check the Anthropic pricing page once.
  *
  * This is the edge of the program: it reads the clock and the network.
- * verifyAnthropicSource() does the work. A recorded visit, including a
+ * verifyOfficialSource() does the work. A recorded visit, including a
  * failed download or a failed archive, exits 0. A throw exits 1.
  * The message never includes the database URL or the archive keys.
  */
@@ -20,7 +20,7 @@ async function main() {
   const { db, close } = createDb(databaseUrl);
 
   try {
-    const result = await verifyAnthropicSource(db, {
+    const result = await verifyOfficialSource(db, {
       source: anthropicSource,
       fetchedAt: new Date(),
       fetchImpl: fetch,
@@ -34,7 +34,7 @@ async function main() {
   }
 }
 
-function formatResult(result: VerifyAnthropicResult): string {
+function formatResult(result: VerifyOfficialResult): string {
   switch (result.kind) {
     case "fetch_error":
       return `fetch_error: ${result.note}`;

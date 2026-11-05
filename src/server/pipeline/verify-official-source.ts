@@ -12,9 +12,9 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
  * Check one official pricing page and, when the parsed prices are new,
  * ask Wayback to save that page.
  *
- * This chains the pieces that already exist. It does not parse with a
- * new parser, and it does not call publishPriceVersion(). A new snapshot
- * stays flagged. The open price stays open.
+ * This chains the pieces that already exist. The caller picks the page
+ * (Anthropic or OpenAI today). It does not call publishPriceVersion().
+ * A new snapshot stays flagged. The open price stays open.
  *
  * The caller passes the clock, fetch, and sleep. This file does not call
  * new Date() and does not wait on a real timer, so a test can run without
@@ -26,7 +26,7 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
  * snapshot stays pending.
  */
 
-export type VerifyAnthropicResult =
+export type VerifyOfficialResult =
   | { kind: "fetch_error"; note: string }
   | { kind: "parser_suspect"; note: string }
   | { kind: "unchanged" }
@@ -36,7 +36,7 @@ export type VerifyAnthropicResult =
       archive: ArchiveObservationResult;
     };
 
-export async function verifyAnthropicSource(
+export async function verifyOfficialSource(
   db: EvidenceDb,
   input: {
     source: ProviderSource;
@@ -46,7 +46,7 @@ export async function verifyAnthropicSource(
     now: () => number;
     sleep: (ms: number) => Promise<void>;
   },
-): Promise<VerifyAnthropicResult> {
+): Promise<VerifyOfficialResult> {
   const sourceRow = await findOfficialSource(db, input.source.url);
 
   let page: Awaited<ReturnType<ProviderSource["fetchPage"]>>;
