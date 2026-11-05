@@ -26,11 +26,11 @@ export type ParsedOfficialPrices = {
  * which parser reads the text.
  *
  * lab is the labs.slug this page is checked against. Anthropic uses
- * "anthropic". OpenAI uses "openai". A test passes its own slug so it
- * does not touch a seeded lab. This type is still not a registry. The
- * cron is what will list the pages to check. Google stays later. Its
- * download must pin English, so it will not be a plain call to
- * fetchOfficialPage.
+ * "anthropic". OpenAI uses "openai". Google uses "google". A test passes
+ * its own slug so it does not touch a seeded lab. This type is still not
+ * a registry. The cron is what will list the pages to check. Google is
+ * not a plain call to fetchOfficialPage: that page must be English, so
+ * the download also sends Accept-Language.
  */
 export type ProviderSource = {
   lab: string;
@@ -47,12 +47,14 @@ const USER_AGENT = "PriceTrail/0.1 (pricing evidence checker)";
 const FETCH_TIMEOUT_MS = 30_000;
 
 /**
- * Downloads one official page that is already plain text.
+ * Downloads one official page.
  *
- * Anthropic and OpenAI both use this. The rules live here once so a 403
- * or a blank body cannot be treated as prices on one page and forgotten
- * on the other. A network error is not caught. Google needs its own
- * download later, because that page must be English.
+ * Anthropic and OpenAI call this with no extra headers. Google passes
+ * Accept-Language: en, because that page must be English. The status and
+ * empty-body rules live here once, so a 403 or a blank body cannot be
+ * treated as prices on one page and forgotten on another. A network
+ * error is not caught. The User-Agent is set last, so an extra header
+ * cannot replace it.
  *
  * Nothing here writes a price, a fetch_log row, or an observation.
  */
@@ -60,9 +62,13 @@ export async function fetchOfficialPage(
   url: string,
   pageLabel: string,
   fetchImpl: FetchLike,
+  extraHeaders?: Record<string, string>,
 ): Promise<FetchedPage> {
   const response = await fetchImpl(url, {
-    headers: { "User-Agent": USER_AGENT },
+    headers: {
+      ...extraHeaders,
+      "User-Agent": USER_AGENT,
+    },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 

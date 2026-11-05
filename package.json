@@ -22,8 +22,10 @@
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx --env-file=.env scripts/seed.ts",
     "seed:pending": "tsx --env-file=.env scripts/seed-pending-example.ts",
+    "seed:google": "tsx --env-file=.env scripts/seed-google-catalog.ts",
     "verify:anthropic": "tsx --env-file=.env scripts/run-verify.ts",
-    "verify:openai": "tsx --env-file=.env scripts/run-verify-openai.ts"
+    "verify:openai": "tsx --env-file=.env scripts/run-verify-openai.ts",
+    "verify:google": "tsx --env-file=.env scripts/run-verify-google.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

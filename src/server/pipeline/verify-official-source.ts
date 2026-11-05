@@ -13,7 +13,7 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
  * ask Wayback to save that page.
  *
  * This chains the pieces that already exist. The caller picks the page
- * (Anthropic or OpenAI today). It does not call publishPriceVersion().
+ * (Anthropic, OpenAI, or Google). It does not call publishPriceVersion().
  * A new snapshot stays flagged. The open price stays open.
  *
  * The caller passes the clock, fetch, and sleep. This file does not call
