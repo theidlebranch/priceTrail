@@ -24,9 +24,13 @@ import {
  * retracted_at blank, including closed ones, so the chart can draw
  * the older prices. A retracted row stays out of both lists.
  * A region other than global is left out. The evidence link is
- * sources.url where type is official. raw_content, parsed_data, and
- * archive_url are not selected. A public page does not load the
- * stored page text.
+ * sources.url where type is official. raw_content, parsed_data,
+ * grounding_result, and archive_url are not selected. A public page
+ * does not load the stored page text or an unverified amount.
+ *
+ * reviewStatuses are the official items on this offering. flagged
+ * is the only status that means a change is still under review.
+ * An aggregator item is not included.
  */
 
 type Schema = typeof schema;
@@ -60,6 +64,7 @@ export type ModelDetailOffering = {
   openVersions: ModelDetailVersion[];
   historyVersions: ModelDetailHistoryVersion[];
   officialSourceUrls: string[];
+  reviewStatuses: string[];
 };
 
 export type ModelDetailRead = {
@@ -159,6 +164,7 @@ export async function findModelDetail(
     .select({
       offeringId: observationItems.offeringId,
       url: sources.url,
+      reviewStatus: observationItems.reviewStatus,
     })
     .from(observationItems)
     .innerJoin(observations, eq(observationItems.observationId, observations.id))
@@ -191,7 +197,7 @@ function offeringDetail(
     amount: string;
     condition: unknown;
   }[],
-  sourceRows: { offeringId: number; url: string }[],
+  sourceRows: { offeringId: number; url: string; reviewStatus: string }[],
 ): ModelDetailOffering {
   const historyVersions = versionRows
     .filter((version) => version.offeringId === offeringId)
@@ -217,11 +223,9 @@ function offeringDetail(
       components: version.components,
     }));
 
-  const officialSourceUrls = [
-    ...new Set(
-      sourceRows.filter((source) => source.offeringId === offeringId).map((source) => source.url),
-    ),
-  ].sort();
+  const forOffering = sourceRows.filter((source) => source.offeringId === offeringId);
+  const officialSourceUrls = [...new Set(forOffering.map((source) => source.url))].sort();
+  const reviewStatuses = forOffering.map((source) => source.reviewStatus).sort();
 
-  return { openVersions, historyVersions, officialSourceUrls };
+  return { openVersions, historyVersions, officialSourceUrls, reviewStatuses };
 }

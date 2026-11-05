@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { and, eq } from "drizzle-orm";
 import { parseAnthropicPricing } from "@/core/pricing/anthropic";
 import { parseOpenAiPricing } from "@/core/pricing/openai";
 import type { NormalizedPrice } from "@/core/pricing/shape";
@@ -25,17 +26,26 @@ import {
  * price_components. That write stays in the publish function. The evidence
  * repository is a later step, so these observation inserts live here.
  *
- * Each item is confirmed. ok would mean the cell check passed, and that
- * check does not exist yet. reviewed_by is the word "seed".
+ * Each published item is confirmed. ok would mean the cell check passed,
+ * and that check does not exist yet. reviewed_by is the word "seed".
+ *
+ * One extra snapshot is flagged for Claude Mythos 5.1. That row is the
+ * example "change under review." It is not passed to publishPriceVersion(),
+ * so its amount never becomes a price.
  *
  * There is no fetch_log row. A fetch log is a live visit, and this script
  * only reads the saved fixtures. sources.last_checked_at stays empty.
  *
  * A second run throws when the lab slug is already there. It does not
- * delete rows and it does not open a second current price.
+ * delete rows and it does not open a second current price. The pending
+ * example has its own function, so an already-seeded database can gain
+ * that one flagged row without publishing again.
  */
 
 const RETIRED_NOTE = /retired/i;
+const PENDING_MODEL_SLUG = "claude-mythos-5.1";
+const PENDING_FETCHED_AT = new Date("2026-11-01T00:00:00.000Z");
+const PENDING_AMOUNT = "999";
 
 export type SeedPlanModel = SeedModelSpec & {
   name: string;
@@ -210,6 +220,8 @@ export async function runSeed(db: PublishDb): Promise<SeedResult> {
       }
     }
 
+    await plantSeedPendingExample(tx);
+
     return {
       labs: plan.length,
       models: modelCount,
@@ -217,6 +229,94 @@ export async function runSeed(db: PublishDb): Promise<SeedResult> {
       priceVersions: priceVersionCount,
     };
   });
+}
+
+/**
+ * Add the example flagged snapshot for Claude Mythos 5.1.
+ *
+ * The amount in that snapshot is not a price. This function does not
+ * call publishPriceVersion(). A second call finds the flagged item and
+ * inserts nothing. A missing model throws, so this does not invent a lab.
+ */
+export async function plantSeedPendingExample(
+  db: PublishDb,
+): Promise<"inserted" | "already-present"> {
+  const anthropic = SEED_LABS.find((lab) => lab.slug === "anthropic");
+  if (anthropic === undefined) {
+    throw new Error("anthropic is missing from the seed list");
+  }
+
+  const catalog = createCatalogRepository(db);
+  const lab = await catalog.findLabBySlug(anthropic.slug);
+  const model =
+    lab === null ? null : await catalog.findModelByLabAndSlug(lab.id, PENDING_MODEL_SLUG);
+  if (lab === null || model === null) {
+    throw new Error(
+      `${PENDING_MODEL_SLUG} is not in the database; seed the catalog before the pending example`,
+    );
+  }
+
+  const offering = await catalog.findOffering(model.id, "official-api", "global");
+  if (offering === null) {
+    throw new Error(`${PENDING_MODEL_SLUG} has no global offering`);
+  }
+
+  const sourceRows = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.url, anthropic.sourceUrl))
+    .limit(1);
+  const source = sourceRows[0];
+  if (source === undefined) {
+    throw new Error("anthropic official source is missing");
+  }
+
+  const flagged = await db
+    .select({ id: observationItems.id })
+    .from(observationItems)
+    .where(
+      and(eq(observationItems.offeringId, offering.id), eq(observationItems.reviewStatus, "flagged")),
+    )
+    .limit(1);
+  if (flagged.length > 0) {
+    return "already-present";
+  }
+
+  const parsedData = {
+    example: "pending-review",
+    modelSlug: PENDING_MODEL_SLUG,
+    dimension: "input",
+    usdPer1M: PENDING_AMOUNT,
+  };
+  const rawContent = `Example pending snapshot for Claude Mythos 5.1. Unverified input amount ${PENDING_AMOUNT}. Not a published price.`;
+  const observation = requireInsertedRow(
+    await db
+      .insert(observations)
+      .values({
+        sourceId: source.id,
+        fetchedAt: PENDING_FETCHED_AT,
+        contentHash: sha256(JSON.stringify(parsedData)),
+        rawContent,
+        rawContentHash: sha256(rawContent),
+        parsedData,
+      })
+      .returning(),
+    "insert pending observation",
+  );
+  requireInsertedRow(
+    await db
+      .insert(observationItems)
+      .values({
+        observationId: observation.id,
+        offeringId: offering.id,
+        reviewStatus: "flagged",
+        reviewNote: "Example pending change for the public banner. Not a published price.",
+      })
+      .returning(),
+    "insert pending observation item",
+  );
+
+  return "inserted";
 }
 
 /** A driver error can include the database URL. The URL contains the password. */

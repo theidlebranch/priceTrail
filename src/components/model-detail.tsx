@@ -14,7 +14,7 @@ import { PriceHistoryChart } from "@/components/price-history-chart";
  * wording, the official link, and the history. This component only
  * renders that. An empty price is a successful read that found no open
  * version. An empty history is a successful read that found no chartable
- * period.
+ * period. The review banner is a sentence, not a second price.
  */
 export function ModelDetail({ view }: { view: ModelDetailView }) {
   return (
@@ -40,6 +40,14 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
           <p className="mt-3 text-sm text-muted-foreground">
             {view.versionCount} price {view.versionCount === 1 ? "version" : "versions"} since{" "}
             {view.sinceDay}
+          </p>
+        ) : null}
+        {view.changeUnderReview ? (
+          <p
+            className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground"
+            role="status"
+          >
+            A possible change is under review.
           </p>
         ) : null}
         {view.price === null ? (
