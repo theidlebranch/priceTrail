@@ -23,8 +23,10 @@ import {
  *
  * This file inserts labs, models, offerings, and the evidence row
  * publishPriceVersion() requires. It does not insert price_versions or
- * price_components. That write stays in the publish function. The evidence
- * repository is a later step, so these observation inserts live here.
+ * price_components. That write stays in the publish function.
+ * recordSourceCheck() files a live visit and leaves new items flagged.
+ * The seed is not a visit. It writes a hand-confirmed item, then publishes,
+ * so these observation inserts stay in this file.
  *
  * Each published item is confirmed. ok would mean the cell check passed,
  * and that check does not exist yet. reviewed_by is the word "seed".
