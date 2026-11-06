@@ -1,53 +1,61 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import {
-  parseReviewerAllowlist,
-  reviewAuthSecretConfigured,
-  reviewLock,
-  reviewPlaceholder,
-} from "@/core/auth/review-access";
-import { readReviewSession } from "@/server/auth/review-session";
+import { requireAllowedReviewer } from "@/app/review/require-reviewer";
+import { toReviewListEntries } from "@/app/review/review-list";
+import { ReviewList } from "@/components/review-list";
+import { createDb } from "@/server/db/client";
+import { listFlaggedReviewItems } from "@/server/db/repositories/review-queue";
+import { parseDatabaseEnv } from "@/server/env";
 
 export const metadata: Metadata = {
   title: "Review · PriceTrail",
 };
 
 /**
- * The proxy decides who reaches this page. A signed-out visitor is
- * redirected, and everyone else who is not listed gets a 403, before
- * this shell is sent.
+ * The heading is the static shell. The list sits in Suspense so this
+ * Next.js version can render it on the request, not at build time.
+ * There is no "use cache": a new flagged item should show up on the
+ * next visit.
  *
- * The sentence is still checked here. If the proxy was skipped, this
- * throws instead of showing the placeholder. The queue itself is step 30.
- * connection() keeps the cookie read off the prerender.
+ * connection() runs before the database client opens. The postgres
+ * driver calls Math.random() while it starts, and Next.js refuses to
+ * prerender that.
+ *
+ * The proxy already locked this path. requireAllowedReviewer() repeats
+ * that check so a skipped proxy cannot show the queue. A missing
+ * database URL or a failed query throws. The empty sentence is only
+ * for a query that returned no waiting items.
+ *
+ * This page does not call publishPriceVersion(). Confirm and reject
+ * are a later step.
  */
 export default function ReviewPage() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10">
       <h1 className="text-3xl font-semibold tracking-tight">Review</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+        Official snapshots that are still waiting. A flagged row is not a published price.
+      </p>
       <div className="mt-8">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading review…</p>}>
-          <ReviewPlaceholder />
+          <ReviewListLoader />
         </Suspense>
       </div>
     </section>
   );
 }
 
-async function ReviewPlaceholder() {
+async function ReviewListLoader() {
   await connection();
-  const secretConfigured = reviewAuthSecretConfigured(process.env);
-  const session = secretConfigured ? await readReviewSession() : null;
-  const lock = reviewLock({
-    pathname: "/review",
-    secretConfigured,
-    session,
-    allowlist: parseReviewerAllowlist(process.env.REVIEWER_ALLOWLIST),
-  });
-  if (lock !== "allowed" || session == null) {
-    throw new Error("Review page was reached without an allowed reviewer.");
-  }
+  await requireAllowedReviewer();
+  const { databaseUrl } = parseDatabaseEnv(process.env);
+  const { db, close } = createDb(databaseUrl);
 
-  return <p className="text-sm leading-6 text-muted-foreground">{reviewPlaceholder(session)}</p>;
+  try {
+    const rows = await listFlaggedReviewItems(db);
+    return <ReviewList entries={toReviewListEntries(rows)} />;
+  } finally {
+    await close();
+  }
 }

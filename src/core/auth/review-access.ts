@@ -149,10 +149,6 @@ export function assertCanStartReviewSignIn(
   return known;
 }
 
-export function reviewPlaceholder(session: ReviewSession): string {
-  return `You are signed in as ${reviewerId(session.provider, session.accountId)}. The review queue is not built yet.`;
-}
-
 export function reviewAuthSecretConfigured(env: NodeJS.Dict<string>): boolean {
   return (env.AUTH_SECRET ?? "").trim().length > 0;
 }
