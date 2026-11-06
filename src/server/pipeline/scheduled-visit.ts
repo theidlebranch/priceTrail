@@ -54,6 +54,10 @@ type OpenedVisit = {
   close: () => Promise<unknown>;
 };
 
+type ScheduleHeaders = {
+  get(name: string): string | null;
+};
+
 /**
  * Answer one schedule request.
  *
@@ -61,12 +65,15 @@ type OpenedVisit = {
  * Tests pass fakes, so they never download a page. A refused request does
  * not open the database. A filed visit, including a failed download or a
  * failed archive, is HTTP 200. A throw is HTTP 500. The body never includes
- * the database URL or the archive keys. This does not call
- * publishPriceVersion().
+ * the database URL or the archive keys. A filed visit also prints one JSON
+ * line for the host log. That line repeats the response body, plus the
+ * schedule name and execution id when Vercel sent them. It does not include
+ * the secret or the database URL. This does not call publishPriceVersion().
  */
 export async function respondToSchedule(input: {
   lab: string;
   authorization: string | null;
+  headers?: ScheduleHeaders | null;
   env: NodeJS.Dict<string>;
   openDb: (databaseUrl: string) => OpenedVisit;
   runVisit: (db: EvidenceDb, source: ProviderSource) => Promise<VerifyOfficialResult>;
@@ -85,7 +92,9 @@ export async function respondToSchedule(input: {
     const { databaseUrl } = parseDatabaseEnv(input.env);
     opened = input.openDb(databaseUrl);
     const result = await input.runVisit(opened.db, source);
-    return Response.json(visitBody(result));
+    const body = visitBody(result);
+    console.log(JSON.stringify(filedVisitLog(input.lab, body, input.headers)));
+    return Response.json(body);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "verify failed";
     console.error(redactDatabaseUrl(message));
@@ -115,14 +124,43 @@ export function runProductionVisit(
     });
 }
 
-function visitBody(result: VerifyOfficialResult): {
+const SCHEDULE_NAME_HEADER = "ce-vssschedulename";
+const EXECUTION_ID_HEADER = "ce-id";
+
+/**
+ * One line for the host log. Vercel shows stdout, not the JSON response.
+ * A blank header is left out. Only these two header names are read.
+ */
+function filedVisitLog(
+  lab: string,
+  body: VisitBody,
+  headers: ScheduleHeaders | null | undefined,
+): VisitBody & { lab: string; schedule?: string; executionId?: string } {
+  const schedule = headerValue(headers, SCHEDULE_NAME_HEADER);
+  const executionId = headerValue(headers, EXECUTION_ID_HEADER);
+  return {
+    lab,
+    ...body,
+    ...(schedule === null ? {} : { schedule }),
+    ...(executionId === null ? {} : { executionId }),
+  };
+}
+
+function headerValue(headers: ScheduleHeaders | null | undefined, name: string): string | null {
+  const value = headers?.get(name)?.trim() ?? "";
+  return value === "" ? null : value;
+}
+
+type VisitBody = {
   kind: VerifyOfficialResult["kind"];
   note?: string;
   observationId?: number;
   archive?: "archived" | "already_archived" | "failed";
   permalink?: string;
   reason?: string;
-} {
+};
+
+function visitBody(result: VerifyOfficialResult): VisitBody {
   switch (result.kind) {
     case "fetch_error":
     case "parser_suspect":

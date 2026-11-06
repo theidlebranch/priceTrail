@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import {
   cronRequestAuthorized,
@@ -35,12 +35,25 @@ describe("officialSourceForLab", () => {
 });
 
 describe("respondToSchedule", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("does not open the database when the secret does not match", async () => {
     const openDb = vi.fn();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const response = await respondToSchedule({
       lab: "anthropic",
       authorization: null,
+      headers: new Headers({
+        authorization: `Bearer ${SECRET}`,
+        "ce-id": "schx_refused",
+      }),
       env: { CRON_SECRET: SECRET, DATABASE_URL },
       openDb,
       runVisit: vi.fn(),
@@ -48,6 +61,8 @@ describe("respondToSchedule", () => {
 
     expect(response.status).toBe(401);
     expect(openDb).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 
   it("does not open the database for an unknown lab", async () => {
@@ -124,6 +139,88 @@ describe("respondToSchedule", () => {
     expect(await response.json()).toEqual({ kind: "fetch_error", note: "download failed" });
   });
 
+  it("logs one line with the outcome and leaves out the database URL and the secret", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const response = await respondToSchedule({
+      lab: "google",
+      authorization: `Bearer ${SECRET}`,
+      headers: new Headers({
+        authorization: `Bearer ${SECRET}`,
+        "ce-vssschedulename": "verify-google",
+        "ce-id": "schx_abc",
+      }),
+      env: { CRON_SECRET: SECRET, DATABASE_URL },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      runVisit: async () => ({ kind: "unchanged" as const }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(logSpy).toHaveBeenCalledOnce();
+    const line = String(logSpy.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({
+      lab: "google",
+      kind: "unchanged",
+      schedule: "verify-google",
+      executionId: "schx_abc",
+    });
+    expect(line).not.toContain(DATABASE_URL);
+    expect(line).not.toContain(SECRET);
+    logSpy.mockRestore();
+  });
+
+  it("leaves the schedule name and execution id out when those headers are missing", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await respondToSchedule({
+      lab: "openai",
+      authorization: `Bearer ${SECRET}`,
+      env: { CRON_SECRET: SECRET, DATABASE_URL },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      runVisit: async () => ({ kind: "fetch_error" as const, note: "download failed" }),
+    });
+
+    const line = String(logSpy.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({
+      lab: "openai",
+      kind: "fetch_error",
+      note: "download failed",
+    });
+    expect(line).not.toContain(DATABASE_URL);
+    expect(line).not.toContain(SECRET);
+    logSpy.mockRestore();
+  });
+
+  it("logs a changed page with the archive result and the execution id", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await respondToSchedule({
+      lab: "anthropic",
+      authorization: `Bearer ${SECRET}`,
+      headers: new Headers({ "ce-id": "schx_changed" }),
+      env: { CRON_SECRET: SECRET, DATABASE_URL },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      runVisit: async () => ({
+        kind: "changed" as const,
+        observationId: 313,
+        archive: { kind: "failed" as const, reason: "fetch failed" },
+      }),
+    });
+
+    const line = String(logSpy.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({
+      lab: "anthropic",
+      kind: "changed",
+      observationId: 313,
+      archive: "failed",
+      reason: "fetch failed",
+      executionId: "schx_changed",
+    });
+    expect(line).not.toContain(DATABASE_URL);
+    expect(line).not.toContain(SECRET);
+    logSpy.mockRestore();
+  });
+
   it("returns 500 without the database URL when the visit throws", async () => {
     const close = vi.fn(async () => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -143,6 +240,7 @@ describe("respondToSchedule", () => {
     expect(close).toHaveBeenCalledOnce();
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("[redacted]"));
     expect(errorSpy.mock.calls.join(" ")).not.toContain(DATABASE_URL);
+    expect(errorSpy.mock.calls.join(" ")).not.toContain(SECRET);
     errorSpy.mockRestore();
   });
 });

@@ -22,6 +22,7 @@ export async function POST(
   return respondToSchedule({
     lab,
     authorization: request.headers.get("authorization"),
+    headers: request.headers,
     env: process.env,
     openDb: createDb,
     runVisit: runProductionVisit(process.env),
