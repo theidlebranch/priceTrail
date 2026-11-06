@@ -139,7 +139,7 @@ For each active source:
 
 ### The review queue: a real UI page (authenticated)
 
-This isn't a background job with a log file; it's a page the reviewer looks at. It requires auth from day one (simple is fine: GitHub OAuth with an allowlist, or a single secret-protected login), because it can publish prices.
+This isn't a background job with a log file; it's a page the reviewer looks at. It requires a login from day one, because it can publish prices. A reviewer signs in with Google or GitHub. Only accounts listed in the environment can open `/review`. A shared password is not used: it cannot tell two reviewers apart. The decision is [adr/0001-review-login.md](adr/0001-review-login.md).
 
 - **Candidate models**: new slugs Tier 1 spotted. Actions: _Approve_ (creates `models` / `offerings` rows, adds aliases, starts tracking) or _Reject_ (dismiss with an optional note so it doesn't resurface every day).
 - **Flagged items**: extractions that failed grounding, and verification flags that didn't self-resolve. Shows the extracted values side-by-side with the raw source text they supposedly came from, with the match highlighted (or visibly missing). Actions: _Confirm_ (calls `publishPriceVersion()`, sets `review_status = confirmed`) or _Reject_ (`rejected`, publishes nothing).

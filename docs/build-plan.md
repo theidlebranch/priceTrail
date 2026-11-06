@@ -82,7 +82,9 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 ### Phase 6: Review queue
 
 28. **Decide auth** (GitHub OAuth allowlist vs. a single secret) and write an ADR. This is your decision, so ask your agent for the trade-offs.
+   _Done:_ [docs/adr/0001-review-login.md](adr/0001-review-login.md). A reviewer signs in with Google or GitHub. Only accounts listed in the environment can open `/review`. The public site stays open. The only role in this step is `reviewer`. Member, owner, and company watchlists stay later. An empty allowlist means nobody can review. This step does not lock the route and does not call `publishPriceVersion()`.
 29. **Protect the `/review` routes.**
+    _Done:_ `/review` is locked in `src/proxy.ts` before the page shell. `next-auth` 5.0.0-beta.32 keeps the session in an encrypted cookie. There is no user table. The id is `google:<account id>` or `github:<numeric id>`. An email or a display name is not an id. `REVIEWER_ALLOWLIST` is that list. Empty means nobody. A broken entry throws. A missing `AUTH_SECRET` answers 403, "Review sign-in is not configured.", and does not load the login library, so `/`, `/models`, and a model page still open. When the secret is set, no session redirects to `/review/sign-in`. Any other account answers 403, "This account cannot review." A listed account sees "You are signed in as google:…. The review queue is not built yet." `/review/sign-in` stays open. A button is shown only when that provider has both a client id and a client secret. This step does not call `publishPriceVersion()`. The queue is step 30.
 30. **Candidate list and detail view.**
 31. **Approve/reject actions.** They go through `publishPriceVersion()` and record `reviewed_by`, `reviewed_at`, and a note.
 32. **Source health page.**

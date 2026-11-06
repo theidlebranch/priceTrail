@@ -1,16 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
+import {
+  isProtectedReviewPath,
+  parseReviewerAllowlist,
+  reviewAuthSecretConfigured,
+  reviewHttpResult,
+  reviewLock,
+  type ReviewHttpResult,
+} from "@/core/auth/review-access";
 import { createDb } from "@/server/db/client";
 import { hasTrackedModel } from "@/server/db/repositories/model-detail";
 import { parseDatabaseEnv } from "@/server/env";
 
 /**
- * Unknown models must answer 404 before the page shell starts.
+ * Two checks run before a page shell starts.
  *
- * The detail page reads the database inside Suspense. With cache
- * components on, that shell is already sent as HTTP 200, so notFound()
- * inside the loader cannot change the status. This check is one slug
- * lookup. The price read stays in the page.
+ * Unknown models must answer 404. With cache components on, the shell is
+ * already sent as HTTP 200, so notFound() inside the loader cannot change
+ * the status. This check is one slug lookup. The price read stays in the page.
+ *
+ * /review must answer before that shell too. A missing AUTH_SECRET is a
+ * 403 and does not load the login library, so a review secret cannot take
+ * down /models. When the secret is set, a signed-out visitor is redirected
+ * to /review/sign-in. Any other account, including an empty allowlist, is
+ * a 403. The login library is imported only for a locked /review path.
  *
  * The pathname keeps percent-encoding. The page receives decoded
  * params, so this lookup decodes each segment once before it checks
@@ -19,6 +32,10 @@ import { parseDatabaseEnv } from "@/server/env";
  * price continues to the page.
  */
 export async function proxy(request: NextRequest) {
+  if (isProtectedReviewPath(request.nextUrl.pathname)) {
+    return protectReview(request);
+  }
+
   const slugs = modelSlugs(request.nextUrl.pathname);
   if (slugs === null) {
     return NextResponse.next();
@@ -49,8 +66,48 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: "/models/:labSlug/:modelSlug",
+  matcher: ["/models/:labSlug/:modelSlug", "/review", "/review/:path*"],
 };
+
+async function protectReview(request: NextRequest) {
+  const secretConfigured = reviewAuthSecretConfigured(process.env);
+  if (!secretConfigured) {
+    return reviewTextResponse(reviewHttpResult("not-configured"));
+  }
+
+  const { readReviewSession } = await import("@/server/auth/review-session");
+  const session = await readReviewSession();
+  const lock = reviewLock({
+    pathname: request.nextUrl.pathname,
+    secretConfigured: true,
+    session,
+    allowlist: parseReviewerAllowlist(process.env.REVIEWER_ALLOWLIST),
+  });
+  const result = reviewHttpResult(lock);
+  if (result.type === "next") {
+    return NextResponse.next();
+  }
+  if (result.type === "redirect") {
+    const url = request.nextUrl.clone();
+    url.pathname = result.pathname;
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+  return reviewTextResponse(result);
+}
+
+function reviewTextResponse(result: ReviewHttpResult) {
+  if (result.type !== "text") {
+    throw new Error("Review text response was given a redirect.");
+  }
+  return new NextResponse(result.body, {
+    status: result.status,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
 
 export function modelSlugs(pathname: string): { labSlug: string; modelSlug: string } | null {
   const parts = pathname.split("/");
