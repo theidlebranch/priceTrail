@@ -229,6 +229,31 @@ describe("parseOpenAiPricing", () => {
     expect(inputs).toHaveLength(1);
   });
 
+  it("keeps one copy when the same price is written as $4.00 and $4", () => {
+    const first = validRow("gpt-test");
+    const second = [...first];
+    second[1] = "$1";
+    const markdown = pageWithSections([
+      markdownTable(REQUIRED_HEADERS, [first]),
+      markdownTable(REQUIRED_HEADERS, [second]),
+    ]);
+
+    const { rows } = parseOpenAiPricing(markdown);
+    const inputs = rows.filter((row) => row.modelSlug === "gpt-test" && row.dimension === "input");
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.usdPer1M).toBe("1");
+  });
+
+  it("throws when a repeated model names a different context boundary", () => {
+    const markdown = pageWithSections([
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-5.5 (<272K context length)")]),
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-5.5")]),
+    ]);
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/duplicate model slug: gpt-5.5/);
+  });
+
   it("throws when the Standard section has no table but a later section does", () => {
     const markdown = [
       "Prices per 1M tokens.",
@@ -345,5 +370,78 @@ describe("parseOpenAiPricing", () => {
 
     expect(findRow(rows, "gpt-test", "input")?.usdPer1M).toBe("1");
     expect(warnings.some((warning) => /unmappedColumns/i.test(warning))).toBe(true);
+  });
+
+  it("keeps a short table when it has an extra column", () => {
+    const markdown = standardPage(
+      markdownTable(
+        ["Model", "Input", "Output", "Cached input", "Audio tokens"],
+        [["gpt-test", "$1.00", "$5.00", "$0.10", "$9.00"]],
+      ),
+    );
+
+    const { rows, warnings } = parseOpenAiPricing(markdown);
+
+    expect(findRow(rows, "gpt-test", "input")?.usdPer1M).toBe("1");
+    expect(findRow(rows, "gpt-test", "output")?.usdPer1M).toBe("5");
+    expect(findRow(rows, "gpt-test", "cache_read")?.usdPer1M).toBe("0.1");
+    expect(warnings.some((warning) => /unmappedColumns: Audio tokens/.test(warning))).toBe(true);
+  });
+
+  it("reads a table that sits under a Standard subheading", () => {
+    const markdown = [
+      "Prices per 1M tokens.",
+      "### Standard pricing data",
+      "#### Standard text models",
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-test")]),
+    ].join("\n\n");
+
+    const { rows } = parseOpenAiPricing(markdown);
+
+    expect(findRow(rows, "gpt-test", "input")?.usdPer1M).toBe("1");
+  });
+
+  it("does not read a Batch table that follows a Standard subheading", () => {
+    const markdown = [
+      "Prices per 1M tokens.",
+      "### Standard pricing data",
+      "#### Standard text models",
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-one")]),
+      "### Batch pricing data",
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-batch")]),
+    ].join("\n\n");
+
+    const { rows } = parseOpenAiPricing(markdown);
+
+    expect(findRow(rows, "gpt-one", "input")?.usdPer1M).toBe("1");
+    expect(rows.some((row) => row.modelSlug === "gpt-batch")).toBe(false);
+  });
+
+  it("reads long-context cache writes when the row names a token cutoff", () => {
+    const markdown = standardPage(
+      markdownTable(REQUIRED_HEADERS, [
+        validRow("gpt-5.5 (<272K context length)", [
+          "$1.00",
+          "$5.00",
+          "$0.10",
+          "$1.25",
+          "$2.50",
+          "$2.00",
+          "$7.50",
+          "$0.20",
+          "$3.75",
+          "$6.25",
+        ]),
+      ]),
+    );
+
+    const { rows } = parseOpenAiPricing(markdown);
+    const longContext = { promptTokensAtLeast: 272000 };
+
+    expect(findRow(rows, "gpt-5.5", "cache_write_30m", longContext)?.usdPer1M).toBe("3.75");
+    expect(findRow(rows, "gpt-5.5", "cache_write_12h", longContext)?.usdPer1M).toBe("6.25");
+    expect(findRow(rows, "gpt-5.5", "cache_write_30m", { promptTokensUnder: 272000 })?.usdPer1M).toBe(
+      "1.25",
+    );
   });
 });

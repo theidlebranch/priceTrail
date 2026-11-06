@@ -18,11 +18,12 @@
  * A model whose page note says retired does not belong here either.
  *
  * Amounts are the parser's decimal strings: "10", not "10.00".
- * first_seen_at is the source-spike day. The fixture files do not record
+ * firstSeenAt is the day of that lab's fixture. The files do not record
  * an hour, so the time is UTC midnight. The public label is that day.
+ * Anthropic stays on the source-spike day. OpenAI uses the November page.
  */
 
-export const SEED_FIRST_SEEN_AT = new Date("2026-10-18T00:00:00.000Z");
+const SEED_FIRST_SEEN_AT = new Date("2026-10-18T00:00:00.000Z");
 
 export type SeedDimension =
   | "input"
@@ -50,6 +51,7 @@ export type SeedLabSpec = {
   fixturePath: string;
   sourceUrl: string;
   parser: "anthropic" | "openai";
+  firstSeenAt: Date;
   models: readonly SeedModelSpec[];
 };
 
@@ -68,6 +70,7 @@ export const SEED_LABS: readonly SeedLabSpec[] = [
     fixturePath: "tests/fixtures/anthropic-pricing.md",
     sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing.md",
     parser: "anthropic",
+    firstSeenAt: SEED_FIRST_SEEN_AT,
     models: [
       { slug: "claude-fable-5.1", components: fableAmounts },
       { slug: "claude-mythos-5.1", components: fableAmounts },
@@ -79,6 +82,7 @@ export const SEED_LABS: readonly SeedLabSpec[] = [
     fixturePath: "tests/fixtures/openai-pricing.2026-11-05.md",
     sourceUrl: "https://developers.openai.com/api/docs/pricing.md",
     parser: "openai",
+    firstSeenAt: new Date("2026-11-05T00:00:00.000Z"),
     models: [
       {
         slug: "gpt-6-astra",

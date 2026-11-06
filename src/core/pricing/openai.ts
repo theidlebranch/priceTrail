@@ -76,7 +76,7 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
       if (nextStandard !== undefined && index >= nextStandard) {
         return true;
       }
-      return /^#{1,6}\s/.test(line.trim());
+      return isOtherModeHeading(line);
     });
     const section = lines.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd).join("\n");
     readStandardSection(section, warnings, rows, seenPrices);
@@ -91,7 +91,8 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
 
 /**
  * One Standard heading owns one table. A later heading can repeat a model
- * when every price cell matches. A different price for that slug throws.
+ * when every parsed price and context condition matches. `$4.00` and `$4`
+ * are the same price. A different price for that slug throws.
  * The live page repeats gpt-5.6-sol with the same cells.
  */
 const SHORT_HEADERS = ["Model", "Input", "Output", "Cached input"] as const;
@@ -141,10 +142,19 @@ function isFullTable(headers: string[]): boolean {
   return REQUIRED_PRICE_HEADERS.every((header) => headers.includes(header));
 }
 
+function isOtherModeHeading(line: string): boolean {
+  const match = line.trim().match(/^#{1,6}\s+(.*)$/);
+  if (!match) {
+    return false;
+  }
+  // "#### Standard text models" stays in this section. Batch, Flex, and
+  // the other mode headings still end it.
+  return !/\bStandard\b/i.test(match[1]);
+}
+
 function isShortTable(headers: string[]): boolean {
   return (
-    headers.length === SHORT_HEADERS.length &&
-    SHORT_HEADERS.every((header) => headers.includes(header))
+    !isFullTable(headers) && SHORT_HEADERS.every((header) => headers.includes(header))
   );
 }
 
@@ -180,9 +190,7 @@ function readPriceTable(
     const cells = cellsByHeader(table.headers, rawRow);
     const modelCell = cells.get(MODEL_HEADER) ?? "";
     const model = parseModelCell(modelCell);
-    const signature = [modelCell.trim(), ...columns.map((column) => cells.get(column.header) ?? "")].join(
-      "\t",
-    );
+    const signature = priceSignature(model, cells, columns);
     const previous = seenPrices.get(model.modelSlug);
     if (previous !== undefined) {
       if (previous !== signature) {
@@ -228,6 +236,25 @@ function readPriceTable(
   }
 
   return { pricedModels, repeatedModels };
+}
+
+function priceSignature(
+  model: ParsedModel,
+  cells: Map<string, string>,
+  columns: readonly { header: string }[],
+): string {
+  const prices = columns.map((column) => {
+    const amount = parsePriceCell(
+      cells.get(column.header) ?? "",
+      `${model.modelName} / ${column.header}`,
+    );
+    return amount ?? "-";
+  });
+  return JSON.stringify({
+    short: model.shortCondition ?? null,
+    long: model.longCondition ?? null,
+    prices,
+  });
 }
 
 function shouldSkipUnthresholdedLongContext(
