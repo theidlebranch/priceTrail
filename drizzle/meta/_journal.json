@@ -43,6 +43,13 @@
       "when": 1793354274125,
       "tag": "0005_slimmer_observation_items",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793907156172,
+      "tag": "0006_cache_write_durations",
+      "breakpoints": true
     }
   ]
 }

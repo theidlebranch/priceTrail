@@ -7,12 +7,7 @@ import type { NormalizedPrice } from "@/core/pricing/shape";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
 import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-version";
 import { observationItems, observations, sources } from "@/server/db/schema";
-import {
-  SEED_FIRST_SEEN_AT,
-  SEED_LABS,
-  type SeedLabSpec,
-  type SeedModelSpec,
-} from "@/server/db/seed-data";
+import { SEED_LABS, type SeedLabSpec, type SeedModelSpec } from "@/server/db/seed-data";
 
 /**
  * Fill an empty database with the hand-checked current prices.
@@ -171,7 +166,7 @@ export async function runSeed(db: PublishDb): Promise<SeedResult> {
           .insert(observations)
           .values({
             sourceId: source.id,
-            fetchedAt: SEED_FIRST_SEEN_AT,
+            fetchedAt: entry.lab.firstSeenAt,
             contentHash: sha256(JSON.stringify(parsedData)),
             rawContent: entry.rawContent,
             rawContentHash: sha256(entry.rawContent),
@@ -199,7 +194,7 @@ export async function runSeed(db: PublishDb): Promise<SeedResult> {
               offeringId: offering.id,
               reviewStatus: "confirmed",
               reviewedBy: "seed",
-              reviewedAt: SEED_FIRST_SEEN_AT,
+              reviewedAt: entry.lab.firstSeenAt,
               reviewNote: `Hand-checked against ${entry.lab.fixturePath}`,
             })
             .returning(),
@@ -208,7 +203,7 @@ export async function runSeed(db: PublishDb): Promise<SeedResult> {
 
         await publishPriceVersion(tx, {
           observationItemId: item.id,
-          firstSeenAt: SEED_FIRST_SEEN_AT,
+          firstSeenAt: entry.lab.firstSeenAt,
           components: modelSpec.components.map((component) => ({
             dimension: component.dimension,
             unit: "usd_per_1m_tokens",

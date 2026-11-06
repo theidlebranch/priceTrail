@@ -269,6 +269,8 @@ describe("price tables", () => {
       "cache_write_5m",
       "cache_write_1h",
       "cache_write",
+      "cache_write_30m",
+      "cache_write_12h",
     ]);
     expect(priceDimension.enumName).toBe("price_dimension");
     expect(priceDimension.enumValues).toEqual(dimension.enumValues);

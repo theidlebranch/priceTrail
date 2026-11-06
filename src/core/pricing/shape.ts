@@ -7,6 +7,8 @@ const dimensionSchema = z.enum([
   "cache_write_5m",
   "cache_write_1h",
   "cache_write",
+  "cache_write_30m",
+  "cache_write_12h",
 ]);
 
 const conditionSchema = z.object({

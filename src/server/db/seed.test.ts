@@ -33,7 +33,7 @@ import {
   priceVersions,
   sources,
 } from "@/server/db/schema";
-import { SEED_FIRST_SEEN_AT, SEED_LABS, type SeedModelSpec } from "@/server/db/seed-data";
+import { SEED_LABS, type SeedModelSpec } from "@/server/db/seed-data";
 import {
   assertSeedMatchesRows,
   loadSeedPlan,
@@ -51,6 +51,12 @@ describe("hand-checked seed list", () => {
     const plan = loadSeedPlan();
 
     expect(plan.map((entry) => entry.lab.slug)).toEqual(["anthropic", "openai"]);
+    expect(plan.find((entry) => entry.lab.slug === "anthropic")?.lab.firstSeenAt).toEqual(
+      new Date("2026-10-18T00:00:00.000Z"),
+    );
+    expect(plan.find((entry) => entry.lab.slug === "openai")?.lab.firstSeenAt).toEqual(
+      new Date("2026-11-05T00:00:00.000Z"),
+    );
     expect(slugs(plan)).toEqual([
       "claude-fable-5.1",
       "claude-mythos-5.1",
@@ -76,25 +82,29 @@ describe("hand-checked seed list", () => {
     expect(model(plan, "gpt-6-astra").components).toEqual([
       { dimension: "input", amount: "10" },
       { dimension: "cache_read", amount: "1" },
-      { dimension: "cache_write", amount: "12.5" },
+      { dimension: "cache_write_30m", amount: "12.5" },
+      { dimension: "cache_write_12h", amount: "25" },
       { dimension: "output", amount: "50" },
     ]);
     expect(model(plan, "gpt-6.1-sol").components).toEqual([
       { dimension: "input", amount: "2" },
       { dimension: "cache_read", amount: "0.1" },
-      { dimension: "cache_write", amount: "2.5" },
+      { dimension: "cache_write_30m", amount: "2.5" },
+      { dimension: "cache_write_12h", amount: "5" },
       { dimension: "output", amount: "10" },
     ]);
     expect(model(plan, "gpt-6-luna").components).toEqual([
       { dimension: "input", amount: "0.1" },
       { dimension: "cache_read", amount: "0.01" },
-      { dimension: "cache_write", amount: "0.125" },
+      { dimension: "cache_write_30m", amount: "0.125" },
+      { dimension: "cache_write_12h", amount: "0.25" },
       { dimension: "output", amount: "0.5" },
     ]);
     expect(model(plan, "gpt-6-sol").components).toEqual([
       { dimension: "input", amount: "2" },
       { dimension: "cache_read", amount: "0.2" },
-      { dimension: "cache_write", amount: "2.5" },
+      { dimension: "cache_write_30m", amount: "2.5" },
+      { dimension: "cache_write_12h", amount: "5" },
       { dimension: "output", amount: "10" },
     ]);
 
@@ -255,8 +265,8 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
         .select()
         .from(observations)
         .where(inArray(observations.sourceId, sourceRows.map((source) => source.id)));
-      const publishedObservations = observationRows.filter(
-        (observation) => observation.fetchedAt.getTime() === SEED_FIRST_SEEN_AT.getTime(),
+      const publishedObservations = observationRows.filter((observation) =>
+        plan.some((entry) => entry.lab.firstSeenAt.getTime() === observation.fetchedAt.getTime()),
       );
       expect(publishedObservations).toHaveLength(2);
       for (const observation of publishedObservations) {
@@ -271,11 +281,12 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
         expect(observation.contentHash).toBe(sha256(JSON.stringify(entry.parsedData)));
         expect(observation.archiveUrl).toBeNull();
         expect(observation.archiveStatus).toBe("pending");
-        expect(observation.fetchedAt).toEqual(SEED_FIRST_SEEN_AT);
+        expect(observation.fetchedAt).toEqual(entry.lab.firstSeenAt);
       }
 
       const pendingObservations = observationRows.filter(
-        (observation) => observation.fetchedAt.getTime() !== SEED_FIRST_SEEN_AT.getTime(),
+        (observation) =>
+          !plan.some((entry) => entry.lab.firstSeenAt.getTime() === observation.fetchedAt.getTime()),
       );
       expect(pendingObservations).toHaveLength(1);
       const pending = pendingObservations[0];
@@ -291,9 +302,13 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
       const flaggedItems = itemRows.filter((item) => item.reviewStatus === "flagged");
       expect(confirmedItems).toHaveLength(6);
       expect(confirmedItems.every((item) => item.reviewedBy === "seed")).toBe(true);
-      expect(confirmedItems.every((item) => item.reviewedAt?.getTime() === SEED_FIRST_SEEN_AT.getTime())).toBe(
-        true,
-      );
+      expect(
+        confirmedItems.every((item) => {
+          const offering = offeringRows.find((row) => row.id === item.offeringId);
+          const storedModel = modelRows.find((row) => row.id === offering?.modelId);
+          return item.reviewedAt?.getTime() === labOf(plan, storedModel?.slug ?? "").firstSeenAt.getTime();
+        }),
+      ).toBe(true);
       expect(flaggedItems).toHaveLength(1);
       expect(flaggedItems[0]?.reviewedBy).toBeNull();
       expect(flaggedItems[0]?.reviewedAt).toBeNull();
@@ -324,15 +339,15 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
         expect(version.announcedOn).toBeNull();
         expect(version.retractedAt).toBeNull();
         expect(version.replacesVersionId).toBeNull();
-        expect(version.firstSeenAt).toEqual(SEED_FIRST_SEEN_AT);
-        expect(pricePrecisionLabel({ firstSeenAt: version.firstSeenAt, announcedOn: version.announcedOn })).toEqual({
-          kind: "observed",
-          chartStart: "2026-10-18",
-          wording: "changed on or before",
-        });
-
         const offering = offeringRows.find((item) => item.id === version.offeringId);
         const storedModel = modelRows.find((item) => item.id === offering?.modelId);
+        const lab = labOf(plan, storedModel?.slug ?? "");
+        expect(version.firstSeenAt).toEqual(lab.firstSeenAt);
+        expect(pricePrecisionLabel({ firstSeenAt: version.firstSeenAt, announcedOn: version.announcedOn })).toEqual({
+          kind: "observed",
+          chartStart: lab.slug === "openai" ? "2026-11-05" : "2026-10-18",
+          wording: "changed on or before",
+        });
         const expected = model(plan, storedModel?.slug ?? "");
         const amounts = await tx
           .select()
@@ -435,6 +450,14 @@ function rowsFor(labSlug: "anthropic" | "openai") {
 
 function slugs(plan: SeedPlanEntry[]): string[] {
   return plan.flatMap((entry) => entry.models.map((item) => item.slug));
+}
+
+function labOf(plan: SeedPlanEntry[], slug: string): SeedPlanEntry["lab"] {
+  const entry = plan.find((item) => item.models.some((model) => model.slug === slug));
+  if (entry === undefined) {
+    throw new Error(`seed plan is missing ${slug}`);
+  }
+  return entry.lab;
 }
 
 function model(plan: SeedPlanEntry[], slug: string) {

@@ -62,15 +62,17 @@ No source needs Playwright or a JS-rendered fetch. Every official page is parsea
 | Header                                                    | Dimension                         | Condition                     |
 | --------------------------------------------------------- | --------------------------------- | ----------------------------- |
 | Short context input                                       | `input`                           | none                          |
-| Short context cached input                                | `cache_read`                      | none                          |
-| Short context cache writes                                | `cache_write`                     | none                          |
 | Short context output                                      | `output`                          | none                          |
-| Long context input / cached input / cache writes / output | same dimensions                   | long-context tier (see traps) |
+| Short context cached input                                | `cache_read`                      | none                          |
+| Short context 30m write                                   | `cache_write_30m`                 | none                          |
+| Short context 12h write                                   | `cache_write_12h`                 | none                          |
+| Long context input / output / cached input / 30m / 12h    | same dimensions                   | long-context tier (see traps) |
 
 - **Unit:** bare `$10.00` cells. The unit is only stated in the sentence `Prices per 1M tokens.` near the top. The parser must **assert that sentence exists** and throw if it does not.
 - **Traps and rules:**
   - `-` means "not offered", **not zero**. Skip the cell. Parsing it as 0 would publish a fake free price.
   - The long-context threshold is only written for some models (`gpt-5.5 (<272K context length)`). `gpt-6-*` and `gpt-5.6-*` have long-context prices and **no stated threshold**, and the top of the page has no general note (checked lines 1-29). Rule: publish their short-context prices, record the long-context ones as a `needs_threshold` warning. **Never guess 272K.**
+  - The November 2026 page has three `### Standard pricing data` sections, plus one shorter table (`Model`, `Input`, `Output`, `Cached input`) under the first heading. Read every Standard section. A repeated model with the same parsed prices is kept once. `$4.00` and `$4` are the same price. A repeated model with different prices, or a different context boundary, throws. `30m write` is `cache_write_30m`. `12h write` is `cache_write_12h`. Do not map those onto `cache_write`, `cache_write_5m`, or `cache_write_1h`. The October fixture still has one `cache writes` column mapped to `cache_write`. The current parser throws on that header. A heading whose title contains the word Standard stays inside the current section. Batch and the other mode headings still end it. A short table may include an extra column; that header is an `unmappedColumns` warning, and the text prices are kept.
   - `<272K` is ambiguous at exactly 272,000. Do not invent precision.
   - Model names already are API slugs, which makes aliasing easy.
   - Names may carry a parenthetical (`gpt-5.5 (<272K context length)`). Strip it for the slug and keep it as a condition source.
@@ -159,7 +161,9 @@ type Dimension =
   | "cache_read"
   | "cache_write_5m"
   | "cache_write_1h"
-  | "cache_write"; // OpenAI's single cache-write price (decided in 7c)
+  | "cache_write" // October OpenAI page: one cache-write column (decided in 7c)
+  | "cache_write_30m" // November OpenAI page: 30-minute write
+  | "cache_write_12h"; // November OpenAI page: 12-hour write
 
 // Tier conditions use "over" / "atMost" so the boundary is never ambiguous:
 //   Anthropic "up to 100,000"  -> { promptTokensAtMost: 100000 }
@@ -216,7 +220,7 @@ We will measure the real break rate from `fetch_log` before adding heavier machi
 
 1. Anthropic parser, header-based, tested against the fixture. **Done:** `src/core/pricing/anthropic.ts` (`parseAnthropicPricing`). Fail-closed tests: `src/core/pricing/anthropic.test.ts`.
 2. models.dev adapter + a comparison script for Anthropic's models. **Done:** `src/core/pricing/models-dev.ts` (`parseModelsDevAnthropic`) and `scripts/compare-models-dev-anthropic.ts`. Fail-closed tests: `src/core/pricing/models-dev.test.ts`. **Verify-mode decision:** do not build it now. It cannot see dimensions, tiers, schedules, or dates; witnesses lag after real changes; and there is no `fetch_log` yet so there is no measured break rate. Revisit in Phase 5 if `parser_suspect` shows up.
-3. OpenAI parser (Standard section only). **Done:** `src/core/pricing/openai.ts` (`parseOpenAiPricing`). Fail-closed tests: `src/core/pricing/openai.test.ts`. OpenAI's single cache-write column maps to `cache_write`.
+3. OpenAI parser (Standard section only). **Done:** `src/core/pricing/openai.ts` (`parseOpenAiPricing`). Fail-closed tests: `src/core/pricing/openai.test.ts`. The October fixture's single cache-write column maps to `cache_write`. The 2026-11-05 page has three Standard sections. `30m write` is `cache_write_30m` and `12h write` is `cache_write_12h`.
 4. Google parser (largest job; cell grammar for 4 formats). **Done:** `src/core/pricing/google.ts` (`parseGooglePricing`). Fail-closed tests: `src/core/pricing/google.test.ts`. Standard text prices only. Schedules are `validFrom` / `validUntil` rows. Storage and modality prices are warnings.
 5. LiteLLM adapter as a third witness. **Done:** `src/core/pricing/litellm.ts` (`parseLiteLLM`). Fail-closed tests: `src/core/pricing/litellm.test.ts`. Chat rows for `litellm_provider` `anthropic`, `openai`, and `gemini` only. Per-token costs convert with `decimal.js`. `*_above_*k_tokens` and other unmapped cost fields are warnings, not rows. Dated `-YYYYMMDD` keys collapse to the bare key; a disagreement omits that dimension. No comparison against official parsers in this step: LiteLLM slugs stay API ids (`claude-haiku-4-5`), and official Anthropic slugs are page labels (`claude-haiku-4.5`).
 6. Later: new-model detection, deprecation detection (missing on N consecutive checks), hash-based change detection (Phase 5).
@@ -227,7 +231,7 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 
 ## 7. Decisions still open (confirm during the parser stages)
 
-- OpenAI single cache-write price: **Decided in 7c.** Map it to dimension `cache_write`. Do not treat it as a 5-minute or 1-hour price.
+- OpenAI single cache-write price: **Decided in 7c.** Map it to dimension `cache_write`. Do not treat it as a 5-minute or 1-hour price. That is the October fixture. The 2026-11-05 page replaced that column with `30m write` (`cache_write_30m`) and `12h write` (`cache_write_12h`). The current parser throws on the October header.
 - Published price schedules (Google): **Decided in 7d.** Keep each segment as its own row with `validFrom` / `validUntil`. Do not collapse a schedule to today's price. Sales and promo periods remain out of scope.
 - Postgres: `unique(price_version_id, dimension, condition)` treats NULL conditions as distinct. Use `NOT NULL DEFAULT '{}'` or `NULLS NOT DISTINCT` (Postgres 15+). Put this in the step-10 note.
 - Google: do the Batch, Flex, Priority and Contributor modes matter? Out of MVP for now.
