@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
+import { parseReviewItemId } from "@/app/review/review-list";
 import {
   isProtectedReviewPath,
   parseReviewerAllowlist,
@@ -10,6 +11,7 @@ import {
 } from "@/core/auth/review-access";
 import { createDb } from "@/server/db/client";
 import { hasTrackedModel } from "@/server/db/repositories/model-detail";
+import { hasReviewItem } from "@/server/db/repositories/review-queue";
 import { parseDatabaseEnv } from "@/server/env";
 
 /**
@@ -30,10 +32,19 @@ import { parseDatabaseEnv } from "@/server/env";
  * the slug or reads the database. A bad slug still throws. A database
  * error still throws. Neither becomes a 404. A tracked model with no
  * price continues to the page.
+ *
+ * A missing review item answers 404 the same way, and only after the
+ * reviewer is allowed in. A stranger still gets 403, not a hint that
+ * the id exists. An id that is not a whole number throws. /review
+ * itself is not an item lookup.
  */
 export async function proxy(request: NextRequest) {
   if (isProtectedReviewPath(request.nextUrl.pathname)) {
-    return protectReview(request);
+    const denied = await protectReview(request);
+    if (denied !== null) {
+      return denied;
+    }
+    return missingReviewItemResponse(request);
   }
 
   const slugs = modelSlugs(request.nextUrl.pathname);
@@ -50,13 +61,7 @@ export async function proxy(request: NextRequest) {
   try {
     const tracked = await hasTrackedModel(db, slugs.labSlug, slugs.modelSlug);
     if (!tracked) {
-      return new NextResponse("This page could not be found.", {
-        status: 404,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-          "cache-control": "no-store",
-        },
-      });
+      return notFoundResponse();
     }
   } finally {
     await close();
@@ -69,7 +74,7 @@ export const config = {
   matcher: ["/models/:labSlug/:modelSlug", "/review", "/review/:path*"],
 };
 
-async function protectReview(request: NextRequest) {
+async function protectReview(request: NextRequest): Promise<NextResponse | null> {
   const secretConfigured = reviewAuthSecretConfigured(process.env);
   if (!secretConfigured) {
     return reviewTextResponse(reviewHttpResult("not-configured"));
@@ -85,7 +90,7 @@ async function protectReview(request: NextRequest) {
   });
   const result = reviewHttpResult(lock);
   if (result.type === "next") {
-    return NextResponse.next();
+    return null;
   }
   if (result.type === "redirect") {
     const url = request.nextUrl.clone();
@@ -94,6 +99,37 @@ async function protectReview(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   return reviewTextResponse(result);
+}
+
+async function missingReviewItemResponse(request: NextRequest): Promise<NextResponse> {
+  const itemId = reviewItemId(request.nextUrl.pathname);
+  if (itemId === null) {
+    return NextResponse.next();
+  }
+
+  const { databaseUrl } = parseDatabaseEnv(process.env);
+  const { db, close } = createDb(databaseUrl);
+
+  try {
+    const found = await hasReviewItem(db, itemId);
+    if (!found) {
+      return notFoundResponse();
+    }
+  } finally {
+    await close();
+  }
+
+  return NextResponse.next();
+}
+
+function notFoundResponse(): NextResponse {
+  return new NextResponse("This page could not be found.", {
+    status: 404,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 function reviewTextResponse(result: ReviewHttpResult) {
@@ -107,6 +143,43 @@ function reviewTextResponse(result: ReviewHttpResult) {
       "cache-control": "no-store",
     },
   });
+}
+
+/**
+ * /review/items/<id>, or null when this locked path is not an item.
+ * The id check throws. A trailing slash is the same item.
+ */
+export function reviewItemId(pathname: string): number | null {
+  const path = stripTrailingSlash(pathname);
+  const parts = path.split("/");
+  if (parts.length !== 4 || parts[1] !== "review" || parts[2] !== "items") {
+    return null;
+  }
+
+  const segment = parts[3];
+  if (segment === undefined || segment.length === 0) {
+    return null;
+  }
+
+  return parseReviewItemId(decodeReviewSegment(segment));
+}
+
+function stripTrailingSlash(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.replace(/\/+$/, "");
+  }
+  return pathname;
+}
+
+function decodeReviewSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new Error("Review item id is not a valid encoded path segment");
+    }
+    throw error;
+  }
 }
 
 export function modelSlugs(pathname: string): { labSlug: string; modelSlug: string } | null {

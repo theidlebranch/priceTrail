@@ -8,7 +8,6 @@ import {
   reviewDecision,
   reviewHttpResult,
   reviewLock,
-  reviewPlaceholder,
   reviewSessionFromAuthResult,
   reviewerFromToken,
   reviewerId,
@@ -444,19 +443,5 @@ describe("reviewHttpResult", () => {
 
   it("lets an allowed reviewer through", () => {
     expect(reviewHttpResult("allowed")).toEqual({ type: "next" });
-  });
-});
-
-describe("reviewPlaceholder", () => {
-  it("names the provider and the account id", () => {
-    expect(reviewPlaceholder({ provider: "google", accountId: "123" })).toBe(
-      "You are signed in as google:123. The review queue is not built yet.",
-    );
-  });
-
-  it("throws when the account id is an email", () => {
-    expect(() => reviewPlaceholder({ provider: "google", accountId: "person@example.com" })).toThrow(
-      /account id/,
-    );
   });
 });
