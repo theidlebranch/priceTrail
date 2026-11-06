@@ -76,25 +76,29 @@ describe("hand-checked seed list", () => {
     expect(model(plan, "gpt-6-astra").components).toEqual([
       { dimension: "input", amount: "10" },
       { dimension: "cache_read", amount: "1" },
-      { dimension: "cache_write", amount: "12.5" },
+      { dimension: "cache_write_30m", amount: "12.5" },
+      { dimension: "cache_write_12h", amount: "25" },
       { dimension: "output", amount: "50" },
     ]);
     expect(model(plan, "gpt-6.1-sol").components).toEqual([
       { dimension: "input", amount: "2" },
       { dimension: "cache_read", amount: "0.1" },
-      { dimension: "cache_write", amount: "2.5" },
+      { dimension: "cache_write_30m", amount: "2.5" },
+      { dimension: "cache_write_12h", amount: "5" },
       { dimension: "output", amount: "10" },
     ]);
     expect(model(plan, "gpt-6-luna").components).toEqual([
       { dimension: "input", amount: "0.1" },
       { dimension: "cache_read", amount: "0.01" },
-      { dimension: "cache_write", amount: "0.125" },
+      { dimension: "cache_write_30m", amount: "0.125" },
+      { dimension: "cache_write_12h", amount: "0.25" },
       { dimension: "output", amount: "0.5" },
     ]);
     expect(model(plan, "gpt-6-sol").components).toEqual([
       { dimension: "input", amount: "2" },
       { dimension: "cache_read", amount: "0.2" },
-      { dimension: "cache_write", amount: "2.5" },
+      { dimension: "cache_write_30m", amount: "2.5" },
+      { dimension: "cache_write_12h", amount: "5" },
       { dimension: "output", amount: "10" },
     ]);
 

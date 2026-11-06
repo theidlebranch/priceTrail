@@ -42,7 +42,7 @@ const KEYS = {
   IA_SECRET_KEY: "secret-key-test",
 };
 const fixture = readFileSync(
-  path.join(process.cwd(), "tests/fixtures/openai-pricing.md"),
+  path.join(process.cwd(), "tests/fixtures/openai-pricing.2026-11-05.md"),
   "utf8",
 );
 const NOT_A_PRICING_PAGE = "not a pricing page";

@@ -30,6 +30,8 @@ export const PRICE_DIMENSIONS = [
   "cache_write",
   "cache_write_5m",
   "cache_write_1h",
+  "cache_write_30m",
+  "cache_write_12h",
 ] as const;
 
 export type PriceDimension = (typeof PRICE_DIMENSIONS)[number];
@@ -41,6 +43,8 @@ export const PRICE_DIMENSION_LABELS: Record<PriceDimension, string> = {
   cache_write: "Cache write",
   cache_write_5m: "Cache write (5 minutes)",
   cache_write_1h: "Cache write (1 hour)",
+  cache_write_30m: "Cache write (30 minutes)",
+  cache_write_12h: "Cache write (12 hours)",
 };
 
 export type PriceHistoryComponent = {

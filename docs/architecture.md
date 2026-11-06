@@ -226,7 +226,8 @@ price_versions (id, offering_id,
 
 price_components (id, price_version_id, dimension, unit, amount, condition)
   -- dimension: 'input' | 'output' | 'cache_read' | 'cache_write_5m'
-  --            | 'cache_write_1h' | (later: 'audio_input', 'image_input',
+  --            | 'cache_write_1h' | 'cache_write' | 'cache_write_30m'
+  --            | 'cache_write_12h' | (later: 'audio_input', 'image_input',
   --            'cache_storage', 'web_search_call', batch/priority variants...)
   -- unit: 'usd_per_1m_tokens' | 'usd_per_call' | ...
   -- amount: numeric (never float)

@@ -47,6 +47,8 @@ const DIMENSIONS = [
   "cache_write_5m",
   "cache_write_1h",
   "cache_write",
+  "cache_write_30m",
+  "cache_write_12h",
 ] as const;
 
 type Dimension = (typeof DIMENSIONS)[number];

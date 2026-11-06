@@ -11,21 +11,24 @@ const STANDARD_HEADING = "### Standard pricing data";
 const CONTEXT_BOUNDARY_PATTERN = /^<(\d+)K context length$/i;
 const PRICE_PATTERN = /^\$(\d+(?:\.\d+)?)$/;
 
+// The November 2026 page names a 30-minute write and a 12-hour write.
+// The October page's single "cache writes" column is not a current header.
 const PRICE_COLUMNS = [
   { header: "Short context input", dimension: "input", context: "short" },
-  { header: "Short context cached input", dimension: "cache_read", context: "short" },
-  { header: "Short context cache writes", dimension: "cache_write", context: "short" },
   { header: "Short context output", dimension: "output", context: "short" },
+  { header: "Short context cached input", dimension: "cache_read", context: "short" },
+  { header: "Short context 30m write", dimension: "cache_write_30m", context: "short" },
+  { header: "Short context 12h write", dimension: "cache_write_12h", context: "short" },
   { header: "Long context input", dimension: "input", context: "long" },
-  { header: "Long context cached input", dimension: "cache_read", context: "long" },
-  { header: "Long context cache writes", dimension: "cache_write", context: "long" },
   { header: "Long context output", dimension: "output", context: "long" },
+  { header: "Long context cached input", dimension: "cache_read", context: "long" },
+  { header: "Long context 30m write", dimension: "cache_write_30m", context: "long" },
+  { header: "Long context 12h write", dimension: "cache_write_12h", context: "long" },
 ] as const;
 
 type ContextKind = (typeof PRICE_COLUMNS)[number]["context"];
 
 const REQUIRED_PRICE_HEADERS = PRICE_COLUMNS.map((column) => column.header);
-const PRICE_HEADER_SET = new Set<string>(REQUIRED_PRICE_HEADERS);
 const LONG_COLUMNS = PRICE_COLUMNS.filter((column) => column.context === "long");
 
 type MarkdownTable = {
@@ -56,37 +59,107 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
     .filter((index) => index >= 0);
 
   if (headingIndexes.length === 0) {
-    throw new Error("0 Standard pricing data headings: expected exactly one");
-  }
-  if (headingIndexes.length > 1) {
-    throw new Error(
-      `${headingIndexes.length} Standard pricing data headings: expected exactly one`,
-    );
+    throw new Error("0 Standard pricing data headings: expected at least one");
   }
 
-  const sectionStart = headingIndexes[0] + 1;
-  const sectionEnd = lines.findIndex(
-    (line, index) => index >= sectionStart && /^#{1,6}\s/.test(line.trim()),
-  );
-  const section = lines
-    .slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd)
-    .join("\n");
+  const warnings: string[] = [];
+  const rows: NormalizedPrice[] = [];
+  const seenPrices = new Map<string, string>();
+
+  for (let sectionIndex = 0; sectionIndex < headingIndexes.length; sectionIndex += 1) {
+    const sectionStart = headingIndexes[sectionIndex] + 1;
+    const nextStandard = headingIndexes[sectionIndex + 1];
+    const sectionEnd = lines.findIndex((line, index) => {
+      if (index < sectionStart) {
+        return false;
+      }
+      if (nextStandard !== undefined && index >= nextStandard) {
+        return true;
+      }
+      return /^#{1,6}\s/.test(line.trim());
+    });
+    const section = lines.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd).join("\n");
+    readStandardSection(section, warnings, rows, seenPrices);
+  }
+
+  if (rows.length === 0) {
+    throw new Error("empty table: OpenAI Standard pricing table has no price rows");
+  }
+
+  return { rows, warnings };
+}
+
+/**
+ * One Standard heading owns one table. A later heading can repeat a model
+ * when every price cell matches. A different price for that slug throws.
+ * The live page repeats gpt-5.6-sol with the same cells.
+ */
+const SHORT_HEADERS = ["Model", "Input", "Output", "Cached input"] as const;
+const SHORT_COLUMNS = [
+  { header: "Input", dimension: "input", context: "short" },
+  { header: "Output", dimension: "output", context: "short" },
+  { header: "Cached input", dimension: "cache_read", context: "short" },
+] as const;
+
+function readStandardSection(
+  section: string,
+  warnings: string[],
+  rows: NormalizedPrice[],
+  seenPrices: Map<string, string>,
+): void {
   const tables = parseMarkdownTables(section);
   if (tables.length === 0) {
     throw new Error("empty table: no table after Standard pricing data heading");
   }
 
-  const [table] = tables;
-  const missing = REQUIRED_PRICE_HEADERS.filter(
-    (header) => !table.headers.includes(header),
-  );
-  if (missing.length > 0) {
-    throw new Error(`missing required column: ${missing.join(", ")}`);
+  const fullTables = tables.filter((table) => isFullTable(table.headers));
+  const shortTables = tables.filter((table) => isShortTable(table.headers));
+  if (fullTables.length + shortTables.length !== tables.length) {
+    const other = tables.find((table) => !isFullTable(table.headers) && !isShortTable(table.headers));
+    throw new Error(`missing required column: ${(other?.headers ?? []).join(", ")}`);
   }
+  if (fullTables.length > 1) {
+    throw new Error(
+      `${fullTables.length} tables after Standard pricing data heading: expected exactly one`,
+    );
+  }
+
+  let pricedModels = 0;
+  let repeatedModels = 0;
+  for (const table of [...fullTables, ...shortTables]) {
+    const read = readPriceTable(table, warnings, rows, seenPrices);
+    pricedModels += read.pricedModels;
+    repeatedModels += read.repeatedModels;
+  }
+
+  if (pricedModels === 0 && repeatedModels === 0) {
+    throw new Error("empty table: OpenAI Standard pricing table has no price rows");
+  }
+}
+
+function isFullTable(headers: string[]): boolean {
+  return REQUIRED_PRICE_HEADERS.every((header) => headers.includes(header));
+}
+
+function isShortTable(headers: string[]): boolean {
+  return (
+    headers.length === SHORT_HEADERS.length &&
+    SHORT_HEADERS.every((header) => headers.includes(header))
+  );
+}
+
+function readPriceTable(
+  table: MarkdownTable,
+  warnings: string[],
+  rows: NormalizedPrice[],
+  seenPrices: Map<string, string>,
+): { pricedModels: number; repeatedModels: number } {
+  const columns = isFullTable(table.headers) ? PRICE_COLUMNS : SHORT_COLUMNS;
+  const knownHeaders = new Set<string>([MODEL_HEADER, ...columns.map((column) => column.header)]);
   if (!table.headers.includes(MODEL_HEADER)) {
     throw new Error(`missing required column: ${MODEL_HEADER}`);
   }
-  const duplicates = [MODEL_HEADER, ...REQUIRED_PRICE_HEADERS].filter(
+  const duplicates = [...knownHeaders].filter(
     (header) => table.headers.filter((candidate) => candidate === header).length > 1,
   );
   if (duplicates.length > 0) {
@@ -96,21 +169,35 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
     throw new Error("empty table: OpenAI Standard pricing table has no rows");
   }
 
-  const warnings: string[] = [];
-  const unmappedColumns = table.headers.filter(
-    (header) => header !== MODEL_HEADER && !PRICE_HEADER_SET.has(header),
-  );
+  const unmappedColumns = table.headers.filter((header) => !knownHeaders.has(header));
   if (unmappedColumns.length > 0) {
     warnings.push(`unmappedColumns: ${unmappedColumns.join(", ")}`);
   }
 
-  const rows: NormalizedPrice[] = [];
+  let pricedModels = 0;
+  let repeatedModels = 0;
   for (const rawRow of table.rows) {
     const cells = cellsByHeader(table.headers, rawRow);
-    const model = parseModelCell(cells.get(MODEL_HEADER) ?? "");
-    const skipLong = shouldSkipUnthresholdedLongContext(model, cells, warnings);
+    const modelCell = cells.get(MODEL_HEADER) ?? "";
+    const model = parseModelCell(modelCell);
+    const signature = [modelCell.trim(), ...columns.map((column) => cells.get(column.header) ?? "")].join(
+      "\t",
+    );
+    const previous = seenPrices.get(model.modelSlug);
+    if (previous !== undefined) {
+      if (previous !== signature) {
+        throw new Error(`duplicate model slug: ${model.modelSlug}`);
+      }
+      repeatedModels += 1;
+      continue;
+    }
+    seenPrices.set(model.modelSlug, signature);
 
-    for (const column of PRICE_COLUMNS) {
+    const before = rows.length;
+    const skipLong = isFullTable(table.headers)
+      ? shouldSkipUnthresholdedLongContext(model, cells, warnings)
+      : false;
+    for (const column of columns) {
       if (column.context === "long" && skipLong) {
         continue;
       }
@@ -135,13 +222,12 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
         }),
       );
     }
+    if (rows.length > before) {
+      pricedModels += 1;
+    }
   }
 
-  if (rows.length === 0) {
-    throw new Error("empty table: OpenAI Standard pricing table has no price rows");
-  }
-
-  return { rows, warnings };
+  return { pricedModels, repeatedModels };
 }
 
 function shouldSkipUnthresholdedLongContext(

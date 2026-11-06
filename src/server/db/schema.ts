@@ -129,8 +129,9 @@ export const priceVersions = pgTable("price_versions", {
 /**
  * Same list as src/core/pricing/shape.ts. A new dimension is a new row
  * here, plus one new enum value. It is not a new column on this table.
- * OpenAI's single cache-write price is cache_write, not a 5-minute or
- * 1-hour price.
+ * OpenAI's October page used one cache_write column. The November page
+ * names cache_write_30m and cache_write_12h. Those are not the 5-minute
+ * or 1-hour prices.
  */
 export const priceDimension = pgEnum("price_dimension", [
   "input",
@@ -139,6 +140,8 @@ export const priceDimension = pgEnum("price_dimension", [
   "cache_write_5m",
   "cache_write_1h",
   "cache_write",
+  "cache_write_30m",
+  "cache_write_12h",
 ]);
 
 /** MVP stores USD per 1 million tokens. A later unit needs a new enum value. */

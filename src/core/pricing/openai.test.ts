@@ -6,6 +6,20 @@ import { parseOpenAiPricing } from "./openai";
 const REQUIRED_HEADERS = [
   "Model",
   "Short context input",
+  "Short context output",
+  "Short context cached input",
+  "Short context 30m write",
+  "Short context 12h write",
+  "Long context input",
+  "Long context output",
+  "Long context cached input",
+  "Long context 30m write",
+  "Long context 12h write",
+] as const;
+
+const OCTOBER_HEADERS = [
+  "Model",
+  "Short context input",
   "Short context cached input",
   "Short context cache writes",
   "Short context output",
@@ -16,6 +30,11 @@ const REQUIRED_HEADERS = [
 ] as const;
 
 const fixture = readFileSync(
+  path.join(process.cwd(), "tests/fixtures/openai-pricing.2026-11-05.md"),
+  "utf8",
+);
+
+const octoberFixture = readFileSync(
   path.join(process.cwd(), "tests/fixtures/openai-pricing.md"),
   "utf8",
 );
@@ -31,13 +50,15 @@ function validRow(
   model: string,
   amounts = [
     "$1.00",
+    "$5.00",
     "$0.10",
     "$1.25",
-    "$5.00",
+    "$2.50",
     "$2.00",
+    "$7.50",
     "$0.20",
     "$2.50",
-    "$7.50",
+    "$5.00",
   ],
 ): string[] {
   return [model, ...amounts];
@@ -62,6 +83,12 @@ function standardPage(
   return parts.join("\n\n");
 }
 
+function pageWithSections(tables: string[]): string {
+  return ["Prices per 1M tokens.", ...tables.flatMap((table) => ["### Standard pricing data", table])].join(
+    "\n\n",
+  );
+}
+
 function findRow(
   rows: ReturnType<typeof parseOpenAiPricing>["rows"],
   modelSlug: string,
@@ -82,7 +109,7 @@ function findRow(
 }
 
 describe("parseOpenAiPricing", () => {
-  it("parses the official Standard table and ignores Batch", () => {
+  it("parses every Standard section and ignores Batch", () => {
     const { rows, warnings } = parseOpenAiPricing(fixture);
 
     const lunaInput = findRow(rows, "gpt-6-luna", "input");
@@ -93,17 +120,33 @@ describe("parseOpenAiPricing", () => {
       source: "official",
     });
     expect(lunaInput?.condition).toBeUndefined();
-    expect(findRow(rows, "gpt-6-luna", "cache_read")?.usdPer1M).toBe("0.01");
-    expect(findRow(rows, "gpt-6-luna", "cache_write")?.usdPer1M).toBe("0.125");
     expect(findRow(rows, "gpt-6-luna", "output")?.usdPer1M).toBe("0.5");
+    expect(findRow(rows, "gpt-6-luna", "cache_read")?.usdPer1M).toBe("0.01");
+    expect(findRow(rows, "gpt-6-luna", "cache_write_30m")?.usdPer1M).toBe("0.125");
+    expect(findRow(rows, "gpt-6-luna", "cache_write_12h")?.usdPer1M).toBe("0.25");
+    expect(findRow(rows, "gpt-6-luna", "cache_write")).toBeUndefined();
 
     expect(findRow(rows, "gpt-6-luna", "input", { promptTokensAtLeast: 272000 })).toBeUndefined();
     expect(rows.some((row) => row.modelSlug === "gpt-6-luna" && row.usdPer1M === "0.2")).toBe(
       false,
     );
-    expect(warnings.some((warning) => /needs_threshold/i.test(warning) && /gpt-6-luna/.test(warning))).toBe(
-      true,
+    expect(
+      warnings.some((warning) => /needs_threshold/i.test(warning) && /gpt-6-luna/.test(warning)),
+    ).toBe(true);
+
+    expect(findRow(rows, "gpt-6-cyber", "input")?.usdPer1M).toBe("20");
+    expect(findRow(rows, "gpt-6-cyber", "cache_write_30m")?.usdPer1M).toBe("25");
+    expect(findRow(rows, "gpt-6-rosalind", "input")?.usdPer1M).toBe("15");
+    expect(findRow(rows, "gpt-6-rosalind", "cache_write_12h")?.usdPer1M).toBe("37.5");
+    expect(findRow(rows, "gpt-4o", "input")?.usdPer1M).toBe("2.5");
+    expect(findRow(rows, "gpt-4o", "cache_read")?.usdPer1M).toBe("1.25");
+    expect(findRow(rows, "gpt-4o", "cache_write_30m")).toBeUndefined();
+
+    const repeated = rows.filter(
+      (row) => row.modelSlug === "gpt-5.6-sol" && row.dimension === "input",
     );
+    expect(repeated).toHaveLength(1);
+    expect(repeated[0]?.usdPer1M).toBe("4");
 
     const gpt55Short = findRow(rows, "gpt-5.5", "input", { promptTokensUnder: 272000 });
     expect(gpt55Short).toMatchObject({
@@ -114,8 +157,16 @@ describe("parseOpenAiPricing", () => {
     expect(findRow(rows, "gpt-5.5", "input", { promptTokensAtLeast: 272000 })?.usdPer1M).toBe(
       "10",
     );
-    expect(findRow(rows, "gpt-5.5", "cache_write", { promptTokensUnder: 272000 })).toBeUndefined();
-    expect(findRow(rows, "gpt-5.5", "cache_write", { promptTokensAtLeast: 272000 })).toBeUndefined();
+    expect(
+      findRow(rows, "gpt-5.5", "cache_write_30m", { promptTokensUnder: 272000 }),
+    ).toBeUndefined();
+    expect(
+      findRow(rows, "gpt-5.5", "cache_write_12h", { promptTokensAtLeast: 272000 }),
+    ).toBeUndefined();
+
+    expect(rows.some((row) => row.modelSlug === "gpt-6-astra" && row.usdPer1M === "5")).toBe(
+      false,
+    );
   });
 
   it("throws when the unit sentence is missing", () => {
@@ -134,12 +185,48 @@ describe("parseOpenAiPricing", () => {
     expect(() => parseOpenAiPricing(markdown)).toThrow(/0 Standard pricing data headings/i);
   });
 
-  it("throws when two Standard headings are present", () => {
+  it("reads a model that appears only in a later Standard section", () => {
+    const markdown = pageWithSections([
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-one")]),
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-two", ["$3.00", ...validRow("ignored").slice(2)])]),
+    ]);
+
+    const { rows } = parseOpenAiPricing(markdown);
+
+    expect(findRow(rows, "gpt-one", "input")?.usdPer1M).toBe("1");
+    expect(findRow(rows, "gpt-two", "input")?.usdPer1M).toBe("3");
+  });
+
+  it("throws when a later Standard section is missing a required column", () => {
+    const brokenHeaders = REQUIRED_HEADERS.filter((header) => header !== "Short context output");
+    const markdown = pageWithSections([
+      markdownTable(REQUIRED_HEADERS, [validRow("gpt-one")]),
+      markdownTable(brokenHeaders, [validRow("gpt-two").filter((_, index) => index !== 2)]),
+    ]);
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/missing required column/i);
+  });
+
+  it("throws when two Standard sections disagree on one model", () => {
+    const first = validRow("gpt-test");
+    const second = validRow("gpt-test", ["$9.00", ...first.slice(2)]);
+    const markdown = pageWithSections([
+      markdownTable(REQUIRED_HEADERS, [first]),
+      markdownTable(REQUIRED_HEADERS, [second]),
+    ]);
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/duplicate model slug: gpt-test/);
+  });
+
+  it("keeps one copy when a later Standard section repeats the same prices", () => {
     const markdown = standardPage(markdownTable(REQUIRED_HEADERS, [validRow("gpt-test")]), {
       extraHeading: true,
     });
 
-    expect(() => parseOpenAiPricing(markdown)).toThrow(/2 Standard pricing data headings/i);
+    const { rows } = parseOpenAiPricing(markdown);
+    const inputs = rows.filter((row) => row.modelSlug === "gpt-test" && row.dimension === "input");
+
+    expect(inputs).toHaveLength(1);
   });
 
   it("throws when the Standard section has no table but a later section does", () => {
@@ -153,15 +240,31 @@ describe("parseOpenAiPricing", () => {
     expect(() => parseOpenAiPricing(markdown)).toThrow(/empty table/i);
   });
 
+  it("throws when a Standard section has two tables", () => {
+    const table = markdownTable(REQUIRED_HEADERS, [validRow("gpt-test")]);
+    const markdown = standardPage([table, table].join("\n\n"));
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/2 tables/i);
+  });
+
   it("throws when a required column is missing", () => {
     const markdown = standardPage(
       markdownTable(
         REQUIRED_HEADERS.filter((header) => header !== "Short context output"),
-        [validRow("gpt-test").slice(0, -1)],
+        [validRow("gpt-test").filter((_, index) => index !== 2)],
       ),
     );
 
     expect(() => parseOpenAiPricing(markdown)).toThrow(/missing required column/i);
+  });
+
+  it("throws when the October cache-write column is still the header", () => {
+    const markdown = standardPage(
+      markdownTable(OCTOBER_HEADERS, [["gpt-test", "$1.00", "$0.10", "$1.25", "$5.00", "$2.00", "$0.20", "$2.50", "$7.50"]]),
+    );
+
+    expect(() => parseOpenAiPricing(markdown)).toThrow(/missing required column/i);
+    expect(() => parseOpenAiPricing(octoberFixture)).toThrow(/missing required column/i);
   });
 
   it("throws when a required column appears twice", () => {
@@ -176,20 +279,9 @@ describe("parseOpenAiPricing", () => {
   });
 
   it("throws when a cell is not a dollar amount or dash", () => {
-    const markdown = standardPage(
-      markdownTable(REQUIRED_HEADERS, [
-        validRow("gpt-test", [
-          "$1.00",
-          "$0.10",
-          "free",
-          "$5.00",
-          "$2.00",
-          "$0.20",
-          "$2.50",
-          "$7.50",
-        ]),
-      ]),
-    );
+    const amounts = validRow("gpt-test").slice(1);
+    amounts[3] = "free";
+    const markdown = standardPage(markdownTable(REQUIRED_HEADERS, [["gpt-test", ...amounts]]));
 
     expect(() => parseOpenAiPricing(markdown)).toThrow(/unrecognized cell/i);
   });
@@ -202,10 +294,9 @@ describe("parseOpenAiPricing", () => {
 
   it("throws when every price cell is a dash", () => {
     const markdown = standardPage(
-      markdownTable(
-        REQUIRED_HEADERS,
-        [validRow("gpt-test", ["-", "-", "-", "-", "-", "-", "-", "-"])],
-      ),
+      markdownTable(REQUIRED_HEADERS, [
+        validRow("gpt-test", ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]),
+      ]),
     );
 
     expect(() => parseOpenAiPricing(markdown)).toThrow(/empty table/i);
@@ -216,9 +307,11 @@ describe("parseOpenAiPricing", () => {
       markdownTable(REQUIRED_HEADERS, [
         validRow("gpt-test", [
           "$1.00",
+          "$5.00",
           "$0.10",
           "-",
-          "$5.00",
+          "$2.50",
+          "-",
           "-",
           "-",
           "-",
@@ -230,7 +323,8 @@ describe("parseOpenAiPricing", () => {
     const { rows } = parseOpenAiPricing(markdown);
 
     expect(findRow(rows, "gpt-test", "input")?.usdPer1M).toBe("1");
-    expect(findRow(rows, "gpt-test", "cache_write")).toBeUndefined();
+    expect(findRow(rows, "gpt-test", "cache_write_30m")).toBeUndefined();
+    expect(findRow(rows, "gpt-test", "cache_write_12h")?.usdPer1M).toBe("2.5");
     expect(rows.some((row) => row.usdPer1M === "0")).toBe(false);
   });
 
@@ -244,10 +338,7 @@ describe("parseOpenAiPricing", () => {
 
   it("warns about unknown extra columns instead of dropping them silently", () => {
     const markdown = standardPage(
-      markdownTable(
-        [...REQUIRED_HEADERS, "Audio tokens"],
-        [[...validRow("gpt-test"), "$9.00"]],
-      ),
+      markdownTable([...REQUIRED_HEADERS, "Audio tokens"], [[...validRow("gpt-test"), "$9.00"]]),
     );
 
     const { rows, warnings } = parseOpenAiPricing(markdown);

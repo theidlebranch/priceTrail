@@ -6,7 +6,7 @@ import { openaiSource } from "@/server/sources/openai-source";
 import type { FetchLike } from "@/server/sources/provider-source";
 
 const fixture = readFileSync(
-  path.join(process.cwd(), "tests/fixtures/openai-pricing.md"),
+  path.join(process.cwd(), "tests/fixtures/openai-pricing.2026-11-05.md"),
   "utf8",
 );
 
