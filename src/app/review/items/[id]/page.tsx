@@ -27,8 +27,8 @@ export const metadata: Metadata = {
  * read failed and this function throws.
  *
  * connection() runs before the database client opens, for the same
- * reason as the review list. This page does not call
- * publishPriceVersion().
+ * reason as the review list. Confirm and reject are a form on this
+ * page. The publish call lives in decideReviewItem(), not here.
  */
 export default function ReviewItemPage({ params }: { params: Promise<{ id: string }> }) {
   return (

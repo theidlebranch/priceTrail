@@ -15,8 +15,9 @@ import {
  * Read door for the review queue.
  *
  * This file only runs SELECT. It does not insert, update, or delete.
- * publishPriceVersion() stays the only writer of price rows. Confirm
- * and reject are a later step, so this file does not stamp a review.
+ * publishPriceVersion() stays the only writer of price rows. This file
+ * does not stamp a review and does not publish. Confirm and reject live
+ * in decideReviewItem().
  *
  * The list is official items still waiting. ok, confirmed, and rejected
  * stay off it. An aggregator item stays off it. The list does not select

@@ -1,10 +1,14 @@
 import Link from "next/link";
 import type { ReviewDetailView } from "@/app/review/review-detail";
+import { ReviewDecisionForm } from "@/components/review-decision-form";
 
 /**
  * One observation item. The amounts are parsed text from the snapshot.
  * They are not the published price. The source URL is text, not a link,
  * so a stored address cannot navigate the browser.
+ *
+ * Confirm and Reject are shown only while the item is flagged. The form
+ * posts to the server action. This component does not publish a price.
  */
 export function ReviewDetail({ view }: { view: ReviewDetailView }) {
   return (
@@ -25,6 +29,8 @@ export function ReviewDetail({ view }: { view: ReviewDetailView }) {
         <p>{view.cellCheckText}</p>
         <p className="text-muted-foreground">{view.actionsText}</p>
       </div>
+
+      {view.canDecide ? <ReviewDecisionForm itemId={view.itemId} /> : null}
 
       <div className="space-y-2 text-sm leading-6">
         <p>{view.sourceTypeLabel}</p>

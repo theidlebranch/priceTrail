@@ -14,6 +14,8 @@ import { normalizedPriceSchema, type Condition, type NormalizedPrice } from "@/c
  * decimal, throws. A parsed list with no row for this model throws.
  * grounding_result has no shape yet, so any stored value throws instead
  * of being shown as a match. Null means the cell check has not run.
+ * A flagged item can be confirmed or rejected. Any other status is
+ * read-only. This file does not publish a price.
  */
 
 const AMOUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
@@ -75,14 +77,16 @@ export type ReviewDetailView = {
   reviewedAtText: string | null;
   cellCheckText: "No cell check is stored for this item.";
   prices: ReviewDetailPrices;
-  actionsText: "Confirm and reject are not on this page yet.";
+  itemId: number;
+  canDecide: boolean;
+  actionsText: string;
 };
 
 export function toReviewDetailView(item: ReviewItemInput): ReviewDetailView {
   if (item.groundingResult !== null) {
     throw new Error("grounding_result has no reader yet.");
   }
-  parseReviewItemId(String(item.id));
+  const itemId = parseReviewItemId(String(item.id));
   assertText(item.labName, "lab name");
   assertText(item.modelName, "model name");
   assertText(item.modelSlug, "model slug");
@@ -106,8 +110,17 @@ export function toReviewDetailView(item: ReviewItemInput): ReviewDetailView {
       item.reviewedAt === null ? null : formatReviewTimestamp(item.reviewedAt, "reviewedAt"),
     cellCheckText: "No cell check is stored for this item.",
     prices: readPrices(item.parsedData, item.modelSlug),
-    actionsText: "Confirm and reject are not on this page yet.",
+    itemId,
+    canDecide: item.reviewStatus === "flagged",
+    actionsText: decisionText(item.reviewStatus),
   };
+}
+
+function decisionText(status: string): string {
+  if (status === "flagged") {
+    return "Confirm publishes this price. Reject publishes nothing.";
+  }
+  return "This decision is already recorded.";
 }
 
 function statusText(status: string): string {

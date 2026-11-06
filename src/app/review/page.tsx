@@ -28,7 +28,7 @@ export const metadata: Metadata = {
  * for a query that returned no waiting items.
  *
  * This page does not call publishPriceVersion(). Confirm and reject
- * are a later step.
+ * are on the detail page.
  */
 export default function ReviewPage() {
   return (
