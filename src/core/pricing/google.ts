@@ -50,11 +50,25 @@ type MarkupNode = ReturnType<typeof pricingNodes>[number];
 
 export function parseGooglePricing(html: string): GoogleParseResult {
   const $ = load(html);
+  assertEnglish($);
+
+  // The October page is HTML tables. The live page is docs markup inside
+  // the same URL. A pricing-table node means the old reader still applies.
+  if ($("table.pricing-table").length > 0) {
+    return parseHtmlPricing($);
+  }
+
+  return parseMarkupPricing(markupSource($));
+}
+
+function assertEnglish($: CheerioAPI): void {
   const lang = $("html").attr("lang") ?? "";
   if (!lang.toLowerCase().startsWith("en")) {
     throw new Error(`page language is not English: html lang="${lang}"`);
   }
+}
 
+function parseHtmlPricing($: CheerioAPI): GoogleParseResult {
   const warnings: string[] = [];
   const rows: NormalizedPrice[] = [];
   let section: ModelSection | null = null;
@@ -92,6 +106,254 @@ export function parseGooglePricing(html: string): GoogleParseResult {
   }
 
   return { rows, warnings };
+}
+
+/**
+ * The live page keeps its prices in a noscript block. Cheerio does not
+ * parse inside noscript, so the tags and the &quot; escapes are still text.
+ * Loading that text once turns it into the markup the rest of this reader
+ * walks. A small test page can put the same markup in pre instead.
+ */
+function markupSource($: CheerioAPI): string {
+  const noscript = $("noscript")
+    .toArray()
+    .map((node) => $(node).text())
+    .find((text) => text.includes("{% tab") || text.includes("{% table"));
+  if (noscript) {
+    return load(noscript).root().text();
+  }
+
+  const pre = $("pre")
+    .toArray()
+    .map((node) => $(node).text())
+    .find((text) => text.includes("{% tab") || text.includes("{% table"));
+  if (pre) {
+    return pre;
+  }
+
+  return $("body").text();
+}
+
+function parseMarkupPricing(markup: string): GoogleParseResult {
+  const warnings: string[] = [];
+  const rows: NormalizedPrice[] = [];
+  let standardTables = 0;
+  const sections = markup.split(/^(?=## )/m).filter((section) => section.startsWith("## "));
+
+  for (const section of sections) {
+    const read = readMarkupSection(section, warnings);
+    standardTables += read.standardTables;
+    rows.push(...read.rows);
+  }
+
+  if (standardTables === 0) {
+    throw new Error("0 Standard pricing tables: expected at least one");
+  }
+
+  return { rows, warnings };
+}
+
+type MarkupSection = {
+  modelName: string;
+  ids: string[];
+};
+
+type MarkupRead = {
+  rows: NormalizedPrice[];
+  standardTables: number;
+};
+
+function readMarkupSection(section: string, warnings: string[]): MarkupRead {
+  const headingLine = section.split(/\r?\n/, 1)[0] ?? "";
+  const model: MarkupSection = {
+    modelName: markupModelName(headingLine),
+    ids: [...headingLine.matchAll(/\{%\s*id="([^"]+)"\s*%\}/g)].map((match) => match[1]),
+  };
+  const tabs = [
+    ...section.matchAll(/\{%\s*tab\s+title="([^"]+)"\s*%\}([\s\S]*?)\{%\s*\/tab\s*%\}/g),
+  ];
+
+  if (tabs.length > 0) {
+    return readMarkupTabs(tabs, model, warnings);
+  }
+
+  const table = section.match(/\{%\s*table\s*%\}([\s\S]*?)\{%\s*\/table\s*%\}/);
+  if (!table?.[1] || !markupHasPaidHeader(table[1])) {
+    if (table) {
+      warnings.push(skipWarning({ modelName: model.modelName, codes: model.ids, mode: null }));
+    }
+    return { rows: [], standardTables: 0 };
+  }
+
+  return readMarkupStandardTable(table[1], model, warnings);
+}
+
+function readMarkupTabs(
+  tabs: RegExpMatchArray[],
+  model: MarkupSection,
+  warnings: string[],
+): MarkupRead {
+  const read: MarkupRead = { rows: [], standardTables: 0 };
+
+  for (const tab of tabs) {
+    const title = (tab[1] ?? "").trim().toLowerCase();
+    const body = tab[2] ?? "";
+    if (title !== "standard") {
+      warnings.push(
+        skipWarning({
+          modelName: model.modelName,
+          codes: model.ids,
+          mode: title,
+        }),
+      );
+      continue;
+    }
+
+    const table = body.match(/\{%\s*table\s*%\}([\s\S]*?)\{%\s*\/table\s*%\}/);
+    const standard = readMarkupStandardTable(table?.[1] ?? "", model, warnings);
+    read.standardTables += standard.standardTables;
+    read.rows.push(...standard.rows);
+  }
+
+  return read;
+}
+
+function readMarkupStandardTable(
+  tableBody: string,
+  model: MarkupSection,
+  warnings: string[],
+): MarkupRead {
+  if (!model.modelName) {
+    throw new Error("empty model heading");
+  }
+  if (model.ids.length === 0) {
+    throw new Error(`0 model codes for Standard table: ${model.modelName}`);
+  }
+  if (model.ids.length > 1) {
+    warnings.push(`multiple model codes: expected exactly one (${model.ids.join(", ")})`);
+    return { rows: [], standardTables: 1 };
+  }
+
+  const modelSlug = model.ids[0];
+  const blocks = tableBody
+    .split(/^\s*---\s*$/m)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+  if (blocks.length < 2) {
+    throw new Error(`empty table: Standard pricing table for ${modelSlug} has no rows`);
+  }
+
+  const headers = readBulletCells(blocks[0] ?? "").map((cell) => cell.join(" "));
+  const paidIndexes = headers
+    .map((header, index) => ({ header, index }))
+    .filter((column) => column.header.startsWith("Paid Tier"));
+  if (paidIndexes.length > 1) {
+    throw new Error(`duplicate paid column for ${modelSlug}`);
+  }
+  const paidColumn = paidIndexes[0];
+  if (!paidColumn || !paidColumn.header.includes("per 1M tokens in USD")) {
+    throw new Error('missing paid unit: expected header containing "per 1M tokens in USD"');
+  }
+
+  const seenLabels = new Set<string>();
+  const rows: NormalizedPrice[] = [];
+
+  for (const block of blocks.slice(1)) {
+    const cells = readBulletCells(block);
+    const label = cleanText(cells[0]?.join(" ") ?? "")
+      .replace(/\*+$/, "")
+      .trim();
+    if (!label) {
+      throw new Error(`empty price label for ${modelSlug}`);
+    }
+
+    const dimension = dimensionForLabel(label);
+    if (dimension === "ignore") {
+      continue;
+    }
+    if (dimension === "unmapped") {
+      warnings.push(`unmapped label: ${label} (${modelSlug})`);
+      continue;
+    }
+    if (seenLabels.has(label)) {
+      throw new Error(`duplicate price label: ${label} for ${modelSlug}`);
+    }
+    seenLabels.add(label);
+
+    const paidCell = cells[paidColumn.index];
+    if (!paidCell || paidCell.length === 0) {
+      throw new Error(`missing paid cell for ${modelSlug} / ${label}`);
+    }
+
+    for (const segment of paidCell) {
+      const row = classifySegment(
+        segment,
+        {
+          modelName: model.modelName,
+          modelSlug,
+          dimension,
+          label,
+        },
+        warnings,
+      );
+      if (row) {
+        rows.push(row);
+      }
+    }
+  }
+
+  return { rows, standardTables: 1 };
+}
+
+function markupHasPaidHeader(tableBody: string): boolean {
+  const headerBlock = tableBody.split(/^\s*---\s*$/m)[0] ?? "";
+  return readBulletCells(headerBlock).some((cell) => {
+    const header = cell.join(" ");
+    return header.startsWith("Paid Tier") && header.includes("per 1M tokens in USD");
+  });
+}
+
+function readBulletCells(block: string): string[][] {
+  const cells: string[][] = [];
+  let current: string[] | null = null;
+
+  for (const line of block.split(/\r?\n/)) {
+    const trimmed = line.trim().replace(/\\+$/, "").trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const bullet = trimmed.match(/^\*\s*(.*)$/);
+    if (bullet) {
+      if (current) {
+        cells.push(current.filter((segment) => segment.length > 0));
+      }
+      current = [cleanMarkupSegment(bullet[1] ?? "")];
+      continue;
+    }
+
+    if (current) {
+      current.push(cleanMarkupSegment(trimmed));
+    }
+  }
+
+  if (current) {
+    cells.push(current.filter((segment) => segment.length > 0));
+  }
+
+  return cells;
+}
+
+function cleanMarkupSegment(raw: string): string {
+  const withoutSup = raw
+    .replace(/\{%\s*sup\s*%\}[\s\S]*?\{%\s*\/sup\s*%\}/gi, "")
+    .replace(/\{%\s*sup\s*\/%\}/gi, "");
+  return cleanText(withoutSup);
+}
+
+function markupModelName(headingLine: string): string {
+  const withoutIds = headingLine.replace(/^##\s+/, "").replace(/\{%\s*id="[^"]+"\s*%\}/g, "");
+  return cleanText(withoutIds.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"));
 }
 
 function pricingNodes($: CheerioAPI) {

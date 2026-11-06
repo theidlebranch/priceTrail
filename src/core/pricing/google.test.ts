@@ -9,6 +9,11 @@ const fixture = readFileSync(
   "utf8",
 );
 
+const markupFixture = readFileSync(
+  path.join(process.cwd(), "tests/fixtures/google-pricing.2026-11-06.html"),
+  "utf8",
+);
+
 type PageRow = {
   label: string;
   free?: string;
@@ -62,6 +67,56 @@ function page(options: {
     </table>
   </body>
 </html>`;
+}
+
+function markupPage(options: {
+  lang?: string;
+  heading?: string;
+  ids?: string[];
+  tabs?: { title: string; rows: PageRow[] }[];
+} = {}): string {
+  const lang = options.lang ?? "en";
+  const heading = options.heading ?? "Gemini Test";
+  const ids = options.ids ?? ["gemini-test"];
+  const idTags = ids.map((id) => `{% id="${id}" %}`).join(" ");
+  const tabs = options.tabs ?? [
+    { title: "Standard", rows: [{ label: "Input price", paid: "$1.00" }] },
+  ];
+  const tabMarkup = tabs
+    .map(
+      (tab) => `{% tab title="${tab.title}" %}
+{% table %}
+${markupTable(tab.rows)}
+{% /table %}
+{% /tab %}`,
+    )
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="${lang}">
+  <body><pre>
+## ${heading} ${idTags}
+{% tabs %}
+${tabMarkup}
+{% /tabs %}
+  </pre></body>
+</html>`;
+}
+
+function markupTable(rows: PageRow[], paidHeader = "Paid Tier, per 1M tokens in USD"): string {
+  const body = rows
+    .map(
+      (row) => `* ${row.label}
+* ${row.free ?? "Free of charge"}
+* ${row.paid}`,
+    )
+    .join("\n---\n");
+
+  return `* Feature
+* Free Tier
+* ${paidHeader}
+---
+${body}`;
 }
 
 function findRow(
@@ -278,5 +333,87 @@ describe("parseGooglePricing", () => {
 
     expect(findRow(rows, "gemini-test", "input")?.usdPer1M).toBe("1.5");
     expect(rows.some((row) => row.usdPer1M === "99")).toBe(false);
+  });
+
+  it("parses Standard schedules and tiers from the AI Studio markup page", () => {
+    const { rows, warnings } = parseGooglePricing(markupFixture);
+
+    expect(findRow(rows, "gemini-4-argon", "input", { validUntil: "2026-11-30" })).toMatchObject({
+      provider: "google",
+      modelName: "Gemini 4 Argon",
+      usdPer1M: "2",
+      source: "official",
+    });
+    expect(findRow(rows, "gemini-4-argon", "input", { validFrom: "2026-12-01" })?.usdPer1M).toBe(
+      "4",
+    );
+    expect(rows.some((row) => row.modelSlug === "gemini-4-argon" && row.usdPer1M === "1")).toBe(
+      false,
+    );
+    expect(
+      warnings.some((warning) => /outOfMvp: skipped batch table for gemini-4-argon/.test(warning)),
+    ).toBe(true);
+
+    expect(
+      findRow(rows, "gemini-3.8-flash", "input", { validUntil: "2026-12-31" })?.usdPer1M,
+    ).toBe("0.75");
+    expect(findRow(rows, "gemini-3.8-flash", "input", { validFrom: "2027-01-01" })?.usdPer1M).toBe(
+      "1.5",
+    );
+    expect(rows.some((row) => row.modelSlug === "gemini-3.8-flash" && row.usdPer1M === "0.375")).toBe(
+      false,
+    );
+
+    expect(
+      findRow(rows, "gemini-2.5-pro", "input", {
+        condition: { promptTokensAtMost: 200000 },
+      })?.usdPer1M,
+    ).toBe("1.25");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "input", {
+        condition: { promptTokensOver: 200000 },
+      })?.usdPer1M,
+    ).toBe("2.5");
+    expect(rows.some((row) => row.modelSlug === "gemini-2.5-pro" && row.usdPer1M === "4.5")).toBe(
+      false,
+    );
+    expect(
+      warnings.some(
+        (warning) =>
+          /storage price/i.test(warning) && /gemini-2\.5-pro/.test(warning) && /4\.50/.test(warning),
+      ),
+    ).toBe(true);
+
+    expect(rows.some((row) => row.modelSlug === "gemini-3.8-live" && row.dimension === "input")).toBe(
+      false,
+    );
+    expect(
+      warnings.some(
+        (warning) => /unmapped modality/i.test(warning) && /gemini-3\.8-live/.test(warning),
+      ),
+    ).toBe(true);
+    expect(warnings.some((warning) => /multiple model codes/i.test(warning) && /gemini-3.8-live/.test(warning))).toBe(
+      false,
+    );
+  });
+
+  it("throws when a markup page has no Standard tab", () => {
+    const html = markupPage({
+      tabs: [{ title: "Batch", rows: [{ label: "Input price", paid: "$1.00" }] }],
+    });
+
+    expect(() => parseGooglePricing(html)).toThrow(/0 Standard/i);
+  });
+
+  it("warns and emits no rows when one markup heading lists two ids", () => {
+    const html = markupPage({
+      ids: ["gemini-a", "gemini-b"],
+      tabs: [{ title: "Standard", rows: [{ label: "Input price", paid: "$1.00" }] }],
+    });
+
+    const { rows, warnings } = parseGooglePricing(html);
+
+    expect(rows).toEqual([]);
+    expect(warnings.some((warning) => /multiple model codes/i.test(warning))).toBe(true);
   });
 });
