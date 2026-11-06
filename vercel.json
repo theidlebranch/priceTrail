@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "verify-anthropic": {
+      "schedule": "0 */6 * * *",
+      "path": "/api/verify/anthropic",
+      "requestMethod": "POST"
+    },
+    "verify-openai": {
+      "schedule": "10 */6 * * *",
+      "path": "/api/verify/openai",
+      "requestMethod": "POST"
+    },
+    "verify-google": {
+      "schedule": "20 */6 * * *",
+      "path": "/api/verify/google",
+      "requestMethod": "POST"
+    }
+  }
+}

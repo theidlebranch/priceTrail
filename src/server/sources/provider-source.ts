@@ -28,7 +28,7 @@ export type ParsedOfficialPrices = {
  * lab is the labs.slug this page is checked against. Anthropic uses
  * "anthropic". OpenAI uses "openai". Google uses "google". A test passes
  * its own slug so it does not touch a seeded lab. This type is still not
- * a registry. The cron is what will list the pages to check. Google is
+ * a registry. The schedule route lists the three pages to check. Google is
  * not a plain call to fetchOfficialPage: that page must be English, so
  * the download also sends Accept-Language.
  */

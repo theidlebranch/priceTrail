@@ -29,7 +29,7 @@ scheduled poll (every ~6h)    ────────────────�
 
 ## How a check is filed
 
-The program is the visit. The tables are where each ending is filed. `pnpm verify:anthropic`, `pnpm verify:openai`, and `pnpm verify:google` each run that visit for one official page. `.github/workflows/verify.yml` runs those three about every 6 hours, and the cell check is still not part of that visit. `verifyOfficialSource()` stops after the archive call. These scripts do not call `publishPriceVersion()`.
+The program is the visit. The tables are where each ending is filed. `vercel.json` starts three schedules about every 6 hours, one lab each: Anthropic at minute 0, OpenAI at minute 10, and Google at minute 20. Each schedule sends POST to `/api/verify/<lab>`. The route checks `CRON_SECRET`, then calls `verifyOfficialSource()`. The cell check is still not part of that visit. `verifyOfficialSource()` stops after the archive call. The route does not call `publishPriceVersion()`.
 
 A visit always writes `fetch_log`. It writes `observations` and `observation_items` only when the download worked, the mechanical checks passed, and the fingerprint of `parsed_data` is new. `raw_content` and `parsed_data` are both kept on that snapshot. Public pages do not load `raw_content`. Only the evidence view for one price reads it.
 
@@ -274,7 +274,7 @@ Reuse what's already known from day-job work, with no new tools to learn mid-pro
 - Zod (validate everything at the ingestion boundary)
 - Tailwind + shadcn/ui
 - Recharts (price-history step chart)
-- GitHub Actions (cron every ~6h; it's best-effort and can be delayed, which is fine at this cadence because everything is idempotent)
+- Vercel Schedules (one check per lab every ~6h; a repeated visit is safe, and a stranger cannot start one without `CRON_SECRET`)
 - Playwright only if a source truly needs a rendered page
 - Vercel (hosting)
 
@@ -323,7 +323,7 @@ For what to do next, follow [docs/build-plan.md](build-plan.md). This section is
 
 0. **Source spike (an evening, before any code).** Fetch the OpenAI, Anthropic, and Google pricing pages by hand and see what you actually get: static HTML table, JS-rendered, bot-protected, or an underlying JSON endpoint? The "structured docs table" assumption may only hold for one provider. Note each source's URL, format, and the plan for it (parser, JSON endpoint, LLM + grounding, or Playwright). Also confirm the LiteLLM commits feed and one provider changelog feed work.
 1. **Schema + seed.** Drizzle migrations for the v3 model. Hand-seed ~10 models with today's real prices, **through `publishPriceVersion()`** (so the seed exercises the invariant). Build `/models/[slug]` against seed data before touching any fetching.
-2. **Tier 2 + Tier 3, wired together.** OpenAI + Anthropic parsers as plain functions returning Zod-validated normalized JSON; sanity checks; column-aware grounding; hash compare; `fetch_log`; observation + items on change; Wayback submit-on-change storing the permalink. Run manually first, then wire the GitHub Action cron.
+2. **Tier 2 + Tier 3, wired together.** OpenAI + Anthropic parsers as plain functions returning Zod-validated normalized JSON; sanity checks; column-aware grounding; hash compare; `fetch_log`; observation + items on change; Wayback submit-on-change storing the permalink. Run the visit first, then put it on a schedule.
 3. **Tier 1 + review UI.** LiteLLM/OpenRouter polling and the commit/changelog feeds writing to `fetch_triggers`, `candidate_models`, `verification_flags`; model alias resolution. Build the authenticated review page and wire approve/reject/confirm to the schema, with reviewer and note recorded.
 4. **Polish.** Recharts step chart with "changed on or before" labels, evidence expander and sources list, pending-change banner, parser-suspect alerting, deploy.
 
@@ -336,7 +336,7 @@ After this, adding more models/providers is mostly repeating step 2, not new arc
 - **Fetching official pages is the biggest risk.** OpenAI/Google pages may be JS-rendered or bot-protected. Step 0 exists to find this out early.
 - **Grounding can pass on the wrong column** unless it's column-aware (it is, in v3).
 - **Parser breaks look like price changes** unless sanity checks gate the diff (they do, in v3).
-- **GitHub Actions cron is best-effort.** Acceptable here; revisit only if brackets get too wide.
+- **A schedule can start a few minutes late, and a failed run waits for the next 6 hours.** Acceptable here, because a repeated visit is safe. Run now in the Vercel dashboard starts one lab sooner.
 - **Archive.org can fail or rate-limit.** Raw-content fallback plus retry on a later run.
 - **Review queue is a single point of human attention.** Keep the pending banner honest so a backlog degrades gracefully instead of silently serving stale data.
 
