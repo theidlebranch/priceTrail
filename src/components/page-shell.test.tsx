@@ -1,11 +1,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinalCtaSection } from "@/components/landing-page/final-cta-section";
 import { PageShell } from "@/components/page-shell";
 import { SiteHeader } from "@/components/site-header";
 
+const pathname = vi.hoisted(() => ({ current: "/" }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => pathname.current,
+}));
+
 afterEach(() => {
   cleanup();
+  pathname.current = "/";
 });
 
 describe("PageShell", () => {
@@ -25,15 +32,15 @@ describe("PageShell", () => {
     );
 
     const browseLinks = screen.getAllByRole("link", { name: "Browse models" });
-    expect(browseLinks.length).toBeGreaterThan(0);
-    for (const link of browseLinks) {
-      expect(link.getAttribute("href")).toBe("/models");
-    }
+    expect(browseLinks).toHaveLength(1);
+    expect(browseLinks[0]?.getAttribute("href")).toBe("/models");
+    expect(browseLinks[0]?.getAttribute("aria-current")).toBeNull();
 
     const sectionLinks = screen.getAllByRole("link", { name: "Receipts" });
     expect(sectionLinks.length).toBeGreaterThan(0);
     for (const link of sectionLinks) {
       expect(link.getAttribute("href")).toBe("/#receipts");
+      expect(link.getAttribute("aria-current")).toBeNull();
     }
 
     const footer = screen.getByRole("contentinfo");
@@ -53,6 +60,28 @@ describe("SiteHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 
     expect(screen.getByRole("navigation", { name: "Mobile" })).toBeTruthy();
+  });
+
+  it("marks Browse models current on the models list and a model page", () => {
+    const { rerender } = render(<SiteHeader />);
+    expect(screen.getByRole("link", { name: "Browse models" }).getAttribute("aria-current")).toBeNull();
+
+    pathname.current = "/models";
+    rerender(<SiteHeader />);
+    expect(screen.getByRole("link", { name: "Browse models" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+
+    pathname.current = "/models/anthropic/claude";
+    rerender(<SiteHeader />);
+    expect(screen.getByRole("link", { name: "Browse models" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Browse models" }).className).toContain("text-primary");
+
+    for (const link of screen.getAllByRole("link", { name: "Receipts" })) {
+      expect(link.getAttribute("aria-current")).toBeNull();
+    }
   });
 });
 
