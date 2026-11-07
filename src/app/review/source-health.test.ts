@@ -60,6 +60,23 @@ describe("toSourceHealthView", () => {
     });
   });
 
+  it("shows a seeded snapshot that has not been checked yet", () => {
+    const view = toSourceHealthView(
+      [row({ lastCheckedAt: null, latestCheck: null, archiveStatus: "pending" })],
+      [ANTHROPIC],
+    );
+
+    expect(view.entries[0]).toMatchObject({
+      lastCheckedText: "Not checked yet.",
+      outcomeText: null,
+      checkedAtText: null,
+      httpStatusText: null,
+      note: null,
+      archiveText: "Archive is still pending.",
+      warning: null,
+    });
+  });
+
   it("keeps a stored note and names each outcome and archive status", () => {
     const view = toSourceHealthView(
       [

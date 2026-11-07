@@ -38,7 +38,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Vercel Speed Insights, Web Analytics, and Observability. `<SpeedInsights />` and `<Analytics />` are in the root layout. `src/instrumentation.ts` calls `registerOTel({ serviceName: "price-trail" })`. `@opentelemetry/api` stays on 1.9.x (`~1.9.1`) because 1.10 does not match the tracing libraries `@vercel/otel` uses. Nothing is sent from `next dev`. Numbers show up after this code is deployed and the three products are turned on in the Vercel project.
 - Schedule visits print one JSON line after a filed check: lab, outcome, and the Vercel schedule name and execution id when those headers are present. A blank or missing header is left out. The line keeps `CRON_SECRET` and the database URL out. A throw still prints a redacted error. This does not call `publishPriceVersion()`. The line shows up in the Vercel log after this commit is deployed.
 - A refused confirm or reject puts the typed note back in the review box. The refusal still writes nothing.
-- Phase 6 step 32: `/review/sources` lists every stored source, its latest check, and whether that URL is still the one the schedule fetches. The reads are select-only. A broken row throws. A URL mismatch is a warning. The page does not edit a URL and does not call `publishPriceVersion()`. The Neon tests roll back.
+- Phase 6 step 32: `/review/sources` lists every stored source, its latest check, and whether that URL is still the one the schedule fetches. The reads are select-only. A broken row throws. A seeded snapshot with no check says the source has not been checked yet. A URL mismatch is a warning. The page does not edit a URL and does not call `publishPriceVersion()`. The Neon tests roll back.
 
 ## In progress
 

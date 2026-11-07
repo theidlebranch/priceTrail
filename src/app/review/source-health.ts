@@ -14,6 +14,8 @@ export type { SourceHealthRow };
  *
  * A URL the schedule fetches that is missing from the rows is a
  * warning, not a throw. That gap is what the page is for.
+ * A snapshot with no check is the seed. The page says the source
+ * has not been checked yet.
  */
 
 export type SourceHealthEntry = {
@@ -105,9 +107,6 @@ function toEntry(row: SourceHealthRow, url: string, wired: ReadonlySet<string>):
   const hasCheck = row.latestCheck !== null;
   if (hasStamp !== hasCheck) {
     throw new Error("last checked time and the latest check disagree");
-  }
-  if (!hasCheck && row.archiveStatus !== null) {
-    throw new Error("a snapshot was stored without a check");
   }
 
   const check = row.latestCheck === null ? null : readCheck(row.latestCheck);
