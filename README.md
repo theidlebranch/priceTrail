@@ -4,7 +4,7 @@ An open, source-backed history of AI model API prices. The design is in [docs/ar
 
 ## Run it
 
-Use Node 24 and pnpm 10.32.1.
+Use Node 24 and pnpm 11.28.11.
 
 ```bash
 pnpm install

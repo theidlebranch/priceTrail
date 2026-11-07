@@ -4,8 +4,8 @@ PriceTrail is an open, source-backed history of AI model API prices. Every publi
 
 ## Stack
 
-- Next.js 16.4.2, React 19.3, TypeScript 5, Tailwind 4
-- Node 24 (see `.nvmrc`). Package manager: pnpm 10.32.1
+- Next.js 16.4.5, React 19.3, TypeScript 5, Tailwind 4
+- Node 24 (see `.nvmrc`). Package manager: pnpm 11.28.11
 - Postgres on Neon, Drizzle, Zod
 - Vitest for tests
 
