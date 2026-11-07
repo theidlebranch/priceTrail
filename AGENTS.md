@@ -86,6 +86,10 @@ Wait for my approval before implementing a substantial design or multi-step feat
 
 Prefer completing work in the current agent session rather than spawning subagents or creating worktrees unless I request them or parallelization has a clear benefit.
 
+## UI
+
+Before building new UI or reshaping existing UI, read [.agents/skills/frontend-design/SKILL.md](.agents/skills/frontend-design/SKILL.md) and follow it.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
