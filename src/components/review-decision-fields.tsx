@@ -53,7 +53,7 @@ export function ReviewDecisionFields({
   const note = state?.ok === false ? state.note : "";
 
   return (
-    <form action={formAction} className="max-w-xl space-y-3" key={field.key}>
+    <form action={formAction} className="space-y-3" key={field.key}>
       <input type="hidden" name="itemId" value={String(itemId)} />
       <label className="block space-y-2 text-sm leading-6">
         <span>Note</span>
