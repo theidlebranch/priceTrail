@@ -36,6 +36,14 @@ export function officialSourceForLab(lab: string): ProviderSource | null {
   return OFFICIAL_SOURCES[lab] ?? null;
 }
 
+/**
+ * The page URLs the schedule looks up. The health page compares these
+ * with sources.url. A second copy of the strings would drift.
+ */
+export function officialSourceUrls(): readonly string[] {
+  return Object.values(OFFICIAL_SOURCES).map((source) => source.url);
+}
+
 export function cronRequestAuthorized(
   authorization: string | null,
   secret: string | undefined,

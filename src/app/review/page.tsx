@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
@@ -36,6 +37,11 @@ export default function ReviewPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Review</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
         Official snapshots that are still waiting. A flagged row is not a published price.
+      </p>
+      <p className="mt-3">
+        <Link href="/review/sources" className="text-sm text-foreground underline">
+          Source health
+        </Link>
       </p>
       <div className="mt-8">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading review…</p>}>
