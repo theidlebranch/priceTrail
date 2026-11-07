@@ -41,6 +41,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 - Schedule visits now print one JSON line after a filed check: lab, outcome, and the Vercel schedule name and execution id when those headers are present. A blank or missing header is left out. The line keeps `CRON_SECRET` and the database URL out. A throw still prints a redacted error. This does not call `publishPriceVersion()`. The line shows up in the Vercel log after this commit is deployed.
+- A refused confirm or reject puts the typed note back in the review box. The refusal still writes nothing.
 
 ## Blocked
 

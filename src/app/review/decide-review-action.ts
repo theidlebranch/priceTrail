@@ -1,7 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { readDecisionForm, type DecideReviewFormState } from "@/app/review/decision-form";
+import {
+  readDecisionForm,
+  refusedReview,
+  type DecideReviewFormState,
+} from "@/app/review/decision-form";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { ReviewRefusal } from "@/core/review/confirm-price";
 import { createDb } from "@/server/db/client";
@@ -15,9 +19,10 @@ import { decideReviewItem } from "@/server/review/decide-review-item";
  * form. The reviewer is checked again here. The note, the id, and the
  * prices are read on the server. The browser does not send a price.
  *
- * A refusal is a sentence for the form. A missing database still throws.
- * refresh() asks Next.js to render this page again, so a finished item
- * drops the buttons. An action that does not ask is not re-rendered.
+ * A refusal is a sentence for the form, plus the note the reviewer
+ * typed. A missing database still throws. refresh() asks Next.js to
+ * render this page again, so a finished item drops the buttons. An
+ * action that does not ask is not re-rendered.
  */
 export async function decideReviewAction(
   _previous: DecideReviewFormState,
@@ -29,7 +34,7 @@ export async function decideReviewAction(
     fields = readDecisionForm(formData);
   } catch (error) {
     if (error instanceof ReviewRefusal) {
-      return { ok: false, message: error.message };
+      return refusedReview(error.message, formData);
     }
     throw error;
   }
@@ -46,7 +51,7 @@ export async function decideReviewAction(
     });
   } catch (error) {
     if (error instanceof ReviewRefusal) {
-      return { ok: false, message: error.message };
+      return refusedReview(error.message, formData);
     }
     throw error;
   } finally {

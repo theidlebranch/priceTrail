@@ -15,7 +15,22 @@ export type DecisionForm = {
   note: string;
 };
 
-export type DecideReviewFormState = { ok: false; message: string } | null;
+export type DecideReviewFormState = { ok: false; message: string; note: string } | null;
+
+/**
+ * A refusal the form can show again.
+ *
+ * React clears the note box when the action finishes. The note here is
+ * the text the reviewer submitted, with no trim, so the box can put it
+ * back. A missing note is an empty string.
+ */
+export function refusedReview(
+  message: string,
+  formData: FormData,
+): { ok: false; message: string; note: string } {
+  const note = formData.get("note");
+  return { ok: false, message, note: typeof note === "string" ? note : "" };
+}
 
 export function readDecisionForm(formData: FormData): DecisionForm {
   const decision = formData.get("decision");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readDecisionForm } from "@/app/review/decision-form";
+import { readDecisionForm, refusedReview } from "@/app/review/decision-form";
 
 /**
  * The form can post any string. These checks run before a database
@@ -45,5 +45,26 @@ describe("readDecisionForm", () => {
     expect(() => readDecisionForm(form({ decision: "confirm", itemId: "4" }))).toThrow(
       /review note is empty/,
     );
+  });
+});
+
+describe("refusedReview", () => {
+  it("returns the typed note with the refusal", () => {
+    expect(
+      refusedReview(
+        "an earlier flagged item is still waiting",
+        form({ decision: "confirm", itemId: "4", note: "Checked the table." }),
+      ),
+    ).toEqual({
+      ok: false,
+      message: "an earlier flagged item is still waiting",
+      note: "Checked the table.",
+    });
+  });
+
+  it("returns an empty note when the field is missing", () => {
+    expect(
+      refusedReview("review decision is not confirm or reject", form({ decision: "approve" })).note,
+    ).toBe("");
   });
 });
