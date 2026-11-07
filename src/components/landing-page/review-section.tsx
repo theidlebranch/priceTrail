@@ -18,7 +18,7 @@ export function ReviewSection() {
           </p>
         </div>
 
-        <Card className="gap-0 overflow-hidden rounded-md border-border bg-muted/40 py-0 shadow-sm">
+        <Card className="gap-0 overflow-hidden rounded-md border-border bg-muted/40 py-0 shadow-none">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="size-2 rounded-full bg-amber-500" />

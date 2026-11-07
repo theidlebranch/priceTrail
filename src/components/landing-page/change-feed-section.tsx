@@ -24,7 +24,7 @@ export function ChangeFeedSection() {
   return (
     <section className="border-b border-border bg-background py-14">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
-        <Card className="mx-auto max-w-2xl gap-0 rounded-md border-border bg-card p-6 text-center shadow-sm sm:p-8">
+        <Card className="mx-auto max-w-2xl gap-0 rounded-md border-border bg-card p-6 text-center shadow-none sm:p-8">
           <div className="mb-4 inline-flex items-center gap-1.5 self-center rounded border border-border bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground"><Rss className="size-3.5 text-primary" />Coming soon</div>
           <h2 className="mb-2 text-xl font-semibold tracking-tight sm:text-2xl">A change feed (RSS and JSON).</h2>
           <p className="mx-auto mb-6 max-w-lg text-sm leading-6 text-muted-foreground">Know the day a price changes, with proof attached.</p>
