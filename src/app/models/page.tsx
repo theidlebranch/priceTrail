@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { toModelListEntries } from "@/app/models/model-list-entries";
 import { ModelList } from "@/components/model-list";
+import { ModelsPageHeader } from "@/components/models-page-header";
 import { createDb } from "@/server/db/client";
 import { createCatalogRepository } from "@/server/db/repositories/catalog";
 import { parseDatabaseEnv } from "@/server/env";
@@ -12,8 +13,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * The heading is the static shell. The list sits in Suspense so this
- * Next.js version can render it on the request, not at build time.
+ * The heading is in the Suspense fallback, so it shows before the
+ * database returns. The loaded list repeats that heading and adds the
+ * row count. The list sits in Suspense so this Next.js version can
+ * render it on the request, not at build time.
  * There is no "use cache": a model added by the seed should show up
  * on the next visit.
  *
@@ -29,16 +32,19 @@ export const metadata: Metadata = {
 export default function ModelsPage() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10">
-      <h1 className="text-3xl font-semibold tracking-tight">Tracked models</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        These are the models PriceTrail follows.
-      </p>
-      <div className="mt-8">
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading models…</p>}>
-          <ModelListLoader />
-        </Suspense>
-      </div>
+      <Suspense fallback={<ModelsLoading />}>
+        <ModelListLoader />
+      </Suspense>
     </section>
+  );
+}
+
+function ModelsLoading() {
+  return (
+    <>
+      <ModelsPageHeader />
+      <p className="mt-8 text-sm text-muted-foreground">Loading models…</p>
+    </>
   );
 }
 

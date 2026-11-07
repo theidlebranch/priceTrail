@@ -40,6 +40,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - A refused confirm or reject puts the typed note back in the review box. The refusal still writes nothing.
 - Phase 6 step 32: `/review/sources` lists every stored source, its latest check, and whether that URL is still the one the schedule fetches. The reads are select-only. A broken row throws. A seeded snapshot with no check says the source has not been checked yet. A URL mismatch is a warning. The page does not edit a URL and does not call `publishPriceVersion()`. The Neon tests roll back.
 - UI prompt 0: shared colors, Geist, and the header. The page background is white, borders are hairline, and the extra "Browse models" button is gone. "Browse models" is the active link on `/models`. Landing layout and landing copy are unchanged.
+- UI prompt 1: `/models` is one bordered list. The heading count is the number of rows already loaded (`1 model` or `N models`). A search box filters by model name, and lab chips filter by the lab names in those rows. Both run in the browser. Prices stay off this page. An empty catalog still says "No models are tracked yet." A filter that matches nothing says "No models match."
 
 ## In progress
 
