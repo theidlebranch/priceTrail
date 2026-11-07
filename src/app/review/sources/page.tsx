@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { toSourceHealthView } from "@/app/review/source-health";
 import { SourceHealthList } from "@/components/source-health-list";
+import { SourceHealthPageHeader } from "@/components/source-health-page-header";
 import { createDb } from "@/server/db/client";
 import { listSourceHealth } from "@/server/db/repositories/source-health";
 import { parseDatabaseEnv } from "@/server/env";
@@ -15,8 +15,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * The heading is the static shell. The list sits in Suspense so this
- * Next.js version can render it on the request, not at build time.
+ * The heading is in the Suspense fallback, so it shows before the
+ * database returns. The loaded list repeats that heading and adds the
+ * counts. The list sits in Suspense so this Next.js version can render
+ * it on the request, not at build time.
  * There is no "use cache": a new check should show up on the next visit.
  *
  * connection() runs before the database client opens. The postgres
@@ -33,22 +35,19 @@ export const metadata: Metadata = {
 export default function SourceHealthPage() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10">
-      <h1 className="text-3xl font-semibold tracking-tight">Source health</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        Every stored page, its latest check, and whether the schedule still looks up that URL.
-        A warning here is not a published price.
-      </p>
-      <p className="mt-3">
-        <Link href="/review" className="text-sm text-foreground underline">
-          Back to the review queue
-        </Link>
-      </p>
-      <div className="mt-8">
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading sources…</p>}>
-          <SourceHealthLoader />
-        </Suspense>
-      </div>
+      <Suspense fallback={<SourceHealthLoading />}>
+        <SourceHealthLoader />
+      </Suspense>
     </section>
+  );
+}
+
+function SourceHealthLoading() {
+  return (
+    <>
+      <SourceHealthPageHeader />
+      <p className="mt-8 text-sm text-muted-foreground">Loading sources…</p>
+    </>
   );
 }
 

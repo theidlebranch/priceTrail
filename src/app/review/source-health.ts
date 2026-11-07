@@ -217,3 +217,38 @@ function readUrl(value: string, label: string): string {
   }
   return value.trim();
 }
+
+/**
+ * A row needs a visible mark when a check, archive, or schedule
+ * problem is already in the sentences. A quiet success stays quiet.
+ * This does not read the database. It only looks at the view text.
+ */
+export function sourceEntryNeedsAttention(entry: SourceHealthEntry): boolean {
+  return (
+    entry.archiveText === "Archive failed. The stored copy remains." ||
+    entry.httpStatusText === "no HTTP status" ||
+    entry.outcomeText === "The download failed" ||
+    entry.outcomeText === "The parser could not read the page" ||
+    entry.activeText === "Inactive" ||
+    entry.warning !== null
+  );
+}
+
+export type SourceHealthSummary = {
+  sources: number;
+  needsAttention: number;
+  healthy: number;
+};
+
+/**
+ * Counts already on the view. A missing-checker line is not a source,
+ * so it raises the attention count and leaves the healthy count alone.
+ */
+export function summarizeSourceHealth(view: SourceHealthView): SourceHealthSummary {
+  const attentionRows = view.entries.filter(sourceEntryNeedsAttention).length;
+  return {
+    sources: view.entries.length,
+    needsAttention: attentionRows + view.missingCheckerWarnings.length,
+    healthy: view.entries.length - attentionRows,
+  };
+}

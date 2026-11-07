@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { toSourceHealthView, type SourceHealthRow } from "./source-health";
+import {
+  sourceEntryNeedsAttention,
+  summarizeSourceHealth,
+  toSourceHealthView,
+  type SourceHealthEntry,
+  type SourceHealthRow,
+} from "./source-health";
 
 const ANTHROPIC = "https://platform.claude.com/docs/en/about-claude/pricing.md";
 const OPENAI = "https://developers.openai.com/api/docs/pricing.md";
@@ -279,5 +285,93 @@ describe("toSourceHealthView", () => {
     expect(() => toSourceHealthView([row({ lastCheckedAt: new Date("nope") })], [])).toThrow(
       /last checked/,
     );
+  });
+});
+
+function healthEntry(overrides: Partial<SourceHealthEntry> = {}): SourceHealthEntry {
+  return {
+    url: ANTHROPIC,
+    typeText: "official",
+    activeText: "Active",
+    lastCheckedText: "2026-11-07 12:00:00 UTC",
+    outcomeText: "Prices unchanged",
+    checkedAtText: "2026-11-07 12:00:00 UTC",
+    httpStatusText: "200",
+    note: null,
+    archiveText: "Archived.",
+    warning: null,
+    ...overrides,
+  };
+}
+
+describe("sourceEntryNeedsAttention", () => {
+  it("leaves a checked, archived, active page quiet", () => {
+    expect(sourceEntryNeedsAttention(healthEntry())).toBe(false);
+    expect(
+      sourceEntryNeedsAttention(healthEntry({ outcomeText: "Parsed prices changed" })),
+    ).toBe(false);
+    expect(
+      sourceEntryNeedsAttention(healthEntry({ archiveText: "Archive is still pending." })),
+    ).toBe(false);
+    expect(
+      sourceEntryNeedsAttention(
+        healthEntry({
+          lastCheckedText: "Not checked yet.",
+          outcomeText: null,
+          checkedAtText: null,
+          httpStatusText: null,
+          archiveText: "No snapshot yet.",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("flags a failed archive, a missing status, a bad read, an inactive row, and a warning", () => {
+    expect(
+      sourceEntryNeedsAttention(
+        healthEntry({ archiveText: "Archive failed. The stored copy remains." }),
+      ),
+    ).toBe(true);
+    expect(sourceEntryNeedsAttention(healthEntry({ httpStatusText: "no HTTP status" }))).toBe(true);
+    expect(sourceEntryNeedsAttention(healthEntry({ outcomeText: "The download failed" }))).toBe(
+      true,
+    );
+    expect(
+      sourceEntryNeedsAttention(
+        healthEntry({ outcomeText: "The parser could not read the page" }),
+      ),
+    ).toBe(true);
+    expect(sourceEntryNeedsAttention(healthEntry({ activeText: "Inactive" }))).toBe(true);
+    expect(
+      sourceEntryNeedsAttention(healthEntry({ warning: "No checker is wired to this URL." })),
+    ).toBe(true);
+    expect(
+      sourceEntryNeedsAttention(
+        healthEntry({ warning: "The next visit will stop before download." }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("summarizeSourceHealth", () => {
+  it("counts attention rows plus missing checkers, and leaves the other rows healthy", () => {
+    expect(
+      summarizeSourceHealth({
+        missingCheckerWarnings: [
+          "The schedule looks up a URL that is not in the database: https://example.test/missing",
+        ],
+        entries: [
+          healthEntry(),
+          healthEntry({
+            url: "https://example.test/changed",
+            outcomeText: "Parsed prices changed",
+          }),
+          healthEntry({
+            url: "https://example.test/failed",
+            archiveText: "Archive failed. The stored copy remains.",
+          }),
+        ],
+      }),
+    ).toEqual({ sources: 3, needsAttention: 2, healthy: 2 });
   });
 });
