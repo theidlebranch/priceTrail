@@ -3,8 +3,12 @@ import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import {
   cronRequestAuthorized,
   officialSourceForLab,
+  officialSourceUrls,
   respondToSchedule,
 } from "@/server/pipeline/scheduled-visit";
+import { anthropicSource } from "@/server/sources/anthropic-source";
+import { googleSource } from "@/server/sources/google-source";
+import { openaiSource } from "@/server/sources/openai-source";
 import type { ProviderSource } from "@/server/sources/provider-source";
 
 const SECRET = "cron-secret-16ch";
@@ -31,6 +35,10 @@ describe("officialSourceForLab", () => {
     expect(officialSourceForLab("google")?.url).toContain("ai.google.dev");
     expect(officialSourceForLab("Anthropic")).toBeNull();
     expect(officialSourceForLab("")).toBeNull();
+  });
+
+  it("lists the checker urls from the same map the schedule uses", () => {
+    expect(officialSourceUrls()).toEqual([anthropicSource.url, openaiSource.url, googleSource.url]);
   });
 });
 

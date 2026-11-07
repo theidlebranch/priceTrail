@@ -35,6 +35,7 @@ describe("reviewItemId", () => {
     expect(reviewItemId("/review/items/4/")).toBe(4);
     expect(reviewItemId("/review")).toBeNull();
     expect(reviewItemId("/review/sign-in")).toBeNull();
+    expect(reviewItemId("/review/sources")).toBeNull();
   });
 
   it("throws when the id is not a whole number", () => {

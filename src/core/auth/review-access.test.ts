@@ -102,6 +102,7 @@ describe("isProtectedReviewPath", () => {
     expect(isProtectedReviewPath("/review")).toBe(true);
     expect(isProtectedReviewPath("/review/")).toBe(true);
     expect(isProtectedReviewPath("/review/items/1")).toBe(true);
+    expect(isProtectedReviewPath("/review/sources")).toBe(true);
   });
 
   it("leaves the sign-in page open so the redirect does not loop", () => {
