@@ -16,6 +16,9 @@ const conditionSchema = z.object({
   promptTokensAtMost: z.number().int().positive().optional(),
   promptTokensUnder: z.number().int().positive().optional(),
   promptTokensAtLeast: z.number().int().positive().optional(),
+  // True when the page has a long-context price and does not state the cutoff.
+  // This is not a token count. 272000 is not stored here.
+  longContext: z.literal(true).optional(),
 });
 
 export const normalizedPriceSchema = z.object({

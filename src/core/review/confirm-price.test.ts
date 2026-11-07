@@ -54,6 +54,26 @@ describe("componentsForConfirm", () => {
     ]);
   });
 
+  it("keeps a long-context price whose cutoff is not stated", () => {
+    const components = componentsForConfirm(
+      snapshot([
+        price({ usdPer1M: "2" }),
+        price({ usdPer1M: "4", condition: { longContext: true } }),
+      ]),
+      "claude-mythos-5.1",
+    );
+
+    expect(components).toEqual([
+      { dimension: "input", unit: "usd_per_1m_tokens", amount: "2" },
+      {
+        dimension: "input",
+        unit: "usd_per_1m_tokens",
+        amount: "4",
+        condition: { longContext: true },
+      },
+    ]);
+  });
+
   it("throws when the snapshot is not a parsed price list", () => {
     expect(() =>
       componentsForConfirm(

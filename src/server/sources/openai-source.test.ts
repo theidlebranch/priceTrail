@@ -61,7 +61,10 @@ describe("openaiSource", () => {
       usdPer1M: astraInput?.amount,
       source: "official",
     });
-    expect(parsed.warnings.some((warning) => /needs_threshold/.test(warning))).toBe(true);
+    expect(parsed.rows.some((row) => row.modelSlug === "gpt-6-astra" && row.condition?.longContext === true)).toBe(
+      true,
+    );
+    expect(parsed.warnings.some((warning) => /needs_threshold/.test(warning))).toBe(false);
   });
 
   it("throws on HTTP 403 even when the body contains real prices", async () => {

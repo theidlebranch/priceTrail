@@ -92,8 +92,9 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource for OpenAI", () 
         archiveStatus: "archived",
       });
       expect(warningList(stored[0]?.parsedData).some((warning) => /needs_threshold/.test(warning))).toBe(
-        true,
+        false,
       );
+      expect(JSON.stringify(stored[0]?.parsedData)).toContain('"longContext":true');
 
       const items = await tx
         .select()

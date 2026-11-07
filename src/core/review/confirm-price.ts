@@ -162,22 +162,43 @@ function componentKey(dimension: string, condition: Condition): string {
   return JSON.stringify([dimension, conditionEntries(condition)]);
 }
 
-function readCondition(value: unknown): Record<string, number> {
+function readCondition(value: unknown): Condition {
   if (!isRecord(value)) {
     throw new ReviewRefusal("stored condition is not a known tier");
   }
-  const condition: Record<string, number> = {};
+  const condition: Condition = {};
   for (const [key, entry] of Object.entries(value)) {
+    if (key === "longContext") {
+      if (entry !== true) {
+        throw new ReviewRefusal("stored condition is not a known tier");
+      }
+      condition.longContext = true;
+      continue;
+    }
     if (!isConditionKey(key) || !isPositiveInteger(entry)) {
       throw new ReviewRefusal("stored condition is not a known tier");
     }
     condition[key] = entry;
   }
+  if (condition.longContext === true && hasTokenBound(condition)) {
+    throw new ReviewRefusal("stored condition is not a known tier");
+  }
   return condition;
 }
 
-function conditionEntries(condition: Record<string, number>): [string, number][] {
-  return Object.entries(condition).sort(([left], [right]) => left.localeCompare(right));
+function hasTokenBound(condition: Condition): boolean {
+  return (
+    condition.promptTokensOver !== undefined ||
+    condition.promptTokensAtMost !== undefined ||
+    condition.promptTokensUnder !== undefined ||
+    condition.promptTokensAtLeast !== undefined
+  );
+}
+
+function conditionEntries(condition: Condition): [string, number | true][] {
+  return Object.entries(condition)
+    .filter((entry): entry is [string, number | true] => entry[1] !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
 }
 
 /**

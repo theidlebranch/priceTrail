@@ -13,8 +13,9 @@ import { SEED_LABS, type SeedLabSpec, type SeedModelSpec } from "@/server/db/see
  * Fill an empty database with the hand-checked current prices.
  *
  * The checker runs before any insert. A retired model, a wrong amount, or
- * a long-context price the parser did not emit throws here, and the
- * database stays unchanged.
+ * a long-context price added to the hand-checked list throws here, and the
+ * database stays unchanged. A long-context row whose cutoff is not stated
+ * stays in the parsed page and is not published by the seed.
  *
  * This file inserts labs, models, offerings, and the evidence row
  * publishPriceVersion() requires. It does not insert price_versions or
@@ -81,7 +82,9 @@ export function assertSeedMatchesRows(
     }
     seen.add(model.slug);
 
-    const parsed = rows.filter((row) => row.modelSlug === model.slug);
+    const parsed = rows.filter(
+      (row) => row.modelSlug === model.slug && !isUnstatedLongContext(row),
+    );
     if (parsed.length === 0) {
       throw new Error(`seed model ${model.slug} is not in the parser output`);
     }
@@ -107,6 +110,23 @@ export function assertSeedMatchesRows(
       throw new Error(`seed model ${model.slug} does not match the parser`);
     }
   }
+}
+
+/**
+ * The page listed a second price and did not say the token cutoff.
+ * The seed publishes the short-context price only.
+ */
+function isUnstatedLongContext(row: NormalizedPrice): boolean {
+  const condition = row.condition;
+  if (condition?.longContext !== true) {
+    return false;
+  }
+  return (
+    condition.promptTokensOver === undefined &&
+    condition.promptTokensAtMost === undefined &&
+    condition.promptTokensUnder === undefined &&
+    condition.promptTokensAtLeast === undefined
+  );
 }
 
 /** Read the two fixtures, parse them, and refuse a list that does not match. */

@@ -80,6 +80,22 @@ describe("toReviewDetailView", () => {
     expect(JSON.stringify(view)).not.toContain("storage price");
   });
 
+  it("names a long-context price whose cutoff is not stated", () => {
+    const view = toReviewDetailView(
+      item({
+        parsedData: {
+          rows: [price({ usdPer1M: "4", condition: { longContext: true } })],
+          warnings: [],
+        },
+      }),
+    );
+
+    expect(view.prices).toMatchObject({
+      kind: "parsed",
+      rows: [{ amountText: "4", conditionText: "long context, cutoff not stated" }],
+    });
+  });
+
   it("keeps a schedule as the dates written on the page", () => {
     const view = toReviewDetailView(
       item({

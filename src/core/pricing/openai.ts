@@ -29,7 +29,6 @@ const PRICE_COLUMNS = [
 type ContextKind = (typeof PRICE_COLUMNS)[number]["context"];
 
 const REQUIRED_PRICE_HEADERS = PRICE_COLUMNS.map((column) => column.header);
-const LONG_COLUMNS = PRICE_COLUMNS.filter((column) => column.context === "long");
 
 type MarkdownTable = {
   headers: string[];
@@ -202,14 +201,7 @@ function readPriceTable(
     seenPrices.set(model.modelSlug, signature);
 
     const before = rows.length;
-    const skipLong = isFullTable(table.headers)
-      ? shouldSkipUnthresholdedLongContext(model, cells, warnings)
-      : false;
     for (const column of columns) {
-      if (column.context === "long" && skipLong) {
-        continue;
-      }
-
       const amount = parsePriceCell(
         cells.get(column.header) ?? "",
         `${model.modelName} / ${column.header}`,
@@ -257,31 +249,13 @@ function priceSignature(
   });
 }
 
-function shouldSkipUnthresholdedLongContext(
-  model: ParsedModel,
-  cells: Map<string, string>,
-  warnings: string[],
-): boolean {
-  if (model.longCondition) {
-    return false;
-  }
-
-  const hasLongPrice = LONG_COLUMNS.some((column) => {
-    const raw = (cells.get(column.header) ?? "").trim();
-    return raw !== "" && raw !== "-";
-  });
-  if (!hasLongPrice) {
-    return false;
-  }
-
-  warnings.push(
-    `needs_threshold: ${model.modelName} has long-context prices with no stated cutoff`,
-  );
-  return true;
-}
-
 function conditionForContext(model: ParsedModel, context: ContextKind): Condition | undefined {
-  return context === "short" ? model.shortCondition : model.longCondition;
+  if (context === "short") {
+    return model.shortCondition;
+  }
+  // A stated cutoff stays a token count. A missing cutoff is only a flag.
+  // The number 272000 is not written here.
+  return model.longCondition ?? { longContext: true };
 }
 
 function parseMarkdownTables(markdown: string): MarkdownTable[] {

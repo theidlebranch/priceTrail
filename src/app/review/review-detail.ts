@@ -218,6 +218,9 @@ function conditionText(condition: Condition | undefined): string | null {
   if (condition.promptTokensAtLeast !== undefined) {
     parts.push(`prompts at least ${formatCount(condition.promptTokensAtLeast)} tokens`);
   }
+  if (condition.longContext === true) {
+    parts.push("long context, cutoff not stated");
+  }
   if (parts.length === 0) {
     return null;
   }

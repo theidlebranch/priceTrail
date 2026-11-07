@@ -400,6 +400,12 @@ function conditionLabel(condition: unknown): string {
   }
 
   const key = keys[0];
+  if (key === "longContext") {
+    if (condition.longContext !== true) {
+      throw new Error("condition is not a known tier");
+    }
+    return "long context, cutoff not stated";
+  }
   if (key !== "promptTokensAtMost" && key !== "promptTokensOver") {
     throw new Error("condition is not a known tier");
   }

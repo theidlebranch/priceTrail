@@ -98,6 +98,7 @@ function findRow(
     promptTokensOver?: number;
     promptTokensUnder?: number;
     promptTokensAtLeast?: number;
+    longContext?: true;
   },
 ) {
   return rows.find(
@@ -127,12 +128,11 @@ describe("parseOpenAiPricing", () => {
     expect(findRow(rows, "gpt-6-luna", "cache_write")).toBeUndefined();
 
     expect(findRow(rows, "gpt-6-luna", "input", { promptTokensAtLeast: 272000 })).toBeUndefined();
-    expect(rows.some((row) => row.modelSlug === "gpt-6-luna" && row.usdPer1M === "0.2")).toBe(
-      false,
-    );
-    expect(
-      warnings.some((warning) => /needs_threshold/i.test(warning) && /gpt-6-luna/.test(warning)),
-    ).toBe(true);
+    expect(findRow(rows, "gpt-6-luna", "input", { longContext: true })).toMatchObject({
+      usdPer1M: "0.2",
+      condition: { longContext: true },
+    });
+    expect(warnings.some((warning) => /needs_threshold/i.test(warning))).toBe(false);
 
     expect(findRow(rows, "gpt-6-cyber", "input")?.usdPer1M).toBe("20");
     expect(findRow(rows, "gpt-6-cyber", "cache_write_30m")?.usdPer1M).toBe("25");
@@ -145,8 +145,7 @@ describe("parseOpenAiPricing", () => {
     const repeated = rows.filter(
       (row) => row.modelSlug === "gpt-5.6-sol" && row.dimension === "input",
     );
-    expect(repeated).toHaveLength(1);
-    expect(repeated[0]?.usdPer1M).toBe("4");
+    expect(repeated.map((row) => row.usdPer1M).sort()).toEqual(["4", "8"]);
 
     const gpt55Short = findRow(rows, "gpt-5.5", "input", { promptTokensUnder: 272000 });
     expect(gpt55Short).toMatchObject({
@@ -226,7 +225,9 @@ describe("parseOpenAiPricing", () => {
     const { rows } = parseOpenAiPricing(markdown);
     const inputs = rows.filter((row) => row.modelSlug === "gpt-test" && row.dimension === "input");
 
-    expect(inputs).toHaveLength(1);
+    expect(inputs).toHaveLength(2);
+    expect(inputs.find((row) => row.condition === undefined)?.usdPer1M).toBe("1");
+    expect(inputs.find((row) => row.condition?.longContext === true)?.usdPer1M).toBe("2");
   });
 
   it("keeps one copy when the same price is written as $4.00 and $4", () => {
@@ -241,8 +242,9 @@ describe("parseOpenAiPricing", () => {
     const { rows } = parseOpenAiPricing(markdown);
     const inputs = rows.filter((row) => row.modelSlug === "gpt-test" && row.dimension === "input");
 
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0]?.usdPer1M).toBe("1");
+    expect(inputs).toHaveLength(2);
+    expect(inputs.find((row) => row.condition === undefined)?.usdPer1M).toBe("1");
+    expect(inputs.find((row) => row.condition?.longContext === true)?.usdPer1M).toBe("2");
   });
 
   it("throws when a repeated model names a different context boundary", () => {

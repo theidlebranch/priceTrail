@@ -111,10 +111,15 @@ describe("hand-checked seed list", () => {
     const openai = plan.find((entry) => entry.lab.slug === "openai");
     const astraRows = openai?.parsedData.rows.filter((row) => row.modelSlug === "gpt-6-astra") ?? [];
     expect(openai?.parsedData.warnings.some((warning) => /needs_threshold/.test(warning))).toBe(
+      false,
+    );
+    expect(astraRows.some((row) => row.usdPer1M === "20" && row.condition?.longContext === true)).toBe(
       true,
     );
-    expect(astraRows.some((row) => row.usdPer1M === "20")).toBe(false);
-    expect(astraRows.every((row) => row.condition === undefined)).toBe(true);
+    expect(astraRows.filter((row) => row.condition === undefined).length).toBeGreaterThan(0);
+    expect(astraRows.some((row) => JSON.stringify(row.condition) === '{"promptTokensAtLeast":272000}')).toBe(
+      false,
+    );
   });
 
   it("throws when a hand-checked amount disagrees with the parser", () => {

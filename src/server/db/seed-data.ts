@@ -10,8 +10,9 @@
  * The Google lab is planted by plantGoogleCatalog(), and that function
  * does not publish a price.
  *
- * OpenAI's long-context cells for these models have no token cutoff, so
- * the parser emits no row for them. Do not add those amounts here.
+ * OpenAI's long-context cells for these models have no token cutoff.
+ * The parser keeps those rows with a longContext flag and no token count.
+ * The seed does not publish them. Do not add those amounts here.
  * The November page names a 30-minute write and a 12-hour write. Those
  * are cache_write_30m and cache_write_12h. The October fixture still
  * has the old single cache-write column, and this list does not read it.

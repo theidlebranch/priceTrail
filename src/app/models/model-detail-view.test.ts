@@ -297,6 +297,32 @@ describe("toModelDetailView", () => {
     expect(view.headlines).toEqual([{ label: "Input", amountText: "$1", change: null }]);
   });
 
+  it("names a long-context price whose cutoff is not stated and keeps the short price as the headline", () => {
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [
+              version({
+                components: [
+                  component({ amount: "2" }),
+                  component({ amount: "4", condition: { longContext: true } }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      AS_OF,
+    );
+
+    expect(view.headlines).toEqual([{ label: "Input", amountText: "$2", change: null }]);
+    expect(view.price?.components).toEqual([
+      priceRow("Input", "$2"),
+      priceRow("Input", "$4", "long context, cutoff not stated", "2×"),
+    ]);
+  });
+
   it("treats a repeated copy of the same official URL as one link", () => {
     const view = toModelDetailView(
       read({
