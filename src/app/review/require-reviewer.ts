@@ -2,6 +2,7 @@ import {
   parseReviewerAllowlist,
   reviewAuthSecretConfigured,
   reviewLock,
+  reviewerId,
 } from "@/core/auth/review-access";
 import { readReviewSession } from "@/server/auth/review-session";
 
@@ -11,9 +12,9 @@ import { readReviewSession } from "@/server/auth/review-session";
  *
  * The path passed here is /review for every review page. The lock only
  * cares that the path is a locked review path, and that the session is
- * on the allowlist.
+ * on the allowlist. The returned id is the stamp stored in reviewed_by.
  */
-export async function requireAllowedReviewer(): Promise<void> {
+export async function requireAllowedReviewer(): Promise<string> {
   const secretConfigured = reviewAuthSecretConfigured(process.env);
   const session = secretConfigured ? await readReviewSession() : null;
   const lock = reviewLock({
@@ -25,4 +26,5 @@ export async function requireAllowedReviewer(): Promise<void> {
   if (lock !== "allowed" || session == null) {
     throw new Error("Review page was reached without an allowed reviewer.");
   }
+  return reviewerId(session.provider, session.accountId);
 }

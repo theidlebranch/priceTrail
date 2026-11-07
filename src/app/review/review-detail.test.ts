@@ -71,7 +71,9 @@ describe("toReviewDetailView", () => {
     });
     expect(view.cellCheckText).toBe("No cell check is stored for this item.");
     expect(view.notPublishedText).toBe("This is not a published price.");
-    expect(view.actionsText).toBe("Confirm and reject are not on this page yet.");
+    expect(view.canDecide).toBe(true);
+    expect(view.itemId).toBe(4);
+    expect(view.actionsText).toBe("Confirm publishes this price. Reject publishes nothing.");
     expect(view.statusText).toBe("Waiting for review.");
     expect(view.fetchedAtText).toBe("2026-11-01 00:00:00 UTC");
     expect(JSON.stringify(view)).not.toContain("15");
@@ -109,6 +111,8 @@ describe("toReviewDetailView", () => {
     expect(view.reviewedAtText).toBe("2026-11-02 15:04:05 UTC");
     expect(view.reviewNote).toBe("Checked the Standard table.");
     expect(view.notPublishedText).toBe("This is not a published price.");
+    expect(view.canDecide).toBe(false);
+    expect(view.actionsText).toBe("This decision is already recorded.");
   });
 
   it("does not read an amount out of the seeded example object", () => {
