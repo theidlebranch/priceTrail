@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { PriceHistoryChart } from "@/components/price-history-chart";
+import { PriceHistoryChart, shortUtcDay } from "@/components/price-history-chart";
 import type { PriceHistorySeries } from "@/core/pricing/price-history";
 
 function series(
@@ -83,6 +83,10 @@ describe("PriceHistoryChart", () => {
         />,
       ),
     ).toThrow(/YYYY-MM-DD/);
+  });
+
+  it("shortens a UTC instant to a month and day", () => {
+    expect(shortUtcDay(Date.UTC(2026, 9, 18))).toBe("Oct 18");
   });
 
   it("throws when there is no point to draw", () => {

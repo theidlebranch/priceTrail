@@ -39,12 +39,10 @@ export default function ModelDetailPage({
   params: Promise<{ labSlug: string; modelSlug: string }>;
 }) {
   return (
-    <section className="border-b border-border bg-card">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10 lg:py-16">
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading model…</p>}>
-          <ModelDetailLoader params={params} />
-        </Suspense>
-      </div>
+    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10">
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading model…</p>}>
+        <ModelDetailLoader params={params} />
+      </Suspense>
     </section>
   );
 }

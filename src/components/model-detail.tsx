@@ -20,20 +20,21 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
   return (
     <div className="space-y-10">
       <header>
-        <p className="font-mono text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           <Link href="/models" className="hover:text-foreground">
             Models
           </Link>
-          <span> / {view.labName} / {view.modelName}</span>
+          <span>
+            {" "}
+            / {view.labName} / {view.modelName}
+          </span>
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[44px] lg:leading-[1.1] lg:tracking-[-0.04em]">
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="text-page-title font-semibold tracking-tight text-foreground">
             {view.modelName}
           </h1>
           {view.retired ? (
-            <span className="rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Retired
-            </span>
+            <span className="text-meta text-tertiary-foreground">Retired</span>
           ) : null}
         </div>
         {view.versionCount > 0 && view.sinceDay !== null ? (
@@ -43,12 +44,11 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
           </p>
         ) : null}
         {view.changeUnderReview ? (
-          <p
-            className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground"
-            role="status"
-          >
-            A possible change is under review.
-          </p>
+          <div className="mt-4 rounded-md border border-border border-l-2 border-l-status-warning bg-secondary">
+            <p className="px-3 py-2 text-sm text-foreground" role="status">
+              A possible change is under review.
+            </p>
+          </div>
         ) : null}
         {view.price === null ? (
           <p className="mt-4 text-sm text-muted-foreground">No current price is published.</p>
@@ -81,14 +81,12 @@ function HeadlinePrices({ headlines }: { headlines: readonly ModelDetailHeadline
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {headlines.map((headline) => (
-        <article key={headline.label} className="rounded-md border border-border bg-card p-4">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {headline.label}
-          </p>
-          <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-foreground">
+        <article key={headline.label} className="rounded-xl border border-border bg-card p-4">
+          <p className="text-meta text-muted-foreground">{headline.label}</p>
+          <p className="mt-2 font-mono text-4xl font-semibold tabular-nums text-foreground">
             {headline.amountText}
           </p>
-          <p className="text-[10px] text-muted-foreground">/ 1M tokens</p>
+          <p className="text-meta text-muted-foreground">/ 1M tokens</p>
           {headline.change === null ? null : (
             <p className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <DirectionMark direction={headline.change.direction} pctText={headline.change.pctText} />
@@ -106,34 +104,41 @@ function HeadlinePrices({ headlines }: { headlines: readonly ModelDetailHeadline
 function ComponentRows({ rows }: { rows: readonly ModelDetailPriceRow[] }) {
   return (
     <section>
-      <h2 className="text-sm font-semibold">Price components</h2>
+      <h2 className="text-base font-medium">Price components</h2>
       <p className="mt-1 text-sm text-muted-foreground">USD per 1M tokens.</p>
-      <div className="mt-2">
-        {rows.map((row) => (
-          <div
-            key={`${row.dimensionLabel}\t${row.conditionLabel}\t${row.amountText}`}
-            className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border py-3"
-          >
-            <div className="min-w-40 flex-1">
-              <p className="text-sm text-foreground">{row.dimensionLabel}</p>
-              {row.conditionLabel.length > 0 ? (
-                <p className="font-mono text-xs text-muted-foreground">{row.conditionLabel}</p>
-              ) : null}
-              {row.multiplierText !== null ? (
-                <p className="font-mono text-xs text-muted-foreground">{row.multiplierText}</p>
-              ) : null}
-              {row.lastChange === null ? null : (
-                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                  <DirectionMark direction={row.lastChange.direction} pctText={row.lastChange.pctText} />
-                  <span>{row.lastChange.dateLine}</span>
-                </p>
-              )}
-            </div>
-            <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
-              {row.amountText}
-            </p>
-          </div>
-        ))}
+      <div className="mt-4 overflow-hidden rounded-xl border border-border">
+        <table className="w-full border-collapse text-sm">
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={`${row.dimensionLabel}\t${row.conditionLabel}\t${row.amountText}`}
+                className="border-b border-border last:border-b-0"
+              >
+                <td className="px-4 py-3 align-baseline">
+                  <p className="text-foreground">{row.dimensionLabel}</p>
+                  {row.conditionLabel.length > 0 ? (
+                    <p className="font-mono text-xs text-muted-foreground">{row.conditionLabel}</p>
+                  ) : null}
+                  {row.multiplierText !== null ? (
+                    <p className="font-mono text-xs text-muted-foreground">{row.multiplierText}</p>
+                  ) : null}
+                  {row.lastChange === null ? null : (
+                    <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <DirectionMark
+                        direction={row.lastChange.direction}
+                        pctText={row.lastChange.pctText}
+                      />
+                      <span>{row.lastChange.dateLine}</span>
+                    </p>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right align-baseline font-mono font-semibold tabular-nums text-foreground">
+                  {row.amountText}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -145,13 +150,13 @@ function PriceHistorySection({ history }: { history: ModelDetailView["history"] 
 
   return (
     <section>
-      <h2 className="text-sm font-semibold">Price history</h2>
+      <h2 className="text-base font-medium">Price history</h2>
       {empty ? (
         <p className="mt-3 text-sm text-muted-foreground">No price history is published.</p>
       ) : (
         <div className="mt-4 space-y-3">
           {hasSeries ? (
-            <div className="rounded-md border border-border bg-card p-4">
+            <div className="rounded-xl border border-border p-4">
               <PriceHistoryChart series={history.series} />
             </div>
           ) : null}
@@ -175,7 +180,7 @@ function ChangeLog({
 }) {
   return (
     <section>
-      <h2 className="text-sm font-semibold">Change log</h2>
+      <h2 className="text-base font-medium">Change log</h2>
       {events.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
           {sinceDay === null
@@ -183,12 +188,16 @@ function ChangeLog({
             : `No price changes since ${sinceDay}.`}
         </p>
       ) : (
-        <div className="mt-4 space-y-4">
+        <ol className="mt-4 border-l border-border">
           {events.map((event) => (
-            <article
+            <li
               key={`${event.dateLine}\t${event.changes.map((change) => change.dimensionLabel).join(",")}`}
-              className="rounded-md border border-border bg-card p-4"
+              className="relative pb-8 pl-6 last:pb-0"
             >
+              <span
+                aria-hidden="true"
+                className="absolute top-1 left-0 size-2 -translate-x-1/2 rounded-full border border-border bg-background"
+              />
               <p className="font-mono text-xs text-foreground">{event.dateLine}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {event.changes.length}{" "}
@@ -215,9 +224,9 @@ function ChangeLog({
                   </li>
                 ))}
               </ul>
-            </article>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
     </section>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  Area,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -31,6 +32,23 @@ type ChartPoint = {
 
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Tick text only. The tooltip keeps the full YYYY-MM-DD day, because
+ * that is the day the reader can match to the change log.
+ */
+export function shortUtcDay(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  const date = new Date(value);
+  const month = MONTHS[date.getUTCMonth()];
+  if (month === undefined) {
+    return "";
+  }
+  return `${month} ${date.getUTCDate()}`;
+}
 
 export function PriceHistoryChart({ series }: { series: readonly PriceHistorySeries[] }) {
   const [picked, setPicked] = useState<string | null>(null);
@@ -75,7 +93,7 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
                 aria-selected={selected}
                 className={
                   selected
-                    ? "rounded-md border border-border bg-card px-2.5 py-1 text-sm text-foreground"
+                    ? "rounded-md border border-primary px-2.5 py-1 text-sm text-primary"
                     : "rounded-md border border-transparent px-2.5 py-1 text-sm text-muted-foreground"
                 }
                 onClick={() => setPicked(item.dimension)}
@@ -93,10 +111,10 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
       <div
         role="img"
         aria-label={`${current.label} price history`}
-        className="mt-3 h-28 w-full min-w-0 text-muted-foreground"
+        className="mt-3 h-60 w-full min-w-0 text-muted-foreground"
       >
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
+          <ComposedChart margin={{ top: 8, right: 28, bottom: 24, left: 28 }}>
             <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.7} />
             <XAxis
               dataKey="date"
@@ -107,7 +125,7 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
               tickLine={false}
               ticks={min === max ? [min] : [min, max]}
               interval={0}
-              tickFormatter={formatDay}
+              tickFormatter={shortUtcDay}
               tick={{ fontSize: 11, fill: "currentColor" }}
             />
             <YAxis hide domain={[0, yMax]} />
@@ -120,15 +138,33 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
               const segment = current.segments[index];
               const dashed = segment?.kind === "gap";
               const key = `${segmentPoints[0]?.date ?? index}-${dashed ? "gap" : "known"}`;
+              if (dashed) {
+                return (
+                  <Line
+                    key={key}
+                    data={segmentPoints}
+                    dataKey="amount"
+                    type="linear"
+                    stroke="var(--muted-foreground)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={false}
+                    activeDot={false}
+                    isAnimationActive={false}
+                    name={current.label}
+                  />
+                );
+              }
               return (
-                <Line
+                <Area
                   key={key}
                   data={segmentPoints}
                   dataKey="amount"
                   type="linear"
-                  stroke={dashed ? "var(--muted-foreground)" : "var(--primary)"}
+                  stroke="var(--primary)"
                   strokeWidth={1.5}
-                  strokeDasharray={dashed ? "4 4" : undefined}
+                  fill="var(--primary)"
+                  fillOpacity={0.08}
                   dot={false}
                   activeDot={false}
                   isAnimationActive={false}
