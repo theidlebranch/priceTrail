@@ -17,10 +17,22 @@ function isModelsPath(pathname: string) {
   return pathname === "/models" || pathname.startsWith("/models/");
 }
 
-export function SiteHeader() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const pathname = usePathname() ?? "";
-
+/**
+ * The same bar the real header uses. The fallback passes an empty path
+ * and a closed menu, so no link is marked current and the menu button
+ * does nothing until the real header replaces it.
+ */
+function SiteHeaderView({
+  pathname,
+  menuOpen,
+  onToggleMenu,
+  onNavigate,
+}: {
+  pathname: string;
+  menuOpen: boolean;
+  onToggleMenu?: () => void;
+  onNavigate?: () => void;
+}) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-card">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-10">
@@ -41,7 +53,7 @@ export function SiteHeader() {
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={onToggleMenu}
           >
             {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
           </Button>
@@ -60,7 +72,7 @@ export function SiteHeader() {
               href={link.href}
               pathname={pathname}
               mobile
-              onClick={() => setMenuOpen(false)}
+              onClick={onNavigate}
             >
               {link.label}
             </NavLink>
@@ -69,6 +81,24 @@ export function SiteHeader() {
       )}
     </header>
   );
+}
+
+export function SiteHeader() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname() ?? "";
+
+  return (
+    <SiteHeaderView
+      pathname={pathname}
+      menuOpen={menuOpen}
+      onToggleMenu={() => setMenuOpen((open) => !open)}
+      onNavigate={() => setMenuOpen(false)}
+    />
+  );
+}
+
+export function SiteHeaderFallback() {
+  return <SiteHeaderView pathname="" menuOpen={false} />;
 }
 
 function NavLink({

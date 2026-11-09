@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinalCtaSection } from "@/components/landing-page/final-cta-section";
 import { PageShell } from "@/components/page-shell";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
 
 const pathname = vi.hoisted(() => ({ current: "/" }));
 
@@ -82,6 +82,35 @@ describe("SiteHeader", () => {
     for (const link of screen.getAllByRole("link", { name: "Receipts" })) {
       expect(link.getAttribute("aria-current")).toBeNull();
     }
+  });
+});
+
+describe("SiteHeaderFallback", () => {
+  it("renders the same links with none marked current", () => {
+    render(<SiteHeaderFallback />);
+
+    const browse = screen.getByRole("link", { name: "Browse models" });
+    expect(browse.getAttribute("href")).toBe("/models");
+    expect(browse.getAttribute("aria-current")).toBeNull();
+
+    expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("href")).toBe(
+      "/#receipts",
+    );
+    expect(screen.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe(
+      "/#how-it-works",
+    );
+    expect(screen.getByRole("link", { name: "Honest by design" }).getAttribute("href")).toBe(
+      "/#honest",
+    );
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("aria-current")).toBeNull();
+    }
+
+    expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open menu" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
   });
 });
 
