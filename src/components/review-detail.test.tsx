@@ -52,6 +52,7 @@ function view(overrides: Partial<ReviewDetailView> = {}): ReviewDetailView {
       ],
     },
     itemId: 4,
+    scheduleConfirmText: null,
     canDecide: true,
     actionsText: "Confirm publishes this price. Reject publishes nothing.",
     ...overrides,
@@ -75,6 +76,7 @@ describe("ReviewDetail", () => {
     expect(
       screen.getByText("Confirm publishes this price. Reject publishes nothing."),
     ).toBeTruthy();
+    expect(screen.queryByText(/later segment stays unpublished/)).toBeNull();
     expect(screen.getByRole("button", { name: "Confirm" }).getAttribute("name")).toBe(
       "decision",
     );
@@ -159,6 +161,23 @@ describe("ReviewDetail", () => {
     expect(screen.getByText("This snapshot is not a parsed price list.")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByText("This snapshot has 1 warning.")).toBeNull();
+  });
+
+  it("says a later schedule segment stays unpublished", () => {
+    render(
+      <ReviewDetail
+        view={view({
+          scheduleConfirmText:
+            "Confirm publishes the segment that includes the review day. A later segment stays unpublished.",
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Confirm publishes the segment that includes the review day. A later segment stays unpublished.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows a recorded decision without confirm or reject", () => {

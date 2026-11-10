@@ -29,7 +29,7 @@ export function ReviewDetail({ view }: { view: ReviewDetailView }) {
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-8">
           <SourceBlock view={view} />
-          <PricesBlock prices={view.prices} />
+          <PricesBlock prices={view.prices} scheduleConfirmText={view.scheduleConfirmText} />
         </div>
         <DecisionColumn view={view} />
       </div>
@@ -91,7 +91,13 @@ function statusTone(statusText: string): string {
   return "border-l-border";
 }
 
-function PricesBlock({ prices }: { prices: ReviewDetailView["prices"] }) {
+function PricesBlock({
+  prices,
+  scheduleConfirmText,
+}: {
+  prices: ReviewDetailView["prices"];
+  scheduleConfirmText: string | null;
+}) {
   if (prices.kind === "not-a-price-list") {
     return <p className="text-sm leading-6">{prices.message}</p>;
   }
@@ -100,6 +106,9 @@ function PricesBlock({ prices }: { prices: ReviewDetailView["prices"] }) {
 
   return (
     <div className="space-y-3">
+      {scheduleConfirmText === null ? null : (
+        <p className="text-sm leading-6 text-muted-foreground">{scheduleConfirmText}</p>
+      )}
       {prices.warningText === null ? null : (
         <div className="rounded-md border border-border border-l-2 border-l-status-warning bg-secondary">
           <p className="px-3 py-2 text-sm text-foreground">{prices.warningText}</p>

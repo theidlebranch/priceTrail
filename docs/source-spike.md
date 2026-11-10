@@ -231,7 +231,7 @@ Parser tests to write first: real fixture gives expected rows; missing column th
 ## 7. Decisions still open (confirm during the parser stages)
 
 - OpenAI single cache-write price: **Decided in 7c.** Map it to dimension `cache_write`. Do not treat it as a 5-minute or 1-hour price. That is the October fixture. The 2026-11-05 page replaced that column with `30m write` (`cache_write_30m`) and `12h write` (`cache_write_12h`). The current parser throws on the October header.
-- Published price schedules (Google): **Decided in 7d.** Keep each segment as its own row with `validFrom` / `validUntil`. Do not collapse a schedule to today's price. Sales and promo periods remain out of scope.
+- Published price schedules (Google): **Decided in 7d, confirm updated.** The parser still keeps each segment as its own row with `validFrom` / `validUntil`. Confirm publishes only the segment that includes the UTC review day. A later segment stays on the snapshot and is not published. The page text does not change when that later day arrives, so the visit stays unchanged until a new item is confirmed. Sales and promo periods remain out of scope.
 - Postgres: `unique(price_version_id, dimension, condition)` treats NULL conditions as distinct. Use `NOT NULL DEFAULT '{}'` or `NULLS NOT DISTINCT` (Postgres 15+). Put this in the step-10 note.
 - Google: do the Batch, Flex, Priority and Contributor modes matter? Out of MVP for now.
 - Do we need a modality-specific input dimension (audio, image) later? Out of MVP.

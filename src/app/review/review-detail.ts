@@ -19,6 +19,9 @@ import { normalizedPriceSchema, type Condition, type NormalizedPrice } from "@/c
  */
 
 const AMOUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
+const SCHEDULE_CONFIRM_TEXT =
+  "Confirm publishes the segment that includes the review day. A later segment stays unpublished.";
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -77,6 +80,7 @@ export type ReviewDetailView = {
   reviewedAtText: string | null;
   cellCheckText: "No cell check is stored for this item.";
   prices: ReviewDetailPrices;
+  scheduleConfirmText: string | null;
   itemId: number;
   canDecide: boolean;
   actionsText: string;
@@ -95,6 +99,7 @@ export function toReviewDetailView(item: ReviewItemInput): ReviewDetailView {
   if (sourceTypeLabel === undefined) {
     throw new Error(`source type ${item.sourceType} is not known`);
   }
+  const prices = readPrices(item.parsedData, item.modelSlug);
 
   return {
     modelName: item.modelName,
@@ -109,11 +114,22 @@ export function toReviewDetailView(item: ReviewItemInput): ReviewDetailView {
     reviewedAtText:
       item.reviewedAt === null ? null : formatReviewTimestamp(item.reviewedAt, "reviewedAt"),
     cellCheckText: "No cell check is stored for this item.",
-    prices: readPrices(item.parsedData, item.modelSlug),
+    prices,
+    scheduleConfirmText: scheduleConfirmText(prices),
     itemId,
     canDecide: item.reviewStatus === "flagged",
     actionsText: decisionText(item.reviewStatus),
   };
+}
+
+function scheduleConfirmText(prices: ReviewDetailPrices): string | null {
+  if (prices.kind !== "parsed") {
+    return null;
+  }
+  if (prices.rows.every((row) => row.scheduleText === null)) {
+    return null;
+  }
+  return SCHEDULE_CONFIRM_TEXT;
 }
 
 function decisionText(status: string): string {

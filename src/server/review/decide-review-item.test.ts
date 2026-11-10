@@ -309,7 +309,7 @@ describe.skipIf(databaseUrl.length === 0)("decideReviewItem", () => {
     });
   });
 
-  it("throws when the parsed rows include a schedule and stays flagged", async () => {
+  it("throws when no schedule segment includes the review day and stays flagged", async () => {
     await withDecision(async (tx) => {
       const planted = await plantCatalog(tx);
       const sourceId = await plantSource(tx, "official");
@@ -323,9 +323,61 @@ describe.skipIf(databaseUrl.length === 0)("decideReviewItem", () => {
         reviewStatus: "flagged",
       });
 
-      await expect(decideReviewItem(tx, decision(item.id, "confirm"))).rejects.toThrow(/schedule/);
+      await expect(decideReviewItem(tx, decision(item.id, "confirm"))).rejects.toThrow(
+        /applies on 2026-11-06/,
+      );
       expect(await versionsFor(tx, planted.offeringId)).toHaveLength(0);
       expect((await stampFor(tx, item.id)).reviewStatus).toBe("flagged");
+    });
+  });
+
+  it("publishes the schedule segment that includes the review day", async () => {
+    await withDecision(async (tx) => {
+      const planted = await plantCatalog(tx);
+      const sourceId = await plantSource(tx, "official");
+      const item = await plantItem(tx, {
+        sourceId,
+        offeringId: planted.offeringId,
+        modelSlug: planted.modelSlug,
+        fetchedAt: T4,
+        parsedData: {
+          rows: [
+            {
+              provider: "google",
+              modelName: "Gemini 4 Argon",
+              modelSlug: planted.modelSlug,
+              dimension: "input",
+              usdPer1M: "2",
+              source: "official",
+              validUntil: "2026-11-30",
+            },
+            {
+              provider: "google",
+              modelName: "Gemini 4 Argon",
+              modelSlug: planted.modelSlug,
+              dimension: "input",
+              usdPer1M: "4",
+              source: "official",
+              validFrom: "2026-12-01",
+            },
+          ],
+          warnings: [],
+        },
+        reviewStatus: "flagged",
+      });
+
+      const result = await decideReviewItem(tx, {
+        ...decision(item.id, "confirm"),
+        reviewedAt: new Date("2026-11-10T12:00:00.000Z"),
+      });
+
+      expect(result).toMatchObject({ decision: "confirmed", published: true });
+      const versions = await versionsFor(tx, planted.offeringId);
+      expect(versions).toHaveLength(1);
+      expect(await amountsFor(tx, versions[0]?.id ?? -1)).toEqual([
+        { dimension: "input", amount: "2", condition: {} },
+      ]);
+      expect((await stampFor(tx, item.id)).reviewStatus).toBe("confirmed");
     });
   });
 

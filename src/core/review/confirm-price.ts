@@ -5,14 +5,15 @@ import { normalizedPriceSchema, type Condition, type NormalizedPrice } from "@/c
  * Turn one model's parsed rows into the components a confirm can publish.
  *
  * This file does not open a database and does not call new Date().
- * A snapshot that is not `{ rows, warnings }` throws. A schedule date
- * throws, because one price version cannot hold two amounts for the same
- * dimension and tier, and a future segment is not today's price.
- * A witness row throws. Two rows that share a dimension and tier throw.
- * The caller publishes. This function does not.
+ * reviewedAt is the time of the click. The day is that instant in UTC.
+ * A snapshot that is not `{ rows, warnings }` throws. A schedule keeps
+ * the segment that includes that day. A later segment is dropped. A day
+ * that falls in a gap throws. A witness row throws. Two rows that share
+ * a dimension and tier throw. The caller publishes. This function does not.
  */
 
 const AMOUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /**
  * A refusal the reviewer can read. A database failure is a different
@@ -42,10 +43,12 @@ export type ConfirmPriceComponent = {
 export function componentsForConfirm(
   parsedData: unknown,
   modelSlug: string,
+  reviewedAt: Date,
 ): ConfirmPriceComponent[] {
   if (modelSlug.trim().length === 0) {
     throw new ReviewRefusal("model slug is empty");
   }
+  const day = utcCalendarDay(reviewedAt);
   if (!isPriceList(parsedData)) {
     throw new ReviewRefusal("parsed snapshot is not a parsed price list");
   }
@@ -62,11 +65,8 @@ export function componentsForConfirm(
   if (mine.length === 0) {
     throw new ReviewRefusal(`parsed price list has no rows for ${modelSlug}`);
   }
-  if (mine.some((row) => row.validFrom !== undefined || row.validUntil !== undefined)) {
-    throw new ReviewRefusal(`price schedule for ${modelSlug} cannot be confirmed yet`);
-  }
 
-  const components = mine.map(toComponent);
+  const components = rowsOnDay(mine, modelSlug, day).map(toComponent);
   const seen = new Set<string>();
   for (const component of components) {
     const key = componentKey(component.dimension, component.condition ?? {});
@@ -104,6 +104,74 @@ export function sameConfirmPrice(
     throw new ReviewRefusal("two rows share the same dimension and tier");
   }
   return nextKeys.every((key) => openKeys.includes(key));
+}
+
+function utcCalendarDay(value: Date): string {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new ReviewRefusal("reviewedAt must be a valid date");
+  }
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${value.getUTCFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Keep the rows whose window includes this UTC day.
+ *
+ * A row with no dates always applies. `validUntil` includes that day.
+ * `validFrom` includes that day. A dimension and tier whose every row
+ * misses the day has no current price, so confirm stops.
+ */
+function rowsOnDay(
+  rows: readonly NormalizedPrice[],
+  modelSlug: string,
+  day: string,
+): NormalizedPrice[] {
+  const currentCount = new Map<string, number>();
+  for (const row of rows) {
+    assertScheduleDate(row.validFrom);
+    assertScheduleDate(row.validUntil);
+    const key = componentKey(row.dimension, row.condition ?? {});
+    const count = currentCount.get(key) ?? 0;
+    currentCount.set(key, count + (appliesOn(row, day) ? 1 : 0));
+  }
+  for (const count of currentCount.values()) {
+    if (count === 0) {
+      throw new ReviewRefusal(`no price for ${modelSlug} applies on ${day}`);
+    }
+  }
+  return rows.filter((row) => appliesOn(row, day));
+}
+
+function appliesOn(row: NormalizedPrice, day: string): boolean {
+  if (row.validFrom !== undefined && day < row.validFrom) {
+    return false;
+  }
+  if (row.validUntil !== undefined && day > row.validUntil) {
+    return false;
+  }
+  return true;
+}
+
+function assertScheduleDate(value: string | undefined): void {
+  if (value === undefined) {
+    return;
+  }
+  const match = CALENDAR_DATE.exec(value);
+  if (match === null) {
+    throw new ReviewRefusal("schedule date is not a YYYY-MM-DD date");
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    throw new ReviewRefusal("schedule date is not a YYYY-MM-DD date");
+  }
 }
 
 function parsePriceRow(row: unknown): NormalizedPrice {

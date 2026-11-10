@@ -28,7 +28,9 @@ import {
  *
  * The same parsed price is not a new period. Confirm still records the
  * reviewer, and the open price stays open. Reject records the reviewer
- * and does not publish.
+ * and does not publish. A schedule publishes the segment that includes
+ * reviewedAt. A later segment is not a component. A day in a gap throws
+ * and the item stays flagged.
  *
  * reviewedAt is passed in. This file does not call new Date().
  */
@@ -109,7 +111,7 @@ export async function decideReviewItem(
 
     await assertNoEarlierFlaggedItem(tx, item);
 
-    const components = componentsForConfirm(item.parsedData, item.modelSlug);
+    const components = componentsForConfirm(item.parsedData, item.modelSlug, reviewedAt);
     const openVersions = await findOpenVersions(tx, item.offeringId);
     if (openVersions.length > 1) {
       throw new ReviewRefusal(
@@ -137,7 +139,13 @@ export async function decideReviewItem(
       return { decision: "confirmed", published: false };
     }
 
-    const previousLastSeenAt = await previousSighting(tx, item, open.firstSeenAt, openComponents);
+    const previousLastSeenAt = await previousSighting(
+      tx,
+      item,
+      open.firstSeenAt,
+      openComponents,
+      reviewedAt,
+    );
     await stamp(tx, item.id, "confirmed", { note, reviewedBy, reviewedAt });
     const published = await publishPriceVersion(tx, {
       observationItemId: item.id,
@@ -212,6 +220,7 @@ async function previousSighting(
   item: LockedItem,
   openFirstSeenAt: Date,
   openComponents: readonly StoredComponent[],
+  reviewedAt: Date,
 ): Promise<Date> {
   const earlier = await db
     .select({
@@ -229,7 +238,7 @@ async function previousSighting(
     if (observation.fetchedAt.getTime() < openFirstSeenAt.getTime()) {
       continue;
     }
-    if (!snapshotMatchesOpen(observation.parsedData, item.modelSlug, openComponents)) {
+    if (!snapshotMatchesOpen(observation.parsedData, item.modelSlug, openComponents, reviewedAt)) {
       continue;
     }
     matchedAt = observation.fetchedAt;
@@ -275,10 +284,11 @@ function snapshotMatchesOpen(
   parsedData: unknown,
   modelSlug: string,
   openComponents: readonly StoredComponent[],
+  reviewedAt: Date,
 ): boolean {
   let components: ConfirmPriceComponent[];
   try {
-    components = componentsForConfirm(parsedData, modelSlug);
+    components = componentsForConfirm(parsedData, modelSlug, reviewedAt);
   } catch (error) {
     if (error instanceof ReviewRefusal) {
       return false;

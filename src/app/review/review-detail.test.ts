@@ -74,6 +74,7 @@ describe("toReviewDetailView", () => {
     expect(view.canDecide).toBe(true);
     expect(view.itemId).toBe(4);
     expect(view.actionsText).toBe("Confirm publishes this price. Reject publishes nothing.");
+    expect(view.scheduleConfirmText).toBeNull();
     expect(view.statusText).toBe("Waiting for review.");
     expect(view.fetchedAtText).toBe("2026-11-01 00:00:00 UTC");
     expect(JSON.stringify(view)).not.toContain("15");
@@ -108,6 +109,9 @@ describe("toReviewDetailView", () => {
 
     expect(view.prices.kind === "parsed" ? view.prices.rows[0]?.scheduleText : null).toBe(
       "2026-10-18 through 2026-11-30",
+    );
+    expect(view.scheduleConfirmText).toBe(
+      "Confirm publishes the segment that includes the review day. A later segment stays unpublished.",
     );
     expect(view.prices.kind === "parsed" ? view.prices.rows[0]?.amountText : null).toBe("2");
   });
