@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
 const links = [
@@ -46,6 +47,7 @@ function SiteHeaderView({
               </NavLink>
             ))}
           </nav>
+          <ThemeToggle />
           <Button
             variant="outline"
             size="icon"

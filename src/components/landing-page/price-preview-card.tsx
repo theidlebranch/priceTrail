@@ -16,7 +16,7 @@ export function PricePreviewCard() {
             Example Provider · example-model-1
           </span>
         </div>
-        <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-900">
+        <span className="shrink-0 rounded border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-status-warning">
           EXAMPLE DATA
         </span>
       </div>
@@ -49,7 +49,7 @@ export function PricePreviewCard() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <dt className="text-muted-foreground">Last checked:</dt>
             <dd className="inline-flex items-center gap-1.5 font-mono text-xs">
-              <span className="size-1.5 rounded-full bg-emerald-500" />2 hours
+              <span className="size-1.5 rounded-full bg-status-ok" />2 hours
               ago
             </dd>
           </div>

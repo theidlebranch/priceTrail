@@ -21,11 +21,11 @@ export function ReviewSection() {
         <Card className="gap-0 overflow-hidden rounded-md border-border bg-muted/40 py-0 shadow-none">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="size-2 rounded-full bg-amber-500" />
+              <span className="size-2 rounded-full bg-status-warning" />
               <span className="text-xs font-semibold">
                 Review queue · example item
               </span>
-              <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-900">
+              <span className="rounded border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-status-warning">
                 FLAGGED: WRONG COLUMN
               </span>
             </div>
@@ -59,7 +59,7 @@ export function ReviewSection() {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
                   <span>Extracted as input:</span>
-                  <span className="font-semibold text-amber-900">
+                  <span className="font-semibold text-status-warning">
                     $0.075 / 1M
                   </span>
                 </div>
@@ -91,7 +91,7 @@ export function ReviewSection() {
                       <td className="py-2 pr-4">example-model-1</td>
                       <td className="py-2 pr-4">$0.150</td>
                       <td className="py-2 pr-4">
-                        <span className="rounded bg-amber-100 px-1 font-bold text-amber-900">
+                        <span className="rounded bg-status-warning/15 px-1 font-bold text-status-warning">
                           $0.075
                         </span>
                       </td>
@@ -101,7 +101,7 @@ export function ReviewSection() {
                 </table>
               </div>
               <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-warning" />
                 The highlighted number sits under &quot;Batch input&quot;, not
                 &quot;Input&quot;. It was not published.
               </p>
@@ -113,7 +113,7 @@ export function ReviewSection() {
               <span className="rounded border border-border bg-card px-3 py-1.5 text-muted-foreground">
                 Confirm
               </span>
-              <span className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground">
+              <span className="rounded bg-primary-fill px-3 py-1.5 font-medium text-primary-foreground">
                 Reject
               </span>
             </div>

@@ -12,6 +12,7 @@
   --popover-foreground: #171717;
   --primary: #005c55;
   --primary-foreground: #ffffff;
+  --primary-fill: #005c55;
   --secondary: #fafafa;
   --secondary-foreground: #171717;
   --muted: #fafafa;
@@ -36,6 +37,40 @@
   --status-neutral: #8f8f8f;
 }
 
+.dark {
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #000000;
+  --card-foreground: #ededed;
+  --popover: #000000;
+  --popover-foreground: #ededed;
+  --primary: #2a9d8f;
+  --primary-foreground: #ffffff;
+  --primary-fill: #0f766e;
+  --secondary: #141414;
+  --secondary-foreground: #ededed;
+  --muted: #141414;
+  --muted-foreground: #a1a1a1;
+  --accent: #141414;
+  --accent-foreground: #ededed;
+  --destructive: #ff8b80;
+  --border: #262626;
+  --input: #262626;
+  --ring: #2a9d8f;
+  --chart-1: #2a9d8f;
+  --chart-2: #a8b3c7;
+  --chart-3: #f0a06a;
+  --chart-4: #5eead4;
+  --chart-5: #3d4f4c;
+  --tertiary-foreground: #8a8a8a;
+  --status-ok: #2a9d8f;
+  --status-warning: #f0b429;
+  --status-error: #ff8b80;
+  --status-info: #93c5fd;
+  --status-neutral: #8a8a8a;
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -45,6 +80,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-fill: var(--primary-fill);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -81,6 +117,8 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 4rem;
+  background: var(--background);
+  color-scheme: light;
 }
 
 body {

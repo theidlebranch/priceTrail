@@ -51,6 +51,8 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - A cache-ratio mismatch no longer discards an Anthropic page. The parser does not store a ratio warning. The tracked models stay Claude Fable 5.1 and Claude Mythos 5.1. This does not publish a price.
 - A long-context price whose cutoff was not stated stays on the chart beside the short price. A known token bound is a sentence under the chart. This does not publish a price.
 
+- Dark mode follows the device until the header control is pressed. The control shows a sun when the page is light and a moon when it is dark. A press switches to the other and stores `light` or `dark` in this browser under `price-trail-theme`. A missing choice still follows the device. A short script in the root layout sets the `dark` class before paint. Light colors stay on `:root`. Dark colors are in `.dark` in `src/app/globals.css`. Links and the chart use `#2a9d8f` on black. The primary button fill stays a deeper green, `#0f766e` in dark and `#005c55` in light, so the white label stays readable. Landing warning badges use the status colors. `pnpm check` passed. The home page, `/models`, Claude Fable 5.1, and review sign-in were checked in light and dark at desktop and phone width. Search still filters. The mobile menu still opens. The review queue was not opened, because this browser is signed out.
+
 ## In progress
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.

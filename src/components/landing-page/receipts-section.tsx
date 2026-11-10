@@ -93,7 +93,7 @@ function ExamplePriceChart() {
           cx="245"
           cy="50"
           r="4"
-          fill="white"
+          fill="var(--background)"
           stroke="var(--primary)"
           strokeWidth="2"
         />
@@ -102,7 +102,7 @@ function ExamplePriceChart() {
           cy="80"
           r="4"
           fill="var(--primary)"
-          stroke="white"
+          stroke="var(--background)"
           strokeWidth="1.5"
         />
         <g fill="currentColor" fontFamily="monospace" fontSize="11">
@@ -157,7 +157,7 @@ export function ReceiptsSection() {
                     Input price ($ / 1M tokens)
                   </p>
                 </div>
-                <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-900">
+                <span className="rounded border border-status-warning/40 bg-status-warning/10 px-2 py-0.5 font-mono text-[10px] font-bold text-status-warning">
                   EXAMPLE DATA
                 </span>
               </div>
@@ -188,7 +188,7 @@ export function ReceiptsSection() {
                     Evidence for this price
                   </span>
                 </div>
-                <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-900">
+                <span className="rounded border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-status-warning">
                   EXAMPLE
                 </span>
               </div>

@@ -48,7 +48,7 @@ Tokens in `globals.css`, on the variables that already exist (`--background`, `-
 - Base size 14px. Page title 28–32px at weight 600. Section title 16px at weight 500. Meta 12–13px.
 - All numbers use `tabular-nums`.
 
-Do not add a dark theme. The file has a `dark` variant and no dark token set. Do not add a theme toggle.
+Dark mode follows the device until the header control is pressed. The control shows a sun or a moon for the current look, and a press switches to the other. The dark colors live in `.dark` in `globals.css`. Do not add a third device option.
 
 Layout:
 

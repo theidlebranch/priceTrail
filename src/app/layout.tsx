@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { PageShell } from "@/components/page-shell";
+import { themeInitScript } from "@/components/theme";
 import "./globals.css";
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
@@ -18,8 +19,13 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PageShell>{children}</PageShell>
         <Analytics />
         <SpeedInsights />
