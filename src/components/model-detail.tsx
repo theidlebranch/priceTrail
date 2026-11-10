@@ -146,7 +146,7 @@ function ComponentRows({ rows }: { rows: readonly ModelDetailPriceRow[] }) {
 
 function PriceHistorySection({ history }: { history: ModelDetailView["history"] }) {
   const hasSeries = history.series.length > 0;
-  const empty = !hasSeries && history.skipped.length === 0;
+  const empty = !hasSeries && history.skipped.length === 0 && history.notes.length === 0;
 
   return (
     <section>
@@ -163,6 +163,11 @@ function PriceHistorySection({ history }: { history: ModelDetailView["history"] 
           {history.skipped.map((item) => (
             <p key={item.dimension} className="text-sm text-muted-foreground">
               {item.label} has a tier, so it is not on this chart.
+            </p>
+          ))}
+          {history.notes.map((note) => (
+            <p key={note} className="text-sm text-muted-foreground">
+              {note}
             </p>
           ))}
         </div>

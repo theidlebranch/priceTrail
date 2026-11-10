@@ -53,10 +53,14 @@ function openSeries(
   label: string,
   amountText: string,
   amount: number,
+  id: string = dimension,
+  note: string | null = null,
 ) {
-    return {
+  return {
+    id,
     dimension,
     label,
+    note,
     latestAmountText: amountText,
     changeCount: 0,
     segments: [
@@ -133,6 +137,8 @@ describe("toModelDetailView", () => {
           openSeries("cache_write_1h", "Cache write (1 hour)", "20", 20),
         ],
         skipped: [],
+        bounds: [],
+        notes: [],
       },
       changeUnderReview: false,
     });
@@ -249,7 +255,7 @@ describe("toModelDetailView", () => {
     const view = toModelDetailView(read({ offerings: [] }), AS_OF);
 
     expect(view.price).toBeNull();
-    expect(view.history).toEqual({ series: [], skipped: [] });
+    expect(view.history).toEqual({ series: [], skipped: [], bounds: [], notes: [] });
     expect(view.headlines).toEqual([]);
     expect(view.events).toEqual([]);
     expect(view.versionCount).toBe(0);
@@ -298,18 +304,18 @@ describe("toModelDetailView", () => {
   });
 
   it("names a long-context price whose cutoff is not stated and keeps the short price as the headline", () => {
+    const current = version({
+      components: [
+        component({ amount: "2" }),
+        component({ amount: "4", condition: { longContext: true } }),
+      ],
+    });
     const view = toModelDetailView(
       read({
         offerings: [
           offering({
-            openVersions: [
-              version({
-                components: [
-                  component({ amount: "2" }),
-                  component({ amount: "4", condition: { longContext: true } }),
-                ],
-              }),
-            ],
+            openVersions: [current],
+            historyVersions: [{ ...current, lastSeenAt: null }],
           }),
         ],
       }),
@@ -321,6 +327,12 @@ describe("toModelDetailView", () => {
       priceRow("Input", "$2"),
       priceRow("Input", "$4", "long context, cutoff not stated", "2×"),
     ]);
+    expect(view.history.series).toEqual([
+      openSeries("input", "Input", "2", 2),
+      openSeries("input", "Input, long context", "4", 4, "input:longContext", "Cutoff not stated."),
+    ]);
+    expect(view.history.skipped).toEqual([]);
+    expect(view.history.notes).toEqual([]);
   });
 
   it("treats a repeated copy of the same official URL as one link", () => {
@@ -484,7 +496,7 @@ describe("toModelDetailView", () => {
     ).toThrow(/firstSeenAt/);
   });
 
-  it("skips a tiered input and still shows the current price", () => {
+  it("charts the short input and names the known token bound", () => {
     const view = toModelDetailView(
       read({
         offerings: [
@@ -505,10 +517,11 @@ describe("toModelDetailView", () => {
       AS_OF,
     );
 
-    expect(view.history).toEqual({
-      series: [],
-      skipped: [{ dimension: "input", label: "Input" }],
-    });
+    expect(view.history.series).toEqual([openSeries("input", "Input", "1", 1)]);
+    expect(view.history.skipped).toEqual([]);
+    expect(view.history.notes).toEqual([
+      "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+    ]);
     expect(view.price?.components[0]?.dimensionLabel).toBe("Input");
   });
 

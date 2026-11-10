@@ -47,8 +47,9 @@ function series(
   latestAmountText: string,
   segments: PriceHistorySegment[],
   changeCount = 0,
+  id: string = dimension,
 ): PriceHistorySeries {
-  return { dimension, label, latestAmountText, changeCount, segments };
+  return { id, dimension, label, note: null, latestAmountText, changeCount, segments };
 }
 
 const OLD_OUTPUT: PriceHistorySeries = series("output", "Output", "5", [
@@ -114,6 +115,7 @@ describe("toPriceHistories", () => {
         OLD_OUTPUT,
       ],
       skipped: [],
+      bounds: [],
     });
   });
 
@@ -169,6 +171,7 @@ describe("toPriceHistories", () => {
         OLD_OUTPUT,
       ],
       skipped: [],
+      bounds: [],
     });
   });
 
@@ -218,6 +221,7 @@ describe("toPriceHistories", () => {
         ]),
       ],
       skipped: [],
+      bounds: [],
     });
   });
 
@@ -240,7 +244,7 @@ describe("toPriceHistories", () => {
   });
 
   it("returns no series when there is no period", () => {
-    expect(toPriceHistories([], AS_OF)).toEqual({ series: [], skipped: [] });
+    expect(toPriceHistories([], AS_OF)).toEqual({ series: [], skipped: [], bounds: [] });
   });
 
   it("leaves out a dimension that no period publishes", () => {
@@ -329,13 +333,116 @@ describe("toPriceHistories", () => {
     expect(history.series.find((item) => item.dimension === "output")?.changeCount).toBe(1);
   });
 
-  it("skips a dimension with two rows and still charts the others", () => {
+  it("charts the short price and records a known token bound", () => {
     expect(
       toPriceHistories(
         [
           period({
             lastSeenAt: null,
             components: [input("1"), input("0.50", { promptTokensAtMost: 100000 }), output("5")],
+          }),
+        ],
+        AS_OF,
+      ),
+    ).toEqual({
+      series: [
+        series("input", "Input", "1", [
+          {
+            kind: "known",
+            from: "2026-01-15",
+            to: "2026-06-10",
+            amountText: "1",
+            amount: 1,
+            label: "Changed on or before 2026-01-15.",
+          },
+        ]),
+        series("output", "Output", "5", [
+          {
+            kind: "known",
+            from: "2026-01-15",
+            to: "2026-06-10",
+            amountText: "5",
+            amount: 5,
+            label: "Changed on or before 2026-01-15.",
+          },
+        ]),
+      ],
+      skipped: [],
+      bounds: [
+        {
+          dimension: "input",
+          amountText: "0.50",
+          condition: { promptTokensAtMost: 100000 },
+        },
+      ],
+    });
+  });
+
+  it("charts the short price and the long-context price on separate lines", () => {
+    const history = toPriceHistories(
+      [
+        period({
+          lastSeenAt: null,
+          components: [input("10"), input("20", { longContext: true })],
+        }),
+      ],
+      AS_OF,
+    );
+
+    expect(history.skipped).toEqual([]);
+    expect(history.bounds).toEqual([]);
+    expect(history.series.map((item) => ({ id: item.id, latestAmountText: item.latestAmountText }))).toEqual([
+      { id: "input", latestAmountText: "10" },
+      { id: "input:longContext", latestAmountText: "20" },
+    ]);
+  });
+
+  it("charts a long-context price when the page did not state a short price", () => {
+    const history = toPriceHistories(
+      [
+        period({
+          lastSeenAt: null,
+          components: [input("20", { longContext: true })],
+        }),
+      ],
+      AS_OF,
+    );
+
+    expect(history.skipped).toEqual([]);
+    expect(history.series.map((item) => item.id)).toEqual(["input:longContext"]);
+  });
+
+  it("records the known token bound from the latest period that has one", () => {
+    const history = toPriceHistories(
+      [
+        period({
+          components: [input("1"), input("0.40", { promptTokensAtMost: 100000 })],
+        }),
+        period({
+          firstSeenAt: NEXT_SEEN,
+          lastSeenAt: null,
+          components: [input("1"), input("0.50", { promptTokensAtMost: 100000 })],
+        }),
+      ],
+      AS_OF,
+    );
+
+    expect(history.bounds).toEqual([
+      {
+        dimension: "input",
+        amountText: "0.50",
+        condition: { promptTokensAtMost: 100000 },
+      },
+    ]);
+  });
+
+  it("skips a series when one period has two short prices", () => {
+    expect(
+      toPriceHistories(
+        [
+          period({
+            lastSeenAt: null,
+            components: [input("1"), input("2"), output("5")],
           }),
         ],
         AS_OF,
@@ -354,6 +461,7 @@ describe("toPriceHistories", () => {
         ]),
       ],
       skipped: [{ dimension: "input", label: "Input" }],
+      bounds: [],
     });
   });
 
@@ -377,6 +485,7 @@ describe("toPriceHistories", () => {
     ).toEqual({
       series: [],
       skipped: [{ dimension: "input", label: "Input" }],
+      bounds: [],
     });
   });
 
@@ -400,6 +509,7 @@ describe("toPriceHistories", () => {
         ]),
       ],
       skipped: [],
+      bounds: [],
     });
   });
 
@@ -513,6 +623,7 @@ describe("toPriceHistories", () => {
         OLD_OUTPUT,
       ],
       skipped: [],
+      bounds: [],
     });
   });
 

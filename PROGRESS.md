@@ -49,6 +49,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - UI final pass: the landing page, `/models`, and a model page were checked at 1440px and 390px. The shared width, white background, header, mobile menu, search, lab chips, and chart labels match the brief. The live chart is one solid known line from Oct 18 to Nov 7, so there was no gap to look at. Three landing cards no longer use a drop shadow. Landing copy and layout were left as they were. This browser was sent to review sign-in, so the queue, an item, and source health were not opened. Confirm and Reject were not submitted. A Next.js dev notice still says `SiteHeader` reads the path outside `Suspense`. The pages still rendered, and that notice was left as it was.
 - Production build: `SiteHeader` reads the path inside `Suspense` in `PageShell`. The fallback is the same bar with a closed menu and no link marked current. `pnpm build` completed, including `/models/[labSlug]/[modelSlug]` and `/review/items/[id]`. On `/`, "Browse models" is not current. On `/models` and Claude Fable 5.1 it is. The mobile menu still opens. The dev notice about the path outside `Suspense` is gone.
 - A cache-ratio mismatch no longer discards an Anthropic page. The parser does not store a ratio warning. The tracked models stay Claude Fable 5.1 and Claude Mythos 5.1. This does not publish a price.
+- A long-context price whose cutoff was not stated stays on the chart beside the short price. A known token bound is a sentence under the chart. This does not publish a price.
 
 ## In progress
 

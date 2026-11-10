@@ -89,6 +89,10 @@ export type ModelDetailChangeEvent = {
   changes: ModelDetailChangeLine[];
 };
 
+type ModelDetailHistory = PriceHistories & {
+  notes: string[];
+};
+
 export type ModelDetailView = {
   labName: string;
   modelName: string;
@@ -102,7 +106,7 @@ export type ModelDetailView = {
     sourceLabel: "Official pricing page";
     components: ModelDetailPriceRow[];
   } | null;
-  history: PriceHistories;
+  history: ModelDetailHistory;
   events: ModelDetailChangeEvent[];
   changeUnderReview: boolean;
 };
@@ -130,10 +134,30 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
         : currentPrice(offering, open, changes),
     history:
       offering === undefined
-        ? { series: [], skipped: [] }
-        : toPriceHistories(offering.historyVersions, asOf),
+        ? { series: [], skipped: [], bounds: [], notes: [] }
+        : presentHistory(toPriceHistories(offering.historyVersions, asOf)),
     events: changes === null ? [] : changes.events.map(toEvent),
     changeUnderReview: offering === undefined ? false : changeUnderReview(offering.reviewStatuses),
+  };
+}
+
+function presentHistory(history: PriceHistories): ModelDetailHistory {
+  return {
+    series: history.series.map((item) =>
+      item.id.endsWith(":longContext")
+        ? {
+            ...item,
+            label: `${PRICE_DIMENSION_LABELS[item.dimension]}, long context`,
+            note: "Cutoff not stated.",
+          }
+        : item,
+    ),
+    skipped: history.skipped,
+    bounds: history.bounds,
+    notes: history.bounds.map(
+      (bound) =>
+        `${PRICE_DIMENSION_LABELS[bound.dimension]} also has a price for ${conditionLabel(bound.condition)}, $${bound.amountText}. It is not on this chart.`,
+    ),
   };
 }
 

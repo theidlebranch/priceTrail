@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { PriceHistoryChart, shortUtcDay } from "@/components/price-history-chart";
 import type { PriceHistorySeries } from "@/core/pricing/price-history";
 
@@ -9,10 +9,14 @@ function series(
   changeCount: number,
   amountText: string,
   from: string,
+  id: string = dimension,
+  note: string | null = null,
 ): PriceHistorySeries {
   return {
+    id,
     dimension,
     label,
+    note,
     latestAmountText: amountText,
     changeCount,
     segments: [
@@ -27,6 +31,10 @@ function series(
     ],
   };
 }
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("PriceHistoryChart", () => {
   it("shows one chart at a time and says when that price has not changed", () => {
@@ -58,14 +66,48 @@ describe("PriceHistoryChart", () => {
     expect(screen.getByRole("table", { name: "Output price history" }).textContent).toContain("$50");
   });
 
+  it("selects the long-context tab without selecting the short price", () => {
+    render(
+      <PriceHistoryChart
+        series={[
+          series("input", "Input", 0, "10", "2026-10-18"),
+          series(
+            "input",
+            "Input, long context",
+            0,
+            "20",
+            "2026-10-18",
+            "input:longContext",
+            "Cutoff not stated.",
+          ),
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Input", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Input, long context", selected: false })).toBeTruthy();
+    expect(screen.queryByText("Cutoff not stated.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Input, long context" }));
+
+    expect(screen.getByRole("tab", { name: "Input", selected: false })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Input, long context", selected: true })).toBeTruthy();
+    expect(screen.getByText("Cutoff not stated.")).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Input, long context price history" }).textContent).toContain(
+      "$20",
+    );
+  });
+
   it("throws when a segment day is not a calendar day", () => {
     expect(() =>
       render(
         <PriceHistoryChart
           series={[
             {
+              id: "input",
               dimension: "input",
               label: "Input",
+              note: null,
               latestAmountText: "1",
               changeCount: 0,
               segments: [
@@ -95,8 +137,10 @@ describe("PriceHistoryChart", () => {
         <PriceHistoryChart
           series={[
             {
+              id: "input",
               dimension: "input",
               label: "Input",
+              note: null,
               latestAmountText: "1",
               changeCount: 0,
               segments: [],

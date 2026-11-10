@@ -2,15 +2,17 @@ import { Decimal } from "decimal.js";
 import { pricePrecisionLabel } from "@/core/pricing/precision";
 
 /**
- * Turn published periods into one chart per untiered price.
+ * Turn published periods into one chart line per price we can draw.
  *
  * This file does not open a database and does not call new Date().
  * The page passes asOf, so a test can freeze the day the open line ends.
  *
- * Each dimension is its own series, in the same order as the price card.
- * A dimension with no rows is left out. A tier, or two rows on one period,
- * is skipped instead of picking a row. The other dimensions still chart.
- * A bad amount, unit, date, or unknown dimension still throws.
+ * A short price has an empty condition. A long-context price whose cutoff
+ * was not stated is its own line. A known token bound stays off the line
+ * and is returned so the page can name it. Two short prices, or two
+ * long-context prices, skip that line instead of picking a row. A
+ * dimension that has no line left is skipped. The other dimensions
+ * still chart. A bad amount, unit, date, or unknown dimension still throws.
  *
  * The solid stretch runs from the chart start through the last day we
  * still saw that price. The dashed gap runs from that day to the next
@@ -81,8 +83,10 @@ export type PriceHistorySegment =
     };
 
 export type PriceHistorySeries = {
+  id: string;
   dimension: PriceDimension;
   label: string;
+  note: string | null;
   latestAmountText: string;
   changeCount: number;
   segments: PriceHistorySegment[];
@@ -93,9 +97,16 @@ export type PriceHistorySkipped = {
   label: string;
 };
 
+export type PriceHistoryBound = {
+  dimension: PriceDimension;
+  amountText: string;
+  condition: Record<string, unknown>;
+};
+
 export type PriceHistories = {
   series: PriceHistorySeries[];
   skipped: PriceHistorySkipped[];
+  bounds: PriceHistoryBound[];
 };
 
 const AMOUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
@@ -118,10 +129,25 @@ type PricedPeriod = {
   amount: number;
 };
 
+const TOKEN_BOUND_KEYS = [
+  "promptTokensOver",
+  "promptTokensAtMost",
+  "promptTokensUnder",
+  "promptTokensAtLeast",
+] as const;
+
+type RowKind = "short" | "longContext" | "bound";
+
 type ReadRow = {
   amountText: string;
   amount: number;
-  tiered: boolean;
+  kind: RowKind;
+  condition: Record<string, unknown>;
+};
+
+type ChartableSeries = {
+  blocked: boolean;
+  priced: PricedPeriod[];
 };
 
 export function isPriceDimension(value: string): value is PriceDimension {
@@ -136,7 +162,7 @@ export function toPriceHistories(
     throw new Error("asOf must be a valid date");
   }
   if (periods.length === 0) {
-    return { series: [], skipped: [] };
+    return { series: [], skipped: [], bounds: [] };
   }
 
   const asOfDay = utcDay(asOf);
@@ -162,31 +188,37 @@ export function toPriceHistories(
 
   const series: PriceHistorySeries[] = [];
   const skipped: PriceHistorySkipped[] = [];
+  const bounds: PriceHistoryBound[] = [];
 
   for (const dimension of PRICE_DIMENSIONS) {
     const classified = classifyDimension(dimension, byChart);
     if (classified === null) {
       continue;
     }
-    if (classified.blocked) {
+
+    const charted = [
+      classified.short.blocked
+        ? null
+        : toSeries(dimension, dimension, classified.short.priced, asOfDay),
+      classified.longContext.blocked
+        ? null
+        : toSeries(
+            `${dimension}:longContext`,
+            dimension,
+            classified.longContext.priced,
+            asOfDay,
+          ),
+    ].filter((item): item is PriceHistorySeries => item !== null);
+
+    if (charted.length === 0) {
       skipped.push({ dimension, label: PRICE_DIMENSION_LABELS[dimension] });
       continue;
     }
-
-    const latest = classified.priced[classified.priced.length - 1];
-    if (latest === undefined) {
-      continue;
-    }
-    series.push({
-      dimension,
-      label: PRICE_DIMENSION_LABELS[dimension],
-      latestAmountText: latest.amountText,
-      changeCount: countAmountChanges(classified.priced),
-      segments: segmentsFor(classified.priced, asOfDay),
-    });
+    series.push(...charted);
+    bounds.push(...classified.bounds);
   }
 
-  return { series, skipped };
+  return { series, skipped, bounds };
 }
 
 function prepareTimeline(period: PriceHistoryPeriod): TimelinePeriod {
@@ -259,13 +291,39 @@ function assertPublicationOrder(periods: readonly TimelinePeriod[]): void {
   }
 }
 
+function toSeries(
+  id: string,
+  dimension: PriceDimension,
+  priced: readonly PricedPeriod[],
+  asOfDay: string,
+): PriceHistorySeries | null {
+  const latest = priced[priced.length - 1];
+  if (latest === undefined) {
+    return null;
+  }
+  return {
+    id,
+    dimension,
+    label: PRICE_DIMENSION_LABELS[dimension],
+    note: null,
+    latestAmountText: latest.amountText,
+    changeCount: countAmountChanges(priced),
+    segments: segmentsFor(priced, asOfDay),
+  };
+}
+
 function classifyDimension(
   dimension: PriceDimension,
   periods: readonly TimelinePeriod[],
-): { blocked: boolean; priced: PricedPeriod[] } | null {
+): {
+  short: ChartableSeries;
+  longContext: ChartableSeries;
+  bounds: PriceHistoryBound[];
+} | null {
   let sawRow = false;
-  let blocked = false;
-  const priced: PricedPeriod[] = [];
+  const short: ChartableSeries = { blocked: false, priced: [] };
+  const longContext: ChartableSeries = { blocked: false, priced: [] };
+  let bounds: PriceHistoryBound[] = [];
 
   for (const period of periods) {
     const rows = period.components.filter((component) => component.dimension === dimension);
@@ -274,28 +332,52 @@ function classifyDimension(
     }
     sawRow = true;
     const read = rows.map((row) => readRow(row));
-    if (rows.length > 1 || read.some((row) => row.tiered)) {
-      blocked = true;
-      continue;
+    const shorts = read.filter((row) => row.kind === "short");
+    const longs = read.filter((row) => row.kind === "longContext");
+    const boundRows = read.filter((row) => row.kind === "bound");
+
+    if (shorts.length > 1) {
+      short.blocked = true;
+    } else if (shorts.length === 1) {
+      const price = shorts[0];
+      if (price !== undefined) {
+        short.priced.push(pricedPeriod(period, price));
+      }
     }
-    const price = read[0];
-    if (price === undefined) {
-      continue;
+
+    if (longs.length > 1) {
+      longContext.blocked = true;
+    } else if (longs.length === 1) {
+      const price = longs[0];
+      if (price !== undefined) {
+        longContext.priced.push(pricedPeriod(period, price));
+      }
     }
-    priced.push({
-      firstSeenAt: period.firstSeenAt,
-      lastSeenAt: period.lastSeenAt,
-      chartStart: period.chartStart,
-      label: period.label,
-      amountText: price.amountText,
-      amount: price.amount,
-    });
+
+    if (boundRows.length > 0) {
+      bounds = boundRows.map((row) => ({
+        dimension,
+        amountText: row.amountText,
+        condition: row.condition,
+      }));
+    }
   }
 
   if (!sawRow) {
     return null;
   }
-  return { blocked, priced };
+  return { short, longContext, bounds };
+}
+
+function pricedPeriod(period: TimelinePeriod, price: ReadRow): PricedPeriod {
+  return {
+    firstSeenAt: period.firstSeenAt,
+    lastSeenAt: period.lastSeenAt,
+    chartStart: period.chartStart,
+    label: period.label,
+    amountText: price.amountText,
+    amount: price.amount,
+  };
 }
 
 function countAmountChanges(periods: readonly PricedPeriod[]): number {
@@ -379,8 +461,38 @@ function readRow(row: PriceHistoryComponent): ReadRow {
   return {
     amountText: row.amount,
     amount: decimal.toNumber(),
-    tiered: Object.keys(row.condition).length > 0,
+    kind: conditionKind(row.condition),
+    condition: row.condition,
   };
+}
+
+function conditionKind(condition: Record<string, unknown>): RowKind {
+  const keys = Object.keys(condition);
+  if (keys.length === 0) {
+    return "short";
+  }
+  if (keys.length !== 1) {
+    throw new Error("condition is not a known tier");
+  }
+  const key = keys[0];
+  if (key === "longContext") {
+    if (condition.longContext !== true) {
+      throw new Error("condition is not a known tier");
+    }
+    return "longContext";
+  }
+  if (!isTokenBoundKey(key) || !isPositiveInteger(condition[key])) {
+    throw new Error("condition is not a known tier");
+  }
+  return "bound";
+}
+
+function isTokenBoundKey(value: string | undefined): value is (typeof TOKEN_BOUND_KEYS)[number] {
+  return TOKEN_BOUND_KEYS.some((key) => key === value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
 function utcDay(value: Date): string {

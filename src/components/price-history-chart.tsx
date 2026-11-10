@@ -53,8 +53,8 @@ export function shortUtcDay(value: number): string {
 export function PriceHistoryChart({ series }: { series: readonly PriceHistorySeries[] }) {
   const [picked, setPicked] = useState<string | null>(null);
   const current =
-    series.find((item) => item.dimension === picked) ??
-    series.find((item) => item.dimension === "input") ??
+    series.find((item) => item.id === picked) ??
+    series.find((item) => item.id === "input") ??
     series[0];
 
   if (current === undefined) {
@@ -84,10 +84,10 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Price dimension" className="flex flex-wrap gap-2">
           {series.map((item) => {
-            const selected = item.dimension === current.dimension;
+            const selected = item.id === current.id;
             return (
               <button
-                key={item.dimension}
+                key={item.id}
                 type="button"
                 role="tab"
                 aria-selected={selected}
@@ -96,7 +96,7 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
                     ? "rounded-md border border-primary px-2.5 py-1 text-sm text-primary"
                     : "rounded-md border border-transparent px-2.5 py-1 text-sm text-muted-foreground"
                 }
-                onClick={() => setPicked(item.dimension)}
+                onClick={() => setPicked(item.id)}
               >
                 {item.label}
               </button>
@@ -107,6 +107,10 @@ export function PriceHistoryChart({ series }: { series: readonly PriceHistorySer
           {current.changeCount} {current.changeCount === 1 ? "change" : "changes"} · {current.label}
         </p>
       </div>
+
+      {current.note !== null ? (
+        <p className="mt-2 text-sm text-muted-foreground">{current.note}</p>
+      ) : null}
 
       <div
         role="img"

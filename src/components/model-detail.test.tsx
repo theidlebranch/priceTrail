@@ -12,8 +12,10 @@ const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
 const HISTORY: ModelDetailView["history"] = {
   series: [
     {
+      id: "input",
       dimension: "input",
       label: "Input",
+      note: null,
       latestAmountText: "10",
       changeCount: 0,
       segments: [
@@ -28,8 +30,10 @@ const HISTORY: ModelDetailView["history"] = {
       ],
     },
     {
+      id: "output",
       dimension: "output",
       label: "Output",
+      note: null,
       latestAmountText: "50",
       changeCount: 0,
       segments: [
@@ -45,6 +49,8 @@ const HISTORY: ModelDetailView["history"] = {
     },
   ],
   skipped: [],
+  bounds: [],
+  notes: [],
 };
 
 function row(
@@ -276,6 +282,8 @@ describe("ModelDetail", () => {
           history: {
             series: [],
             skipped: [{ dimension: "input", label: "Input" }],
+            bounds: [],
+            notes: [],
           },
         })}
       />,
@@ -286,13 +294,35 @@ describe("ModelDetail", () => {
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
+  it("shows a known token bound under the chart", () => {
+    render(
+      <ModelDetail
+        view={view({
+          history: {
+            ...HISTORY,
+            notes: [
+              "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+            ],
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Input" })).toBeTruthy();
+  });
+
   it("shows an empty price without rows, a chart, or an official link", () => {
     render(
       <ModelDetail
         view={view({
           price: null,
           headlines: [],
-          history: { series: [], skipped: [] },
+          history: { series: [], skipped: [], bounds: [], notes: [] },
           versionCount: 0,
           sinceDay: null,
           events: [],
