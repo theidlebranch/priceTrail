@@ -79,33 +79,55 @@ describe("hand-checked seed list", () => {
     expect(model(plan, "claude-mythos-5.1").components).toEqual(
       model(plan, "claude-fable-5.1").components,
     );
+    const short = { promptTokensAtMost: 272000 };
+    const long = { promptTokensOver: 272000 };
     expect(model(plan, "gpt-6-astra").components).toEqual([
-      { dimension: "input", amount: "10" },
-      { dimension: "cache_read", amount: "1" },
-      { dimension: "cache_write_30m", amount: "12.5" },
-      { dimension: "cache_write_12h", amount: "25" },
-      { dimension: "output", amount: "50" },
+      { dimension: "input", amount: "10", condition: short },
+      { dimension: "cache_read", amount: "1", condition: short },
+      { dimension: "cache_write_30m", amount: "12.5", condition: short },
+      { dimension: "cache_write_12h", amount: "25", condition: short },
+      { dimension: "output", amount: "50", condition: short },
+      { dimension: "input", amount: "20", condition: long },
+      { dimension: "cache_read", amount: "2", condition: long },
+      { dimension: "cache_write_30m", amount: "25", condition: long },
+      { dimension: "cache_write_12h", amount: "50", condition: long },
+      { dimension: "output", amount: "75", condition: long },
     ]);
     expect(model(plan, "gpt-6.1-sol").components).toEqual([
-      { dimension: "input", amount: "2" },
-      { dimension: "cache_read", amount: "0.1" },
-      { dimension: "cache_write_30m", amount: "2.5" },
-      { dimension: "cache_write_12h", amount: "5" },
-      { dimension: "output", amount: "10" },
+      { dimension: "input", amount: "2", condition: short },
+      { dimension: "cache_read", amount: "0.1", condition: short },
+      { dimension: "cache_write_30m", amount: "2.5", condition: short },
+      { dimension: "cache_write_12h", amount: "5", condition: short },
+      { dimension: "output", amount: "10", condition: short },
+      { dimension: "input", amount: "4", condition: long },
+      { dimension: "cache_read", amount: "0.2", condition: long },
+      { dimension: "cache_write_30m", amount: "5", condition: long },
+      { dimension: "cache_write_12h", amount: "10", condition: long },
+      { dimension: "output", amount: "15", condition: long },
     ]);
     expect(model(plan, "gpt-6-luna").components).toEqual([
-      { dimension: "input", amount: "0.1" },
-      { dimension: "cache_read", amount: "0.01" },
-      { dimension: "cache_write_30m", amount: "0.125" },
-      { dimension: "cache_write_12h", amount: "0.25" },
-      { dimension: "output", amount: "0.5" },
+      { dimension: "input", amount: "0.1", condition: short },
+      { dimension: "cache_read", amount: "0.01", condition: short },
+      { dimension: "cache_write_30m", amount: "0.125", condition: short },
+      { dimension: "cache_write_12h", amount: "0.25", condition: short },
+      { dimension: "output", amount: "0.5", condition: short },
+      { dimension: "input", amount: "0.2", condition: long },
+      { dimension: "cache_read", amount: "0.02", condition: long },
+      { dimension: "cache_write_30m", amount: "0.25", condition: long },
+      { dimension: "cache_write_12h", amount: "0.5", condition: long },
+      { dimension: "output", amount: "0.75", condition: long },
     ]);
     expect(model(plan, "gpt-6-sol").components).toEqual([
-      { dimension: "input", amount: "2" },
-      { dimension: "cache_read", amount: "0.2" },
-      { dimension: "cache_write_30m", amount: "2.5" },
-      { dimension: "cache_write_12h", amount: "5" },
-      { dimension: "output", amount: "10" },
+      { dimension: "input", amount: "2", condition: short },
+      { dimension: "cache_read", amount: "0.2", condition: short },
+      { dimension: "cache_write_30m", amount: "2.5", condition: short },
+      { dimension: "cache_write_12h", amount: "5", condition: short },
+      { dimension: "output", amount: "10", condition: short },
+      { dimension: "input", amount: "4", condition: long },
+      { dimension: "cache_read", amount: "0.4", condition: long },
+      { dimension: "cache_write_30m", amount: "5", condition: long },
+      { dimension: "cache_write_12h", amount: "10", condition: long },
+      { dimension: "output", amount: "15", condition: long },
     ]);
 
     const openai = plan.find((entry) => entry.lab.slug === "openai");
@@ -113,11 +135,13 @@ describe("hand-checked seed list", () => {
     expect(openai?.parsedData.warnings.some((warning) => /needs_threshold/.test(warning))).toBe(
       false,
     );
-    expect(astraRows.some((row) => row.usdPer1M === "20" && row.condition?.longContext === true)).toBe(
-      true,
-    );
-    expect(astraRows.filter((row) => row.condition === undefined).length).toBeGreaterThan(0);
-    expect(astraRows.some((row) => JSON.stringify(row.condition) === '{"promptTokensAtLeast":272000}')).toBe(
+    expect(
+      astraRows.some(
+        (row) => row.usdPer1M === "20" && row.condition?.promptTokensOver === 272000,
+      ),
+    ).toBe(true);
+    expect(astraRows.some((row) => row.condition?.promptTokensAtMost === 272000)).toBe(true);
+    expect(astraRows.some((row) => row.condition === undefined || row.condition?.longContext === true)).toBe(
       false,
     );
   });
@@ -182,7 +206,7 @@ describe("hand-checked seed list", () => {
     );
   });
 
-  it("throws when a listed model has a token tier", () => {
+  it("throws when the list omits a token tier the parser emitted", () => {
     expect(() =>
       assertSeedMatchesRows([{ slug: "example", components: [{ dimension: "input", amount: "1" }] }], [
         {
@@ -192,6 +216,22 @@ describe("hand-checked seed list", () => {
           dimension: "input",
           usdPer1M: "1",
           condition: { promptTokensUnder: 272000 },
+          source: "official",
+        },
+      ]),
+    ).toThrow(/example does not match/);
+  });
+
+  it("throws when a listed model has a dated price", () => {
+    expect(() =>
+      assertSeedMatchesRows([{ slug: "example", components: [{ dimension: "input", amount: "1" }] }], [
+        {
+          provider: "openai",
+          modelName: "example",
+          modelSlug: "example",
+          dimension: "input",
+          usdPer1M: "1",
+          validFrom: "2026-12-01",
           source: "official",
         },
       ]),
@@ -363,6 +403,7 @@ describe.skipIf(testDatabaseUrl.length === 0)("runSeed", () => {
             expected.components.map((component) => ({
               dimension: component.dimension,
               amount: component.amount,
+              condition: component.condition ?? {},
             })),
           ),
         );
@@ -482,7 +523,13 @@ function priced(
       amount: component.amount,
       condition: component.condition ?? {},
     }))
-    .sort((left, right) => left.dimension.localeCompare(right.dimension));
+    .sort((left, right) => {
+      const byDimension = left.dimension.localeCompare(right.dimension);
+      if (byDimension !== 0) {
+        return byDimension;
+      }
+      return JSON.stringify(left.condition).localeCompare(JSON.stringify(right.condition));
+    });
 }
 
 function sha256(value: string): string {

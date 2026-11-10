@@ -43,7 +43,7 @@ describe("openaiSource", () => {
       (price) =>
         price.modelSlug === "gpt-6-astra" &&
         price.dimension === "input" &&
-        price.condition === undefined,
+        price.condition?.promptTokensAtMost === 272000,
     );
 
     expect(requestedUrl).toBe(openaiSource.url);
@@ -61,9 +61,15 @@ describe("openaiSource", () => {
       usdPer1M: astraInput?.amount,
       source: "official",
     });
-    expect(parsed.rows.some((row) => row.modelSlug === "gpt-6-astra" && row.condition?.longContext === true)).toBe(
-      true,
-    );
+    expect(
+      parsed.rows.some(
+        (row) =>
+          row.modelSlug === "gpt-6-astra" &&
+          row.dimension === "input" &&
+          row.condition?.promptTokensOver === 272000 &&
+          row.usdPer1M === "20",
+      ),
+    ).toBe(true);
     expect(parsed.warnings.some((warning) => /needs_threshold/.test(warning))).toBe(false);
   });
 

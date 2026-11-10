@@ -10,9 +10,8 @@
  * The Google lab is planted by plantGoogleCatalog(), and that function
  * does not publish a price.
  *
- * OpenAI's long-context cells for these models have no token cutoff.
- * The parser keeps those rows with a longContext flag and no token count.
- * The seed does not publish them. Do not add those amounts here.
+ * The November page states the short and long cutoff once:
+ * at most 272,000 tokens, and over 272,000 tokens. Both tiers are published.
  * The November page names a 30-minute write and a 12-hour write. Those
  * are cache_write_30m and cache_write_12h. The October fixture still
  * has the old single cache-write column, and this list does not read it.
@@ -39,7 +38,44 @@ export type SeedDimension =
 export type SeedComponent = {
   dimension: SeedDimension;
   amount: string;
+  condition?: {
+    promptTokensAtMost?: number;
+    promptTokensOver?: number;
+  };
 };
+
+const SHORT_CONTEXT = { promptTokensAtMost: 272000 } as const;
+const LONG_CONTEXT = { promptTokensOver: 272000 } as const;
+
+function openAiTiers(
+  short: {
+    input: string;
+    cacheRead: string;
+    write30m: string;
+    write12h: string;
+    output: string;
+  },
+  long: {
+    input: string;
+    cacheRead: string;
+    write30m: string;
+    write12h: string;
+    output: string;
+  },
+): readonly SeedComponent[] {
+  return [
+    { dimension: "input", amount: short.input, condition: SHORT_CONTEXT },
+    { dimension: "cache_read", amount: short.cacheRead, condition: SHORT_CONTEXT },
+    { dimension: "cache_write_30m", amount: short.write30m, condition: SHORT_CONTEXT },
+    { dimension: "cache_write_12h", amount: short.write12h, condition: SHORT_CONTEXT },
+    { dimension: "output", amount: short.output, condition: SHORT_CONTEXT },
+    { dimension: "input", amount: long.input, condition: LONG_CONTEXT },
+    { dimension: "cache_read", amount: long.cacheRead, condition: LONG_CONTEXT },
+    { dimension: "cache_write_30m", amount: long.write30m, condition: LONG_CONTEXT },
+    { dimension: "cache_write_12h", amount: long.write12h, condition: LONG_CONTEXT },
+    { dimension: "output", amount: long.output, condition: LONG_CONTEXT },
+  ];
+}
 
 export type SeedModelSpec = {
   slug: string;
@@ -87,43 +123,31 @@ export const SEED_LABS: readonly SeedLabSpec[] = [
     models: [
       {
         slug: "gpt-6-astra",
-        components: [
-          { dimension: "input", amount: "10" },
-          { dimension: "cache_read", amount: "1" },
-          { dimension: "cache_write_30m", amount: "12.5" },
-          { dimension: "cache_write_12h", amount: "25" },
-          { dimension: "output", amount: "50" },
-        ],
+        components: openAiTiers(
+          { input: "10", cacheRead: "1", write30m: "12.5", write12h: "25", output: "50" },
+          { input: "20", cacheRead: "2", write30m: "25", write12h: "50", output: "75" },
+        ),
       },
       {
         slug: "gpt-6.1-sol",
-        components: [
-          { dimension: "input", amount: "2" },
-          { dimension: "cache_read", amount: "0.1" },
-          { dimension: "cache_write_30m", amount: "2.5" },
-          { dimension: "cache_write_12h", amount: "5" },
-          { dimension: "output", amount: "10" },
-        ],
+        components: openAiTiers(
+          { input: "2", cacheRead: "0.1", write30m: "2.5", write12h: "5", output: "10" },
+          { input: "4", cacheRead: "0.2", write30m: "5", write12h: "10", output: "15" },
+        ),
       },
       {
         slug: "gpt-6-luna",
-        components: [
-          { dimension: "input", amount: "0.1" },
-          { dimension: "cache_read", amount: "0.01" },
-          { dimension: "cache_write_30m", amount: "0.125" },
-          { dimension: "cache_write_12h", amount: "0.25" },
-          { dimension: "output", amount: "0.5" },
-        ],
+        components: openAiTiers(
+          { input: "0.1", cacheRead: "0.01", write30m: "0.125", write12h: "0.25", output: "0.5" },
+          { input: "0.2", cacheRead: "0.02", write30m: "0.25", write12h: "0.5", output: "0.75" },
+        ),
       },
       {
         slug: "gpt-6-sol",
-        components: [
-          { dimension: "input", amount: "2" },
-          { dimension: "cache_read", amount: "0.2" },
-          { dimension: "cache_write_30m", amount: "2.5" },
-          { dimension: "cache_write_12h", amount: "5" },
-          { dimension: "output", amount: "10" },
-        ],
+        components: openAiTiers(
+          { input: "2", cacheRead: "0.2", write30m: "2.5", write12h: "5", output: "10" },
+          { input: "4", cacheRead: "0.4", write30m: "5", write12h: "10", output: "15" },
+        ),
       },
     ],
   },

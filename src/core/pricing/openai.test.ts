@@ -113,31 +113,33 @@ describe("parseOpenAiPricing", () => {
   it("parses every Standard section and ignores Batch", () => {
     const { rows, warnings } = parseOpenAiPricing(fixture);
 
-    const lunaInput = findRow(rows, "gpt-6-luna", "input");
+    const short = { promptTokensAtMost: 272000 };
+    const long = { promptTokensOver: 272000 };
+    const lunaInput = findRow(rows, "gpt-6-luna", "input", short);
     expect(lunaInput).toMatchObject({
       provider: "openai",
       modelName: "gpt-6-luna",
       usdPer1M: "0.1",
       source: "official",
     });
-    expect(lunaInput?.condition).toBeUndefined();
-    expect(findRow(rows, "gpt-6-luna", "output")?.usdPer1M).toBe("0.5");
-    expect(findRow(rows, "gpt-6-luna", "cache_read")?.usdPer1M).toBe("0.01");
-    expect(findRow(rows, "gpt-6-luna", "cache_write_30m")?.usdPer1M).toBe("0.125");
-    expect(findRow(rows, "gpt-6-luna", "cache_write_12h")?.usdPer1M).toBe("0.25");
+    expect(findRow(rows, "gpt-6-luna", "output", short)?.usdPer1M).toBe("0.5");
+    expect(findRow(rows, "gpt-6-luna", "cache_read", short)?.usdPer1M).toBe("0.01");
+    expect(findRow(rows, "gpt-6-luna", "cache_write_30m", short)?.usdPer1M).toBe("0.125");
+    expect(findRow(rows, "gpt-6-luna", "cache_write_12h", short)?.usdPer1M).toBe("0.25");
     expect(findRow(rows, "gpt-6-luna", "cache_write")).toBeUndefined();
 
     expect(findRow(rows, "gpt-6-luna", "input", { promptTokensAtLeast: 272000 })).toBeUndefined();
-    expect(findRow(rows, "gpt-6-luna", "input", { longContext: true })).toMatchObject({
+    expect(findRow(rows, "gpt-6-luna", "input", { longContext: true })).toBeUndefined();
+    expect(findRow(rows, "gpt-6-luna", "input", long)).toMatchObject({
       usdPer1M: "0.2",
-      condition: { longContext: true },
+      condition: long,
     });
     expect(warnings.some((warning) => /needs_threshold/i.test(warning))).toBe(false);
 
-    expect(findRow(rows, "gpt-6-cyber", "input")?.usdPer1M).toBe("20");
-    expect(findRow(rows, "gpt-6-cyber", "cache_write_30m")?.usdPer1M).toBe("25");
-    expect(findRow(rows, "gpt-6-rosalind", "input")?.usdPer1M).toBe("15");
-    expect(findRow(rows, "gpt-6-rosalind", "cache_write_12h")?.usdPer1M).toBe("37.5");
+    expect(findRow(rows, "gpt-6-cyber", "input", short)?.usdPer1M).toBe("20");
+    expect(findRow(rows, "gpt-6-cyber", "cache_write_30m", short)?.usdPer1M).toBe("25");
+    expect(findRow(rows, "gpt-6-rosalind", "input", short)?.usdPer1M).toBe("15");
+    expect(findRow(rows, "gpt-6-rosalind", "cache_write_12h", short)?.usdPer1M).toBe("37.5");
     expect(findRow(rows, "gpt-4o", "input")?.usdPer1M).toBe("2.5");
     expect(findRow(rows, "gpt-4o", "cache_read")?.usdPer1M).toBe("1.25");
     expect(findRow(rows, "gpt-4o", "cache_write_30m")).toBeUndefined();
@@ -166,6 +168,31 @@ describe("parseOpenAiPricing", () => {
     expect(rows.some((row) => row.modelSlug === "gpt-6-astra" && row.usdPer1M === "5")).toBe(
       false,
     );
+  });
+
+  it("reads the sentence that states the short and long context cutoffs", () => {
+    const { rows } = parseOpenAiPricing(fixture);
+
+    expect(findRow(rows, "gpt-6-astra", "input", { promptTokensAtMost: 272000 })).toMatchObject({
+      usdPer1M: "10",
+    });
+    expect(findRow(rows, "gpt-6-astra", "input", { promptTokensOver: 272000 })).toMatchObject({
+      usdPer1M: "20",
+    });
+    expect(findRow(rows, "gpt-5.5", "input", { promptTokensUnder: 272000 })?.usdPer1M).toBe("5");
+    expect(findRow(rows, "gpt-5.5", "input", { promptTokensAtLeast: 272000 })?.usdPer1M).toBe("10");
+  });
+
+  it("keeps an unstated long-context price when that sentence is removed", () => {
+    const markdown = fixture.replace(
+      "Short context: ≤272K input tokens. Long context: >272K input tokens.",
+      "",
+    );
+    const { rows } = parseOpenAiPricing(markdown);
+
+    expect(findRow(rows, "gpt-6-astra", "input")?.usdPer1M).toBe("10");
+    expect(findRow(rows, "gpt-6-astra", "input")?.condition).toBeUndefined();
+    expect(findRow(rows, "gpt-6-astra", "input", { longContext: true })?.usdPer1M).toBe("20");
   });
 
   it("throws when the unit sentence is missing", () => {

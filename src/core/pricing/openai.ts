@@ -47,6 +47,11 @@ type ParsedModel = {
   longCondition?: Condition;
 };
 
+type PageContextBounds = {
+  short: Condition;
+  long: Condition;
+};
+
 export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
   if (!markdown.includes(UNIT_SENTENCE)) {
     throw new Error(`missing unit sentence: expected '${UNIT_SENTENCE}'`);
@@ -64,6 +69,7 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
   const warnings: string[] = [];
   const rows: NormalizedPrice[] = [];
   const seenPrices = new Map<string, string>();
+  const pageBounds = readPageContextBounds(markdown);
 
   for (let sectionIndex = 0; sectionIndex < headingIndexes.length; sectionIndex += 1) {
     const sectionStart = headingIndexes[sectionIndex] + 1;
@@ -78,7 +84,7 @@ export function parseOpenAiPricing(markdown: string): OpenAiParseResult {
       return isOtherModeHeading(line);
     });
     const section = lines.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd).join("\n");
-    readStandardSection(section, warnings, rows, seenPrices);
+    readStandardSection(section, warnings, rows, seenPrices, pageBounds);
   }
 
   if (rows.length === 0) {
@@ -106,6 +112,7 @@ function readStandardSection(
   warnings: string[],
   rows: NormalizedPrice[],
   seenPrices: Map<string, string>,
+  pageBounds: PageContextBounds | undefined,
 ): void {
   const tables = parseMarkdownTables(section);
   if (tables.length === 0) {
@@ -127,7 +134,7 @@ function readStandardSection(
   let pricedModels = 0;
   let repeatedModels = 0;
   for (const table of [...fullTables, ...shortTables]) {
-    const read = readPriceTable(table, warnings, rows, seenPrices);
+    const read = readPriceTable(table, warnings, rows, seenPrices, pageBounds);
     pricedModels += read.pricedModels;
     repeatedModels += read.repeatedModels;
   }
@@ -162,8 +169,11 @@ function readPriceTable(
   warnings: string[],
   rows: NormalizedPrice[],
   seenPrices: Map<string, string>,
+  pageBounds: PageContextBounds | undefined,
 ): { pricedModels: number; repeatedModels: number } {
-  const columns = isFullTable(table.headers) ? PRICE_COLUMNS : SHORT_COLUMNS;
+  const fullTable = isFullTable(table.headers);
+  const columns = fullTable ? PRICE_COLUMNS : SHORT_COLUMNS;
+  const bounds = fullTable ? pageBounds : undefined;
   const knownHeaders = new Set<string>([MODEL_HEADER, ...columns.map((column) => column.header)]);
   if (!table.headers.includes(MODEL_HEADER)) {
     throw new Error(`missing required column: ${MODEL_HEADER}`);
@@ -217,7 +227,7 @@ function readPriceTable(
           modelSlug: model.modelSlug,
           dimension: column.dimension,
           usdPer1M: amount,
-          condition: conditionForContext(model, column.context),
+          condition: conditionForContext(model, column.context, bounds),
           source: "official",
         }),
       );
@@ -249,13 +259,51 @@ function priceSignature(
   });
 }
 
-function conditionForContext(model: ParsedModel, context: ContextKind): Condition | undefined {
+function conditionForContext(
+  model: ParsedModel,
+  context: ContextKind,
+  pageBounds: PageContextBounds | undefined,
+): Condition | undefined {
   if (context === "short") {
-    return model.shortCondition;
+    return model.shortCondition ?? pageBounds?.short;
   }
-  // A stated cutoff stays a token count. A missing cutoff is only a flag.
-  // The number 272000 is not written here.
-  return model.longCondition ?? { longContext: true };
+  // A model cell that names its own cutoff wins. The page sentence is next.
+  // A missing cutoff is only a flag. The number is not copied from another row.
+  return model.longCondition ?? pageBounds?.long ?? { longContext: true };
+}
+
+/**
+ * The flagship page states one definition of the short and long columns.
+ * `≤272K` is at most that many tokens. `>272K` is over that many.
+ * A model cell that already names a cutoff is left alone by the caller.
+ */
+function readPageContextBounds(markdown: string): PageContextBounds | undefined {
+  const matches = [
+    ...markdown.matchAll(
+      /Short context:\s*≤(\d+)K input tokens\.\s*Long context:\s*>(\d+)K input tokens\./g,
+    ),
+  ];
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  const bounds = matches.map((match) => {
+    const shortThousands = Number(match[1]);
+    const longThousands = Number(match[2]);
+    if (shortThousands !== longThousands || shortThousands <= 0) {
+      throw new Error(`unparseable context cutoff sentence: ${match[0]}`);
+    }
+    return shortThousands * 1000;
+  });
+  const bound = bounds[0];
+  if (bound === undefined || bounds.some((value) => value !== bound)) {
+    throw new Error("context cutoff sentences disagree");
+  }
+
+  return {
+    short: { promptTokensAtMost: bound },
+    long: { promptTokensOver: bound },
+  };
 }
 
 function parseMarkdownTables(markdown: string): MarkdownTable[] {

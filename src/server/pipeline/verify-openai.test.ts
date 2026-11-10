@@ -94,7 +94,8 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource for OpenAI", () 
       expect(warningList(stored[0]?.parsedData).some((warning) => /needs_threshold/.test(warning))).toBe(
         false,
       );
-      expect(JSON.stringify(stored[0]?.parsedData)).toContain('"longContext":true');
+      expect(JSON.stringify(stored[0]?.parsedData)).toContain('"promptTokensAtMost":272000');
+      expect(JSON.stringify(stored[0]?.parsedData)).toContain('"promptTokensOver":272000');
 
       const items = await tx
         .select()
