@@ -8,8 +8,11 @@ import { pricePrecisionLabel } from "@/core/pricing/precision";
  * The page passes asOf, so a test can freeze the day the open line ends.
  *
  * A short price has an empty condition. A long-context price whose cutoff
- * was not stated is its own line. A known token bound stays off the line
- * and is returned so the page can name it. Two short prices, or two
+ * was not stated is its own line. A matching pair of token bounds is those
+ * two lines as well: the lower bound is the short price, and the upper
+ * bound is the long-context price. The number on the pair is the model's
+ * own cutoff. A token bound beside a plain price stays off the line and
+ * is returned so the page can name it. Two short prices, or two
  * long-context prices, skip that line instead of picking a row. A
  * dimension that has no line left is skipped. The other dimensions
  * still chart. A bad amount, unit, date, or unknown dimension still throws.
@@ -135,6 +138,25 @@ const TOKEN_BOUND_KEYS = [
   "promptTokensUnder",
   "promptTokensAtLeast",
 ] as const;
+
+/**
+ * An older OpenAI row stored "cutoff not stated" instead of a number.
+ * The current page states 272,000. Reading the flag as that number lets
+ * the old row and the new row sit on the same line. A row that already
+ * names its own cutoff, such as 200,000, is left alone.
+ */
+const UNSTATED_LONG_CONTEXT_TOKENS = 272_000;
+
+const LOWER_KEYS = ["promptTokensAtMost", "promptTokensUnder"] as const;
+const UPPER_KEYS = ["promptTokensOver", "promptTokensAtLeast"] as const;
+
+export type ContextBoundKey = (typeof LOWER_KEYS)[number] | (typeof UPPER_KEYS)[number];
+
+export type ContextBound = {
+  tokens: number;
+  lower: (typeof LOWER_KEYS)[number];
+  upper: (typeof UPPER_KEYS)[number];
+};
 
 type RowKind = "short" | "longContext" | "bound";
 
@@ -354,7 +376,12 @@ function classifyDimension(
       }
     }
 
-    if (boundRows.length > 0) {
+    const pair = shorts.length === 0 && longs.length === 0 ? findPair(boundRows) : null;
+    if (pair !== null) {
+      short.priced.push(pricedPeriod(period, pair.lower));
+      longContext.priced.push(pricedPeriod(period, pair.upper));
+      bounds = [];
+    } else {
       bounds = boundRows.map((row) => ({
         dimension,
         amountText: row.amountText,
@@ -519,6 +546,234 @@ function assertCalendarDate(value: string): void {
 
 function isRealDate(value: Date): boolean {
   return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
+function findPair(rows: readonly ReadRow[]): { lower: ReadRow; upper: ReadRow } | null {
+  if (rows.length !== 2) {
+    return null;
+  }
+  const [first, second] = rows;
+  if (first === undefined || second === undefined) {
+    return null;
+  }
+  const left = boundRole(first.condition);
+  const right = boundRole(second.condition);
+  if (left === null || right === null || left.tokens !== right.tokens) {
+    return null;
+  }
+  if (left.side === "lower" && right.side === "upper" && keysMatch(left.key, right.key)) {
+    return { lower: first, upper: second };
+  }
+  if (right.side === "lower" && left.side === "upper" && keysMatch(right.key, left.key)) {
+    return { lower: second, upper: first };
+  }
+  return null;
+}
+
+type BoundRole = {
+  side: "lower" | "upper";
+  key: ContextBoundKey;
+  tokens: number;
+};
+
+function boundRole(condition: Record<string, unknown>): BoundRole | null {
+  const role = conditionRole(condition);
+  if (role === "plain" || role === "unstated") {
+    return null;
+  }
+  return role;
+}
+
+type ConditionRole = "plain" | "unstated" | BoundRole;
+
+function conditionRole(condition: unknown): ConditionRole {
+  if (!isRecord(condition)) {
+    throw new Error("condition is not a known tier");
+  }
+  const keys = Object.keys(condition);
+  if (keys.length === 0) {
+    return "plain";
+  }
+  if (keys.length !== 1) {
+    throw new Error("condition is not a known tier");
+  }
+  const key = keys[0];
+  if (key === "longContext") {
+    if (condition.longContext !== true) {
+      throw new Error("condition is not a known tier");
+    }
+    return "unstated";
+  }
+  if (!isContextBoundKey(key) || !isPositiveInteger(condition[key])) {
+    throw new Error("condition is not a known tier");
+  }
+  const side = isLowerKey(key) ? "lower" : "upper";
+  return { side, key, tokens: condition[key] };
+}
+
+function keysMatch(lower: ContextBoundKey, upper: ContextBoundKey): boolean {
+  return (
+    (lower === "promptTokensAtMost" && upper === "promptTokensOver") ||
+    (lower === "promptTokensUnder" && upper === "promptTokensAtLeast")
+  );
+}
+
+function isLowerKey(value: ContextBoundKey): value is (typeof LOWER_KEYS)[number] {
+  return LOWER_KEYS.some((key) => key === value);
+}
+
+function isContextBoundKey(value: string | undefined): value is ContextBoundKey {
+  return isTokenBoundKey(value);
+}
+
+/**
+ * The two rows of one dimension, when they are one short price and one
+ * long price at the same cutoff. A plain price plus one extra bound is
+ * not a pair. A plain price next to an unstated long-context flag is
+ * read as 272,000 so it matches a later row that stored the number.
+ */
+export function matchingContext(rows: readonly { condition: unknown }[]): ContextBound | null {
+  if (rows.length !== 2) {
+    return null;
+  }
+  const roles = rows.map((row) => conditionRole(row.condition));
+  const [left, right] = roles;
+  if (left === undefined || right === undefined) {
+    return null;
+  }
+  const numeric = numericPair(left, right);
+  if (numeric !== null) {
+    return numeric;
+  }
+  const plainFirst = left === "plain" && right === "unstated";
+  const plainSecond = right === "plain" && left === "unstated";
+  if (!plainFirst && !plainSecond) {
+    return null;
+  }
+  return {
+    tokens: UNSTATED_LONG_CONTEXT_TOKENS,
+    lower: "promptTokensAtMost",
+    upper: "promptTokensOver",
+  };
+}
+
+function numericPair(left: ConditionRole, right: ConditionRole): ContextBound | null {
+  if (left === "plain" || left === "unstated" || right === "plain" || right === "unstated") {
+    return null;
+  }
+  if (left.tokens !== right.tokens) {
+    return null;
+  }
+  if (left.side === "lower" && right.side === "upper") {
+    return boundFrom(left, right);
+  }
+  if (right.side === "lower" && left.side === "upper") {
+    return boundFrom(right, left);
+  }
+  return null;
+}
+
+function boundFrom(lower: BoundRole, upper: BoundRole): ContextBound | null {
+  if (lower.tokens !== upper.tokens) {
+    return null;
+  }
+  if (lower.key === "promptTokensAtMost" && upper.key === "promptTokensOver") {
+    return { tokens: lower.tokens, lower: lower.key, upper: upper.key };
+  }
+  if (lower.key === "promptTokensUnder" && upper.key === "promptTokensAtLeast") {
+    return { tokens: lower.tokens, lower: lower.key, upper: upper.key };
+  }
+  return null;
+}
+
+/**
+ * Replace an unstated long-context flag, and the plain price beside it,
+ * with the 272,000 bounds. Other rows are copied through unchanged.
+ * This does not write a price. It only gives the chart and the change
+ * log one key for the old row and the new row.
+ */
+export function rewriteUnstatedLongContext<T extends { dimension: string; condition: unknown }>(
+  components: readonly T[],
+): T[] {
+  const indexes = new Map<string, number[]>();
+  components.forEach((component, index) => {
+    const list = indexes.get(component.dimension) ?? [];
+    list.push(index);
+    indexes.set(component.dimension, list);
+  });
+
+  const replacements = new Map<number, ContextBoundKey>();
+  for (const group of indexes.values()) {
+    if (group.length !== 2) {
+      continue;
+    }
+    const first = group[0];
+    const second = group[1];
+    if (first === undefined || second === undefined) {
+      continue;
+    }
+    const left = conditionRole(components[first]?.condition);
+    const right = conditionRole(components[second]?.condition);
+    const plainIndex = left === "plain" ? first : right === "plain" ? second : -1;
+    const unstatedIndex = left === "unstated" ? first : right === "unstated" ? second : -1;
+    if (plainIndex < 0 || unstatedIndex < 0) {
+      continue;
+    }
+    replacements.set(plainIndex, "promptTokensAtMost");
+    replacements.set(unstatedIndex, "promptTokensOver");
+  }
+
+  return components.map((component, index) => {
+    const key = replacements.get(index);
+    if (key === undefined) {
+      return component;
+    }
+    return { ...component, condition: { [key]: UNSTATED_LONG_CONTEXT_TOKENS } };
+  });
+}
+
+export function contextHeading(key: ContextBoundKey, tokens: number): string {
+  const count = formatTokens(tokens);
+  if (key === "promptTokensAtMost") {
+    return `Up to ${count} tokens`;
+  }
+  if (key === "promptTokensUnder") {
+    return `Under ${count} tokens`;
+  }
+  if (key === "promptTokensOver") {
+    return `Over ${count} tokens`;
+  }
+  return `At least ${count} tokens`;
+}
+
+export function shortConditionLabel(condition: unknown): string {
+  const role = conditionRole(condition);
+  if (role === "plain") {
+    return "";
+  }
+  if (role === "unstated") {
+    return "long context";
+  }
+  const mark =
+    role.key === "promptTokensAtMost"
+      ? "≤"
+      : role.key === "promptTokensUnder"
+        ? "<"
+        : role.key === "promptTokensOver"
+          ? ">"
+          : "≥";
+  return `${mark}${compactTokens(role.tokens)}`;
+}
+
+function formatTokens(tokens: number): string {
+  return new Intl.NumberFormat("en-US").format(tokens);
+}
+
+function compactTokens(tokens: number): string {
+  if (tokens >= 1000 && tokens % 1000 === 0) {
+    return `${tokens / 1000}K`;
+  }
+  return formatTokens(tokens);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

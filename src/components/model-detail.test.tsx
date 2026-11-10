@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModelDetailView } from "@/app/models/model-detail-view";
 import { ModelDetail } from "@/components/model-detail";
@@ -70,7 +70,7 @@ function row(
 }
 
 function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
-  return {
+  const next: ModelDetailView = {
     labName: "Anthropic",
     modelName: "Claude Fable 5.1",
     retired: false,
@@ -80,6 +80,7 @@ function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
       { label: "Input", amountText: "$10", change: null },
       { label: "Output", amountText: "$50", change: null },
     ],
+    tiers: [],
     events: [],
     history: HISTORY,
     changeUnderReview: false,
@@ -97,6 +98,17 @@ function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
     },
     ...overrides,
   };
+  if (overrides.tiers === undefined) {
+    next.tiers = [
+      {
+        label: null,
+        headlines: next.headlines,
+        rows: next.price?.components ?? [],
+        series: next.history.series,
+      },
+    ];
+  }
+  return next;
 }
 
 describe("ModelDetail", () => {
@@ -113,6 +125,7 @@ describe("ModelDetail", () => {
     expect(screen.getByText("0.025×")).toBeTruthy();
     expect(screen.getByText("No price changes since 2026-10-18.")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Input", selected: true })).toBeTruthy();
+    expect(screen.queryByRole("tablist", { name: "Context tier" })).toBeNull();
     expect(screen.queryByText("↓")).toBeNull();
     expect(screen.queryByText("Retired")).toBeNull();
 
@@ -121,6 +134,108 @@ describe("ModelDetail", () => {
     expect(screen.queryByText("All prices shown on this page are examples.")).toBeNull();
     expect(screen.queryByText("No current price is published.")).toBeNull();
     expect(screen.queryByText("A possible change is under review.")).toBeNull();
+  });
+
+  it("shows one context tier at a time and keeps the change log whole", () => {
+    const shortSeries = {
+      id: "input",
+      dimension: "input" as const,
+      label: "Input",
+      note: null,
+      latestAmountText: "2",
+      changeCount: 0,
+      segments: [
+        {
+          kind: "known" as const,
+          from: "2026-10-18",
+          to: "2026-11-05",
+          amountText: "2",
+          amount: 2,
+          label: "Changed on or before 2026-10-18.",
+        },
+      ],
+    };
+    const longSeries = {
+      ...shortSeries,
+      id: "input:longContext",
+      latestAmountText: "4",
+      segments: [
+        {
+          ...shortSeries.segments[0],
+          amountText: "4",
+          amount: 4,
+        },
+      ],
+    };
+
+    render(
+      <ModelDetail
+        view={view({
+          headlines: [{ label: "Input", amountText: "$2", change: null }],
+          tiers: [
+            {
+              label: "Up to 272,000 tokens",
+              headlines: [{ label: "Input", amountText: "$2", change: null }],
+              rows: [row("Input", "$2"), row("Output", "$12", "", "6×")],
+              series: [shortSeries],
+            },
+            {
+              label: "Over 272,000 tokens",
+              headlines: [{ label: "Input", amountText: "$4", change: null }],
+              rows: [row("Input", "$4"), row("Output", "$18", "", "4.5×")],
+              series: [longSeries],
+            },
+          ],
+          events: [
+            {
+              dateLine: "Changed on or before 2026-10-18.",
+              changes: [
+                {
+                  dimensionLabel: "Input",
+                  conditionLabel: "≤272K",
+                  fromAmountText: "$1",
+                  toAmountText: "$2",
+                  direction: "up",
+                  pctText: "100",
+                },
+                {
+                  dimensionLabel: "Input",
+                  conditionLabel: ">272K",
+                  fromAmountText: "$3",
+                  toAmountText: "$4",
+                  direction: "up",
+                  pctText: "33.33",
+                },
+              ],
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Up to 272,000 tokens", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Over 272,000 tokens", selected: false })).toBeTruthy();
+    expect(screen.getAllByText("$2").length).toBeGreaterThan(0);
+    expect(screen.getByText("$12")).toBeTruthy();
+    expect(screen.queryByText("$4")).toBeNull();
+    expect(screen.queryByText("$18")).toBeNull();
+    expect(screen.getByRole("table", { name: "Input price history" }).textContent).toContain("$2");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Over 272,000 tokens" }));
+
+    expect(screen.getByRole("tab", { name: "Over 272,000 tokens", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Up to 272,000 tokens", selected: false })).toBeTruthy();
+    expect(screen.getAllByText("$4").length).toBeGreaterThan(0);
+    expect(screen.getByText("$18")).toBeTruthy();
+    expect(screen.queryByText("$2")).toBeNull();
+    expect(screen.queryByText("$12")).toBeNull();
+    expect(screen.getByRole("table", { name: "Input price history" }).textContent).toContain("$4");
+
+    const log = screen.getByRole("heading", { name: "Change log" }).closest("section");
+    expect(log?.textContent).toContain("≤272K");
+    expect(log?.textContent).toContain(">272K");
+    expect(log?.textContent).toContain("$1 → $2");
+    expect(log?.textContent).toContain("$3 → $4");
   });
 
   it("renders component rows in the order the view gave them", () => {

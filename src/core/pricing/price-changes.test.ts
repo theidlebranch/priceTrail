@@ -293,6 +293,120 @@ describe("toPriceChanges", () => {
     expect(changes.lastChanges.map((change) => change.condition)).toEqual([tier]);
   });
 
+  it("keeps a plain short price when the next version states its cutoff", () => {
+    const changes = toPriceChanges([
+      period({
+        components: [row("input", "2"), row("output", "10")],
+      }),
+      period({
+        firstSeenAt: NEXT_SEEN,
+        lastSeenAt: null,
+        components: [
+          row("input", "2", { promptTokensAtMost: 272000 }),
+          row("input", "4", { promptTokensOver: 272000 }),
+          row("output", "10", { promptTokensAtMost: 272000 }),
+          row("output", "15", { promptTokensOver: 272000 }),
+        ],
+      }),
+    ]);
+
+    expect(changes.events[0]?.changes).toEqual([
+      {
+        dimension: "input",
+        condition: { promptTokensOver: 272000 },
+        fromAmount: null,
+        toAmount: "4",
+        direction: null,
+        pctText: null,
+      },
+      {
+        dimension: "output",
+        condition: { promptTokensOver: 272000 },
+        fromAmount: null,
+        toAmount: "15",
+        direction: null,
+        pctText: null,
+      },
+    ]);
+    expect(changes.lastChanges).toEqual([]);
+  });
+
+  it("does not call a filled-in 272,000 cutoff a price change", () => {
+    const changes = toPriceChanges([
+      period({
+        components: [row("input", "2"), row("input", "4", { longContext: true })],
+      }),
+      period({
+        firstSeenAt: NEXT_SEEN,
+        lastSeenAt: null,
+        components: [
+          row("input", "2", { promptTokensAtMost: 272000 }),
+          row("input", "4", { promptTokensOver: 272000 }),
+        ],
+      }),
+    ]);
+
+    expect(changes.events).toEqual([]);
+    expect(changes.latest).toBeNull();
+    expect(changes.lastChanges).toEqual([]);
+  });
+
+  it("keeps a 200,000 pair on its own key when the amount changes", () => {
+    const short = { promptTokensAtMost: 200000 };
+    const long = { promptTokensOver: 200000 };
+    const changes = toPriceChanges([
+      period({
+        components: [row("input", "1.25", short), row("input", "2.5", long)],
+      }),
+      period({
+        firstSeenAt: NEXT_SEEN,
+        lastSeenAt: null,
+        components: [row("input", "1.25", short), row("input", "2", long)],
+      }),
+    ]);
+
+    expect(changes.events[0]?.changes).toEqual([
+      {
+        dimension: "input",
+        condition: long,
+        fromAmount: "2.5",
+        toAmount: "2",
+        direction: "down",
+        pctText: "20",
+      },
+    ]);
+  });
+
+  it("still reports a cache-write split when the cutoff was only filled in", () => {
+    const changes = toPriceChanges([
+      period({
+        components: [
+          row("input", "2"),
+          row("input", "4", { longContext: true }),
+          row("cache_write", "2.5"),
+          row("cache_write", "5", { longContext: true }),
+        ],
+      }),
+      period({
+        firstSeenAt: NEXT_SEEN,
+        lastSeenAt: null,
+        components: [
+          row("input", "2", { promptTokensAtMost: 272000 }),
+          row("input", "4", { promptTokensOver: 272000 }),
+          row("cache_write_30m", "2.5", { promptTokensAtMost: 272000 }),
+          row("cache_write_30m", "5", { promptTokensOver: 272000 }),
+        ],
+      }),
+    ]);
+
+    expect(changes.events[0]?.changes.map((change) => change.dimension)).toEqual([
+      "cache_write",
+      "cache_write",
+      "cache_write_30m",
+      "cache_write_30m",
+    ]);
+  });
+
   it("does not use an older change as the latest step when the open price is unchanged", () => {
     const changes = toPriceChanges([
       period({ components: [row("input", "15"), row("output", "5")] }),

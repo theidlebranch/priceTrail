@@ -115,6 +115,29 @@ describe("toModelDetailView", () => {
         { label: "Input", amountText: "$10", change: null },
         { label: "Output", amountText: "$50", change: null },
       ],
+      tiers: [
+        {
+          label: null,
+          headlines: [
+            { label: "Input", amountText: "$10", change: null },
+            { label: "Output", amountText: "$50", change: null },
+          ],
+          rows: [
+            priceRow("Input", "$10"),
+            priceRow("Cache read", "$0.25", "", "0.025×"),
+            priceRow("Output", "$50", "", "5×"),
+            priceRow("Cache write (5 minutes)", "$12.5", "", "1.25×"),
+            priceRow("Cache write (1 hour)", "$20", "", "2×"),
+          ],
+          series: [
+            openSeries("input", "Input", "10", 10),
+            openSeries("cache_read", "Cache read", "0.25", 0.25),
+            openSeries("output", "Output", "50", 50),
+            openSeries("cache_write_5m", "Cache write (5 minutes)", "12.5", 12.5),
+            openSeries("cache_write_1h", "Cache write (1 hour)", "20", 20),
+          ],
+        },
+      ],
       events: [],
       price: {
         dateLine: "Changed on or before 2026-10-18.",
@@ -126,6 +149,18 @@ describe("toModelDetailView", () => {
           priceRow("Output", "$50", "", "5×"),
           priceRow("Cache write (5 minutes)", "$12.5", "", "1.25×"),
           priceRow("Cache write (1 hour)", "$20", "", "2×"),
+        ],
+        groups: [
+          {
+            heading: null,
+            rows: [
+              priceRow("Input", "$10"),
+              priceRow("Cache read", "$0.25", "", "0.025×"),
+              priceRow("Output", "$50", "", "5×"),
+              priceRow("Cache write (5 minutes)", "$12.5", "", "1.25×"),
+              priceRow("Cache write (1 hour)", "$20", "", "2×"),
+            ],
+          },
         ],
       },
       history: {
@@ -175,11 +210,26 @@ describe("toModelDetailView", () => {
       AS_OF,
     );
 
-    expect(view.price?.components).toEqual([
-      priceRow("Cache write (5 minutes)", "$1.25", "prompts over 200,000 tokens"),
-      priceRow("Cache write (5 minutes)", "$1", "prompts up to 200,000 tokens"),
-      priceRow("Cache write (1 hour)", "$2"),
+    expect(view.price?.groups).toEqual([
+      { heading: null, rows: [priceRow("Cache write (1 hour)", "$2")] },
+      {
+        heading: "Up to 200,000 tokens",
+        rows: [priceRow("Cache write (5 minutes)", "$1")],
+      },
+      {
+        heading: "Over 200,000 tokens",
+        rows: [priceRow("Cache write (5 minutes)", "$1.25")],
+      },
     ]);
+    expect(view.tiers.map((tier) => tier.label)).toEqual([
+      "Up to 200,000 tokens",
+      "Over 200,000 tokens",
+    ]);
+    expect(view.tiers[0]?.rows.map((row) => row.dimensionLabel)).toEqual([
+      "Cache write (1 hour)",
+      "Cache write (5 minutes)",
+    ]);
+    expect(view.tiers[1]?.rows).toEqual([priceRow("Cache write (5 minutes)", "$1.25")]);
     expect(view.headlines).toEqual([]);
   });
 
@@ -323,16 +373,139 @@ describe("toModelDetailView", () => {
     );
 
     expect(view.headlines).toEqual([{ label: "Input", amountText: "$2", change: null }]);
-    expect(view.price?.components).toEqual([
-      priceRow("Input", "$2"),
-      priceRow("Input", "$4", "long context, cutoff not stated", "2×"),
+    expect(view.price?.groups).toEqual([
+      { heading: "Up to 272,000 tokens", rows: [priceRow("Input", "$2")] },
+      { heading: "Over 272,000 tokens", rows: [priceRow("Input", "$4")] },
+    ]);
+    expect(view.tiers.map((tier) => tier.label)).toEqual([
+      "Up to 272,000 tokens",
+      "Over 272,000 tokens",
+    ]);
+    expect(view.tiers[0]?.headlines).toEqual([{ label: "Input", amountText: "$2", change: null }]);
+    expect(view.tiers[1]?.headlines).toEqual([{ label: "Input", amountText: "$4", change: null }]);
+    expect(view.tiers[1]?.rows).toEqual([priceRow("Input", "$4")]);
+    expect(view.tiers[1]?.series).toEqual([
+      openSeries("input", "Input", "4", 4, "input:longContext"),
     ]);
     expect(view.history.series).toEqual([
       openSeries("input", "Input", "2", 2),
-      openSeries("input", "Input, long context", "4", 4, "input:longContext", "Cutoff not stated."),
+      openSeries("input", "Input, long context", "4", 4, "input:longContext"),
     ]);
     expect(view.history.skipped).toEqual([]);
     expect(view.history.notes).toEqual([]);
+  });
+
+  it("groups a 200,000 pair and keeps that cutoff off the 272,000 guess", () => {
+    const tier = (dimension: "input" | "output" | "cache_read", short: string, long: string) => [
+      component({
+        dimension,
+        amount: short,
+        condition: { promptTokensAtMost: 200000 },
+      }),
+      component({
+        dimension,
+        amount: long,
+        condition: { promptTokensOver: 200000 },
+      }),
+    ];
+    const current = version({
+      components: [
+        ...tier("input", "1.25", "2.5"),
+        ...tier("output", "10", "15"),
+        ...tier("cache_read", "0.125", "0.25"),
+      ],
+    });
+    const view = toModelDetailView(
+      read({
+        labName: "Google",
+        modelName: "Gemini 2.5 Pro",
+        offerings: [
+          offering({
+            openVersions: [current],
+            historyVersions: [{ ...current, lastSeenAt: null }],
+          }),
+        ],
+      }),
+      AS_OF,
+    );
+
+    expect(view.headlines).toEqual([
+      { label: "Input", amountText: "$1.25", change: null },
+      { label: "Output", amountText: "$10", change: null },
+    ]);
+    expect(view.tiers.map((tier) => tier.label)).toEqual([
+      "Up to 200,000 tokens",
+      "Over 200,000 tokens",
+    ]);
+    expect(view.tiers[0]?.headlines).toEqual([
+      { label: "Input", amountText: "$1.25", change: null },
+      { label: "Output", amountText: "$10", change: null },
+    ]);
+    expect(view.tiers[1]?.headlines).toEqual([
+      { label: "Input", amountText: "$2.5", change: null },
+      { label: "Output", amountText: "$15", change: null },
+    ]);
+    expect(view.tiers[0]?.rows.map((row) => row.multiplierText)).toEqual([null, "0.1×", "8×"]);
+    expect(view.tiers[1]?.rows.map((row) => row.multiplierText)).toEqual([null, "0.1×", "6×"]);
+    expect(view.tiers[0]?.series.map((item) => item.id)).toEqual(["input", "cache_read", "output"]);
+    expect(view.tiers[1]?.series.map((item) => ({ id: item.id, label: item.label }))).toEqual([
+      { id: "input:longContext", label: "Input" },
+      { id: "cache_read:longContext", label: "Cache read" },
+      { id: "output:longContext", label: "Output" },
+    ]);
+    expect(view.price?.groups?.map((group) => group.heading)).toEqual([
+      "Up to 200,000 tokens",
+      "Over 200,000 tokens",
+    ]);
+    expect(view.price?.groups?.[0]?.rows.map((row) => row.dimensionLabel)).toEqual([
+      "Input",
+      "Cache read",
+      "Output",
+    ]);
+    expect(view.history.notes).toEqual([]);
+    expect(view.history.skipped).toEqual([]);
+    expect(view.history.series.map((item) => item.id)).toEqual([
+      "input",
+      "input:longContext",
+      "cache_read",
+      "cache_read:longContext",
+      "output",
+      "output:longContext",
+    ]);
+  });
+
+  it("does not list a filled-in 272,000 cutoff as a change", () => {
+    const older = version({
+      firstSeenAt: new Date("2026-10-18T00:00:00.000Z"),
+      components: [
+        component({ amount: "2" }),
+        component({ amount: "4", condition: { longContext: true } }),
+      ],
+    });
+    const current = version({
+      firstSeenAt: new Date("2026-11-10T00:00:00.000Z"),
+      components: [
+        component({ amount: "2", condition: { promptTokensAtMost: 272000 } }),
+        component({ amount: "4", condition: { promptTokensOver: 272000 } }),
+      ],
+    });
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [current],
+            historyVersions: [
+              { ...older, lastSeenAt: new Date("2026-11-10T00:00:00.000Z") },
+              { ...current, lastSeenAt: null },
+            ],
+          }),
+        ],
+      }),
+      new Date("2026-11-10T12:00:00.000Z"),
+    );
+
+    expect(view.events).toEqual([]);
+    expect(view.headlines[0]?.change).toBeNull();
   });
 
   it("treats a repeated copy of the same official URL as one link", () => {

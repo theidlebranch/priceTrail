@@ -2,12 +2,18 @@ import { Decimal } from "decimal.js";
 import { changeUnderReview } from "@/app/models/pending-review";
 import { toPriceChanges, type PriceChanges, type PriceLastChange } from "@/core/pricing/price-changes";
 import {
+  contextHeading,
   isPriceDimension,
+  matchingContext,
   PRICE_DIMENSION_LABELS,
   PRICE_DIMENSIONS,
+  rewriteUnstatedLongContext,
+  shortConditionLabel,
   toPriceHistories,
+  type ContextBoundKey,
   type PriceDimension,
   type PriceHistories,
+  type PriceHistorySeries,
 } from "@/core/pricing/price-history";
 import { pricePrecisionLabel } from "@/core/pricing/precision";
 import type {
@@ -64,6 +70,11 @@ export type ModelDetailPriceRow = {
   lastChange: ModelDetailLastChange | null;
 };
 
+export type ModelDetailPriceGroup = {
+  heading: string | null;
+  rows: ModelDetailPriceRow[];
+};
+
 export type ModelDetailHeadline = {
   label: string;
   amountText: string;
@@ -73,6 +84,20 @@ export type ModelDetailHeadline = {
     previousAmountText: string;
     previousDateLine: string;
   } | null;
+};
+
+/**
+ * One context price the page can show on its own.
+ *
+ * label is null when the model has a single price. The page then draws
+ * no tier tabs. A short and a long price each get the stored cutoff,
+ * such as "Up to 272,000 tokens".
+ */
+export type ModelDetailTier = {
+  label: string | null;
+  headlines: ModelDetailHeadline[];
+  rows: ModelDetailPriceRow[];
+  series: PriceHistorySeries[];
 };
 
 export type ModelDetailChangeLine = {
@@ -100,11 +125,13 @@ export type ModelDetailView = {
   versionCount: number;
   sinceDay: string | null;
   headlines: ModelDetailHeadline[];
+  tiers: ModelDetailTier[];
   price: {
     dateLine: string;
     sourceUrl: string;
     sourceLabel: "Official pricing page";
     components: ModelDetailPriceRow[];
+    groups?: ModelDetailPriceGroup[];
   } | null;
   history: ModelDetailHistory;
   events: ModelDetailChangeEvent[];
@@ -119,6 +146,12 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
   const offering = read.offerings[0];
   const open = offering === undefined ? null : openVersion(offering);
   const changes = offering === undefined ? null : toPriceChanges(offering.historyVersions);
+  const shown = open === null ? null : rewriteUnstatedLongContext(open.components);
+  const history =
+    offering === undefined
+      ? { series: [], skipped: [], bounds: [], notes: [] }
+      : presentHistory(toPriceHistories(offering.historyVersions, asOf), shown !== null && cutoffStated(shown));
+  const layout = shown === null || changes === null ? null : layoutPrices(shown, changes.lastChanges);
 
   return {
     labName: read.labName,
@@ -126,29 +159,26 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
     retired: read.deprecatedAt !== null,
     versionCount: changes?.versionCount ?? 0,
     sinceDay: changes?.sinceDay ?? null,
-    headlines:
-      open === null || changes === null ? [] : headlinesFor(open.components, changes.latest),
+    headlines: shown === null || changes === null ? [] : headlinesFor(shown, changes.latest),
+    tiers: toTiers(shown, changes, history, layout),
     price:
-      offering === undefined || open === null || changes === null
+      offering === undefined || open === null || layout === null
         ? null
-        : currentPrice(offering, open, changes),
-    history:
-      offering === undefined
-        ? { series: [], skipped: [], bounds: [], notes: [] }
-        : presentHistory(toPriceHistories(offering.historyVersions, asOf)),
+        : currentPrice(offering, open, layout),
+    history,
     events: changes === null ? [] : changes.events.map(toEvent),
     changeUnderReview: offering === undefined ? false : changeUnderReview(offering.reviewStatuses),
   };
 }
 
-function presentHistory(history: PriceHistories): ModelDetailHistory {
+function presentHistory(history: PriceHistories, stated: boolean): ModelDetailHistory {
   return {
     series: history.series.map((item) =>
       item.id.endsWith(":longContext")
         ? {
             ...item,
             label: `${PRICE_DIMENSION_LABELS[item.dimension]}, long context`,
-            note: "Cutoff not stated.",
+            note: stated ? null : "Cutoff not stated.",
           }
         : item,
     ),
@@ -159,6 +189,15 @@ function presentHistory(history: PriceHistories): ModelDetailHistory {
         `${PRICE_DIMENSION_LABELS[bound.dimension]} also has a price for ${conditionLabel(bound.condition)}, $${bound.amountText}. It is not on this chart.`,
     ),
   };
+}
+
+function cutoffStated(components: readonly ModelDetailComponent[]): boolean {
+  for (const dimension of new Set(components.map((component) => component.dimension))) {
+    if (matchingContext(components.filter((component) => component.dimension === dimension)) !== null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function openVersion(offering: ModelDetailOffering): OpenVersion | null {
@@ -174,14 +213,14 @@ function openVersion(offering: ModelDetailOffering): OpenVersion | null {
 function currentPrice(
   offering: ModelDetailOffering,
   version: OpenVersion,
-  changes: PriceChanges,
+  layout: LaidOutPrices,
 ): NonNullable<ModelDetailView["price"]> {
-  const sourceUrl = oneOfficialUrl(offering.officialSourceUrls);
   return {
     dateLine: dateLine(version.firstSeenAt, version.announcedOn),
-    sourceUrl,
+    sourceUrl: oneOfficialUrl(offering.officialSourceUrls),
     sourceLabel: "Official pricing page",
-    components: orderedComponents(version.components, changes.lastChanges),
+    components: layout.components,
+    groups: layout.groups,
   };
 }
 
@@ -231,33 +270,203 @@ function assertCalendarDate(value: string): void {
   }
 }
 
-function orderedComponents(
+type ContextSide = "lower" | "upper";
+
+type LaidOutEntry = {
+  component: ModelDetailComponent;
+  side: ContextSide | null;
+  heading: string | null;
+  row: ModelDetailPriceRow;
+};
+
+type LaidOutPrices = {
+  components: ModelDetailPriceRow[];
+  groups: ModelDetailPriceGroup[];
+  entries: LaidOutEntry[];
+};
+
+/**
+ * A matching short and long price becomes two tiers. The short tier is
+ * first, so the page opens on it. A plain row, such as a cache write
+ * with no cutoff, stays on that first tier. One price has no label,
+ * and the page draws no tier tabs.
+ */
+function toTiers(
+  shown: readonly ModelDetailComponent[] | null,
+  changes: PriceChanges | null,
+  history: ModelDetailHistory,
+  layout: LaidOutPrices | null,
+): ModelDetailTier[] {
+  if (shown === null || changes === null || layout === null) {
+    return [{ label: null, headlines: [], rows: [], series: history.series }];
+  }
+
+  const paired = layout.entries.some((entry) => entry.side !== null);
+  if (!paired) {
+    return [
+      {
+        label: null,
+        headlines: headlinesFor(shown, changes.latest),
+        rows: layout.components,
+        series: history.series,
+      },
+    ];
+  }
+
+  const short = layout.entries.filter((entry) => entry.side !== "upper");
+  const long = layout.entries.filter((entry) => entry.side === "upper");
+  const tiers: ModelDetailTier[] = [];
+  if (short.length > 0) {
+    tiers.push({
+      label: long.length > 0 ? sideHeading(short, "lower") : null,
+      headlines: headlinesForRows(
+        short.map((entry) => entry.component),
+        changes.latest,
+      ),
+      rows: short.map((entry) => entry.row),
+      series: seriesForSide(history.series, "short"),
+    });
+  }
+  if (long.length > 0) {
+    tiers.push({
+      label: short.length > 0 ? sideHeading(long, "upper") : null,
+      headlines: headlinesForRows(
+        long.map((entry) => entry.component),
+        changes.latest,
+      ),
+      rows: long.map((entry) => entry.row),
+      series: seriesForSide(history.series, "long"),
+    });
+  }
+  if (tiers.length === 1) {
+    const only = tiers[0];
+    if (only === undefined) {
+      return tiers;
+    }
+    return [{ ...only, label: null, series: history.series }];
+  }
+  return tiers;
+}
+
+function sideHeading(entries: readonly LaidOutEntry[], side: ContextSide): string | null {
+  return entries.find((entry) => entry.side === side)?.heading ?? null;
+}
+
+function seriesForSide(
+  series: readonly PriceHistorySeries[],
+  side: "short" | "long",
+): PriceHistorySeries[] {
+  if (side === "short") {
+    return series.filter((item) => !item.id.endsWith(":longContext"));
+  }
+  return series
+    .filter((item) => item.id.endsWith(":longContext"))
+    .map((item) => ({
+      ...item,
+      label: PRICE_DIMENSION_LABELS[item.dimension],
+      note: null,
+    }));
+}
+
+function layoutPrices(
   components: readonly ModelDetailComponent[],
   lastChanges: readonly PriceLastChange[],
-): ModelDetailPriceRow[] {
-  const baseInput = untieredInputAmount(components);
-  return components
+): LaidOutPrices {
+  const sorted = components
     .map((component) => {
       const dimension = asDimension(component.dimension);
-      const label = conditionLabel(component.condition);
+      const siblings = components.filter((item) => item.dimension === component.dimension);
+      const bound = matchingContext(siblings);
+      const side =
+        bound === null ? null : rowSide(component.condition, bound.lower, bound.upper, bound.tokens);
       return {
+        component,
+        side,
         rank: PRICE_DIMENSIONS.indexOf(dimension),
-        row: {
-          dimensionLabel: PRICE_DIMENSION_LABELS[dimension],
-          amountText: amountText(component),
-          conditionLabel: label,
-          multiplierText: multiplierText(component, baseInput),
-          lastChange: lastChangeFor(component, lastChanges),
-        },
+        groupRank: side === null ? 0 : side === "lower" ? 1 : 2,
+        tokens: bound === null || side === null ? 0 : bound.tokens,
+        heading:
+          bound === null || side === null
+            ? null
+            : contextHeading(side === "lower" ? bound.lower : bound.upper, bound.tokens),
+        conditionLabel: side === null ? conditionLabel(component.condition) : "",
       };
     })
     .sort((left, right) => {
+      if (left.groupRank !== right.groupRank) {
+        return left.groupRank - right.groupRank;
+      }
+      if (left.tokens !== right.tokens) {
+        return left.tokens - right.tokens;
+      }
       if (left.rank !== right.rank) {
         return left.rank - right.rank;
       }
-      return left.row.conditionLabel.localeCompare(right.row.conditionLabel);
-    })
-    .map((entry) => entry.row);
+      return left.conditionLabel.localeCompare(right.conditionLabel);
+    });
+
+  const entries: LaidOutEntry[] = sorted.map((entry) => {
+    const base = baseInput(sorted, entry.side);
+    return {
+      component: entry.component,
+      side: entry.side,
+      heading: entry.heading,
+      row: {
+        dimensionLabel: PRICE_DIMENSION_LABELS[asDimension(entry.component.dimension)],
+        amountText: amountText(entry.component),
+        conditionLabel: entry.conditionLabel,
+        multiplierText: multiplierText(
+          entry.component,
+          base === null || base.component === entry.component ? null : base.component.amount,
+        ),
+        lastChange: lastChangeFor(entry.component, lastChanges),
+      },
+    };
+  });
+
+  const groups: ModelDetailPriceGroup[] = [];
+  for (const entry of entries) {
+    const current = groups[groups.length - 1];
+    if (current === undefined || current.heading !== entry.heading) {
+      groups.push({ heading: entry.heading, rows: [entry.row] });
+      continue;
+    }
+    current.rows.push(entry.row);
+  }
+
+  return { components: entries.map((entry) => entry.row), groups, entries };
+}
+
+function baseInput(
+  entries: readonly {
+    component: ModelDetailComponent;
+    side: ContextSide | null;
+  }[],
+  side: ContextSide | null,
+): { component: ModelDetailComponent } | null {
+  const paired = entries.some((entry) => entry.side !== null);
+  const wanted = side === null && paired ? "lower" : side;
+  const found = entries.find(
+    (entry) =>
+      entry.component.dimension === "input" &&
+      entry.side === wanted &&
+      AMOUNT.test(entry.component.amount),
+  );
+  if (found !== undefined) {
+    return found;
+  }
+  if (wanted !== "lower") {
+    return null;
+  }
+  return (
+    entries.find(
+      (entry) =>
+        entry.component.dimension === "input" &&
+        entry.side === null &&
+        conditionKey(entry.component.condition) === emptyConditionKey() &&
+        AMOUNT.test(entry.component.amount),
+    ) ?? null
+  );
 }
 
 function headlinesFor(
@@ -267,44 +476,61 @@ function headlinesFor(
   const headlines: ModelDetailHeadline[] = [];
 
   for (const dimension of HEADLINE_DIMENSIONS) {
-    const rows = components.filter(
-      (component) =>
-        component.dimension === dimension && conditionKey(component.condition) === emptyConditionKey(),
-    );
+    const row = headlineRow(components, dimension);
+    if (row === undefined) {
+      continue;
+    }
+    headlines.push(headlineFrom(row, latest));
+  }
+
+  return headlines;
+}
+
+function headlinesForRows(
+  components: readonly ModelDetailComponent[],
+  latest: PriceChanges["latest"],
+): ModelDetailHeadline[] {
+  const headlines: ModelDetailHeadline[] = [];
+
+  for (const dimension of HEADLINE_DIMENSIONS) {
+    const rows = components.filter((component) => component.dimension === dimension);
     const row = rows.length === 1 ? rows[0] : undefined;
     if (row === undefined) {
       continue;
     }
-
-    const change = latest?.changes.find(
-      (item) =>
-        item.dimension === dimension &&
-        conditionKey(item.condition) === emptyConditionKey() &&
-        item.fromAmount !== null &&
-        item.toAmount !== null &&
-        item.direction !== null &&
-        sameAmount(item.toAmount, row.amount),
-    );
-
-    headlines.push({
-      label: PRICE_DIMENSION_LABELS[dimension],
-      amountText: amountText(row),
-      change:
-        change === undefined ||
-        latest === null ||
-        change.fromAmount === null ||
-        change.direction === null
-          ? null
-          : {
-              direction: change.direction,
-              pctText: change.pctText,
-              previousAmountText: `$${change.fromAmount}`,
-              previousDateLine: latest.previousDateLine,
-            },
-    });
+    headlines.push(headlineFrom(row, latest));
   }
 
   return headlines;
+}
+
+function headlineFrom(
+  row: ModelDetailComponent,
+  latest: PriceChanges["latest"],
+): ModelDetailHeadline {
+  const change = latest?.changes.find(
+    (item) =>
+      item.dimension === row.dimension &&
+      conditionKey(item.condition) === conditionKey(row.condition) &&
+      item.fromAmount !== null &&
+      item.toAmount !== null &&
+      item.direction !== null &&
+      sameAmount(item.toAmount, row.amount),
+  );
+
+  return {
+    label: PRICE_DIMENSION_LABELS[asDimension(row.dimension)],
+    amountText: amountText(row),
+    change:
+      change === undefined || latest === null || change.fromAmount === null || change.direction === null
+        ? null
+        : {
+            direction: change.direction,
+            pctText: change.pctText,
+            previousAmountText: `$${change.fromAmount}`,
+            previousDateLine: latest.previousDateLine,
+          },
+  };
 }
 
 function toEvent(event: NonNullable<PriceChanges["latest"]>): ModelDetailChangeEvent {
@@ -312,7 +538,7 @@ function toEvent(event: NonNullable<PriceChanges["latest"]>): ModelDetailChangeE
     dateLine: event.dateLine,
     changes: event.changes.map((change) => ({
       dimensionLabel: PRICE_DIMENSION_LABELS[asDimension(change.dimension)],
-      conditionLabel: conditionLabel(change.condition),
+      conditionLabel: shortConditionLabel(change.condition),
       fromAmountText: change.fromAmount === null ? null : `$${change.fromAmount}`,
       toAmountText: change.toAmount === null ? null : `$${change.toAmount}`,
       direction: change.direction,
@@ -342,26 +568,42 @@ function lastChangeFor(
   };
 }
 
-function untieredInputAmount(components: readonly ModelDetailComponent[]): string | null {
-  const rows = components.filter(
-    (component) =>
-      component.dimension === "input" && conditionKey(component.condition) === emptyConditionKey(),
-  );
-  const row = rows.length === 1 ? rows[0] : undefined;
-  if (row === undefined || !AMOUNT.test(row.amount)) {
-    return null;
+function headlineRow(
+  components: readonly ModelDetailComponent[],
+  dimension: (typeof HEADLINE_DIMENSIONS)[number],
+): ModelDetailComponent | undefined {
+  const rows = components.filter((component) => component.dimension === dimension);
+  const bound = matchingContext(rows);
+  if (bound !== null) {
+    return rows.find((row) => isBoundRow(row.condition, bound.lower, bound.tokens));
   }
-  return row.amount;
+  const plains = rows.filter(
+    (component) => conditionKey(component.condition) === emptyConditionKey(),
+  );
+  return plains.length === 1 ? plains[0] : undefined;
+}
+
+function rowSide(
+  condition: unknown,
+  lower: ContextBoundKey,
+  upper: ContextBoundKey,
+  tokens: number,
+): "lower" | "upper" | null {
+  if (isBoundRow(condition, lower, tokens)) {
+    return "lower";
+  }
+  if (isBoundRow(condition, upper, tokens)) {
+    return "upper";
+  }
+  return null;
+}
+
+function isBoundRow(condition: unknown, key: ContextBoundKey, tokens: number): boolean {
+  return isRecord(condition) && Object.keys(condition).length === 1 && condition[key] === tokens;
 }
 
 function multiplierText(component: ModelDetailComponent, baseInput: string | null): string | null {
   if (baseInput === null) {
-    return null;
-  }
-  if (
-    component.dimension === "input" &&
-    conditionKey(component.condition) === emptyConditionKey()
-  ) {
     return null;
   }
   if (!AMOUNT.test(component.amount)) {

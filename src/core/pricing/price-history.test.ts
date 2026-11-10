@@ -397,6 +397,60 @@ describe("toPriceHistories", () => {
     ]);
   });
 
+  it("charts a matching token pair as the short line and the long line", () => {
+    const history = toPriceHistories(
+      [
+        period({
+          lastSeenAt: null,
+          components: [
+            input("1.25", { promptTokensAtMost: 200000 }),
+            input("2.5", { promptTokensOver: 200000 }),
+          ],
+        }),
+      ],
+      AS_OF,
+    );
+
+    expect(history.skipped).toEqual([]);
+    expect(history.bounds).toEqual([]);
+    expect(history.series.map((item) => ({ id: item.id, latestAmountText: item.latestAmountText }))).toEqual([
+      { id: "input", latestAmountText: "1.25" },
+      { id: "input:longContext", latestAmountText: "2.5" },
+    ]);
+  });
+
+  it("keeps the same amounts on one line when a later period states 272,000", () => {
+    const history = toPriceHistories(
+      [
+        period({
+          components: [input("2"), input("4", { longContext: true })],
+        }),
+        period({
+          firstSeenAt: NEXT_SEEN,
+          lastSeenAt: null,
+          components: [
+            input("2", { promptTokensAtMost: 272000 }),
+            input("4", { promptTokensOver: 272000 }),
+          ],
+        }),
+      ],
+      AS_OF,
+    );
+
+    expect(history.bounds).toEqual([]);
+    expect(history.skipped).toEqual([]);
+    expect(
+      history.series.map((item) => ({
+        id: item.id,
+        latestAmountText: item.latestAmountText,
+        changeCount: item.changeCount,
+      })),
+    ).toEqual([
+      { id: "input", latestAmountText: "2", changeCount: 0 },
+      { id: "input:longContext", latestAmountText: "4", changeCount: 0 },
+    ]);
+  });
+
   it("charts a long-context price when the page did not state a short price", () => {
     const history = toPriceHistories(
       [

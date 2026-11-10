@@ -1,7 +1,9 @@
 import { Decimal } from "decimal.js";
 import {
   isPriceDimension,
+  matchingContext,
   PRICE_DIMENSIONS,
+  rewriteUnstatedLongContext,
   type PriceHistoryComponent,
   type PriceHistoryPeriod,
 } from "@/core/pricing/price-history";
@@ -14,7 +16,10 @@ import { pricePrecisionLabel } from "@/core/pricing/precision";
  * The first period is the starting price, not a change. Later periods
  * are compared in publication order, which is firstSeenAt. Amounts are
  * decimals, so "0.10" and "0.1" are the same price. A percent is blank
- * when the old amount is missing or zero.
+ * when the old amount is missing or zero. An unstated long-context flag
+ * beside a plain price is read as 272,000 before the comparison, so
+ * filling in that cutoff is not a change. A row that already names a
+ * different cutoff stays on its own key.
  *
  * Retracted rows never reach this function. The reader drops them first.
  */
@@ -80,11 +85,12 @@ export function toPriceChanges(periods: readonly PriceHistoryPeriod[]): PriceCha
   }
 
   prepared.sort((left, right) => left.firstSeenAt.getTime() - right.firstSeenAt.getTime());
+  const aligned = alignPlainPrices(prepared);
 
   const events: PriceChangeEvent[] = [];
-  for (let index = 1; index < prepared.length; index += 1) {
-    const previous = prepared[index - 1];
-    const current = prepared[index];
+  for (let index = 1; index < aligned.length; index += 1) {
+    const previous = aligned[index - 1];
+    const current = aligned[index];
     if (previous === undefined || current === undefined) {
       continue;
     }
@@ -100,8 +106,8 @@ export function toPriceChanges(periods: readonly PriceHistoryPeriod[]): PriceCha
   }
   events.reverse();
 
-  const last = prepared[prepared.length - 1];
-  const beforeLast = prepared[prepared.length - 2];
+  const last = aligned[aligned.length - 1];
+  const beforeLast = aligned[aligned.length - 2];
   const latestChanges =
     last === undefined || beforeLast === undefined
       ? []
@@ -109,7 +115,7 @@ export function toPriceChanges(periods: readonly PriceHistoryPeriod[]): PriceCha
 
   return {
     versionCount: periods.length,
-    sinceDay: prepared[0]?.chartStart ?? null,
+    sinceDay: aligned[0]?.chartStart ?? null,
     events,
     latest:
       last === undefined || beforeLast === undefined || latestChanges.length === 0
@@ -119,8 +125,72 @@ export function toPriceChanges(periods: readonly PriceHistoryPeriod[]): PriceCha
             previousDateLine: beforeLast.dateLine,
             changes: latestChanges,
           },
-    lastChanges: lastChanges(prepared),
+    lastChanges: lastChanges(aligned),
   };
+}
+
+/**
+ * A plain price is the short side of the next pair when that next pair
+ * is the whole price for the dimension. The cutoff is the next pair's
+ * number, so 200,000 stays 200,000 and 272,000 stays 272,000. A plain
+ * price that stays plain, such as a Claude row, is left alone.
+ */
+function alignPlainPrices(periods: readonly PreparedPeriod[]): PreparedPeriod[] {
+  const aligned = periods.map((period) => ({
+    ...period,
+    components: new Map(period.components),
+  }));
+  for (let index = 1; index < aligned.length; index += 1) {
+    const earlier = aligned[index - 1];
+    const later = aligned[index];
+    if (earlier === undefined || later === undefined) {
+      continue;
+    }
+    earlier.components = alignPlainToPair(earlier.components, later.components);
+  }
+  return aligned;
+}
+
+function alignPlainToPair(
+  earlier: Map<string, PriceHistoryComponent>,
+  later: Map<string, PriceHistoryComponent>,
+): Map<string, PriceHistoryComponent> {
+  const aligned = new Map(earlier);
+  const laterRows = new Map<string, PriceHistoryComponent[]>();
+  for (const component of later.values()) {
+    const rows = laterRows.get(component.dimension) ?? [];
+    rows.push(component);
+    laterRows.set(component.dimension, rows);
+  }
+
+  for (const [dimension, rows] of laterRows) {
+    const bound = matchingContext(rows);
+    if (bound === null) {
+      continue;
+    }
+    const earlierRows = [...aligned.values()].filter((row) => row.dimension === dimension);
+    if (earlierRows.length !== 1) {
+      continue;
+    }
+    const only = earlierRows[0];
+    if (only === undefined || !isEmptyCondition(only.condition)) {
+      continue;
+    }
+    const condition = { [bound.lower]: bound.tokens };
+    const oldKey = componentKey(only.dimension, only.condition);
+    const newKey = componentKey(only.dimension, condition);
+    if (oldKey === newKey || aligned.has(newKey)) {
+      continue;
+    }
+    aligned.delete(oldKey);
+    aligned.set(newKey, { ...only, condition });
+  }
+
+  return aligned;
+}
+
+function isEmptyCondition(condition: unknown): boolean {
+  return isRecord(condition) && Object.keys(condition).length === 0;
 }
 
 function preparePeriod(period: PriceHistoryPeriod): PreparedPeriod {
@@ -152,7 +222,7 @@ function indexComponents(
   components: readonly PriceHistoryComponent[],
 ): Map<string, PriceHistoryComponent> {
   const indexed = new Map<string, PriceHistoryComponent>();
-  for (const component of components) {
+  for (const component of rewriteUnstatedLongContext(components)) {
     assertComponent(component);
     const key = componentKey(component.dimension, component.condition);
     if (indexed.has(key)) {
@@ -273,7 +343,9 @@ function lastChanges(periods: readonly PreparedPeriod[]): PriceLastChange[] {
   }
 
   return [...active.values()]
-    .flatMap((price) => (price.change === null ? [] : [price.change]))
+    .flatMap((price) =>
+      price.change === null || price.change.direction === null ? [] : [price.change],
+    )
     .sort(compareChanges);
 }
 
