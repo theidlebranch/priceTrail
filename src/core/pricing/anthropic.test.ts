@@ -135,7 +135,7 @@ describe("parseAnthropicPricing", () => {
     );
   });
 
-  it("warns on a cache multiplier mismatch and still returns the rows", () => {
+  it("returns a cache write that does not follow a fixed ratio", () => {
     const markdown = markdownTable(REQUIRED_HEADERS, [
       validRow("Claude Test", [
         "$1 / MTok",
@@ -150,7 +150,7 @@ describe("parseAnthropicPricing", () => {
 
     expect(rows).toHaveLength(5);
     expect(findRow(rows, "claude-test", "cache_write_5m")?.usdPer1M).toBe("3");
-    expect(warnings.some((warning) => /multiplier/i.test(warning))).toBe(true);
+    expect(warnings.some((warning) => /multiplier/i.test(warning))).toBe(false);
   });
 
   it("warns about unknown extra columns instead of dropping them silently", () => {

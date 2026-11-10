@@ -57,7 +57,7 @@ describe("checkParsedPrices", () => {
     ).toEqual({ status: "ok" });
   });
 
-  it("reports a cache multiplier mismatch and still leaves the parsed rows intact", () => {
+  it("keeps the parsed rows when a cache write does not follow a fixed ratio", () => {
     const markdown = markdownTable(REQUIRED_HEADERS, [
       validRow("Claude Test", [
         "$1 / MTok",
@@ -71,11 +71,35 @@ describe("checkParsedPrices", () => {
 
     expect(rows).toHaveLength(5);
     expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
-      status: "suspect",
-      reasons: [
-        "multiplier mismatch for Claude Test cache_write_5m: expected 1.25, got 3",
-      ],
+      status: "ok",
     });
+  });
+
+  it("keeps a page when an extra model's cache read does not follow a fixed ratio", () => {
+    const markdown = markdownTable(REQUIRED_HEADERS, [
+      validRow("Claude Fable 5.1", [
+        "$10 / MTok",
+        "$12.50 / MTok",
+        "$20 / MTok",
+        "$0.25 / MTok",
+        "$50 / MTok",
+      ]),
+      validRow("Claude New", [
+        "$8 / MTok",
+        "$10 / MTok",
+        "$16 / MTok",
+        "$0.20 / MTok",
+        "$40 / MTok",
+      ]),
+    ]);
+    const { rows } = parseAnthropicPricing(markdown);
+
+    expect(
+      checkParsedPrices({
+        rows,
+        expectedModelSlugs: ["claude-fable-5.1"],
+      }),
+    ).toEqual({ status: "ok" });
   });
 
   it("reports a tracked model that the parse did not return", () => {
@@ -106,9 +130,8 @@ describe("checkParsedPrices", () => {
     });
   });
 
-  it("does not judge an OpenAI cache price by the Anthropic ratio", () => {
-    // One cache cell, and it is not 1.25 times an input price. The check
-    // only applies that ratio to Anthropic rows.
+  it("leaves an OpenAI cache price out of the Anthropic group checks", () => {
+    // One cache cell and no input price. Those group checks stay on Anthropic rows.
     const rows = [
       priceRow({
         provider: "openai",

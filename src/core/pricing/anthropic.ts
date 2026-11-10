@@ -1,5 +1,4 @@
 import { Decimal } from "decimal.js";
-import { anthropicCacheMultiplierWarnings } from "./anthropic-cache";
 import {
   normalizedPriceSchema,
   type Condition,
@@ -83,10 +82,6 @@ export function parseAnthropicPricing(markdown: string): AnthropicParseResult {
         `${model.modelName} / ${column.header}`,
       );
     }
-
-    // A mismatch stays a warning. The parser still returns the rows.
-    // checkParsedPrices is what reports the parse as suspect.
-    warnings.push(...anthropicCacheMultiplierWarnings(model.modelName, amounts));
 
     for (const column of PRICE_COLUMNS) {
       rows.push(

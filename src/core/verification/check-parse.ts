@@ -1,4 +1,3 @@
-import { anthropicCacheMultiplierWarnings } from "@/core/pricing/anthropic-cache";
 import type { Condition, NormalizedPrice } from "@/core/pricing/shape";
 
 /**
@@ -9,10 +8,10 @@ import type { Condition, NormalizedPrice } from "@/core/pricing/shape";
  * recordSourceCheck() is what records that as parser_suspect. An amount
  * that is not a plain decimal throws, because comparing it would be a guess.
  *
- * Anthropic cache rows are compared inside one model, one prompt tier,
- * and one schedule segment. Haiku's "up to 100,000" input is not checked
- * against its "over 100,000" cache price. OpenAI and Google rows are
- * not judged by Anthropic's ratios.
+ * Anthropic rows are grouped by one model, one prompt tier, and one
+ * schedule segment. Two amounts for one dimension in that group are
+ * suspect. A cache price with no input price in that group is suspect.
+ * OpenAI and Google rows are left out of those group checks.
  */
 
 const AMOUNT_PATTERN = /^\d+(\.\d+)?$/;
@@ -124,26 +123,6 @@ function reasonsForGroup(group: readonly NormalizedPrice[]): string[] {
     reasons.push(`missing input price for ${label}`);
   }
 
-  // Two inputs means we cannot know which one the cache price belongs to.
-  if (inputRows.length !== 1) {
-    return reasons;
-  }
-
-  const amounts: {
-    input: string;
-    cache_write_5m?: string;
-    cache_write_1h?: string;
-    cache_read?: string;
-  } = { input: inputRows[0].usdPer1M };
-
-  for (const dimension of CACHE_DIMENSIONS) {
-    const dimensionRows = byDimension.get(dimension) ?? [];
-    if (dimensionRows.length === 1) {
-      amounts[dimension] = dimensionRows[0].usdPer1M;
-    }
-  }
-
-  reasons.push(...anthropicCacheMultiplierWarnings(group[0].modelName, amounts));
   return reasons;
 }
 
