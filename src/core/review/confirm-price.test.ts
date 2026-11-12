@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedPrice } from "@/core/pricing/shape";
-import { componentsForConfirm, sameConfirmPrice } from "@/core/review/confirm-price";
+import {
+  componentsForConfirm,
+  sameConfirmPrice,
+  trackedPriceUnchanged,
+} from "@/core/review/confirm-price";
 
 /**
  * These checks decide whether a parsed snapshot can become a published
@@ -274,5 +278,119 @@ describe("sameConfirmPrice", () => {
         },
       ]),
     ).toBe(false);
+  });
+});
+
+describe("trackedPriceUnchanged", () => {
+  const open = [
+    {
+      dimension: "input",
+      unit: "usd_per_1m_tokens",
+      amount: "10",
+      condition: {},
+    },
+  ];
+
+  it("is true when today's prices match the open price", () => {
+    const rows = [price({ usdPer1M: "10" }), price({ modelSlug: "other-model", usdPer1M: "99" })];
+
+    expect(
+      trackedPriceUnchanged({
+        nextRows: rows,
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open,
+      }),
+    ).toBe(true);
+  });
+
+  it("treats 10 and 10.0 as the same row", () => {
+    expect(
+      trackedPriceUnchanged({
+        nextRows: [price({ usdPer1M: "10" })],
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open: [{ ...open[0], amount: "10.00" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when the amount differs from the open price", () => {
+    expect(
+      trackedPriceUnchanged({
+        nextRows: [price({ usdPer1M: "12" })],
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open,
+      }),
+    ).toBe(false);
+  });
+
+  it("is true when a later dated price is new and today's price matches", () => {
+    const next = [
+      price({
+        provider: "google",
+        modelName: "Gemini 4 Argon",
+        modelSlug: "gemini-4-argon",
+        usdPer1M: "2",
+        validUntil: "2026-11-30",
+      }),
+      price({
+        provider: "google",
+        modelName: "Gemini 4 Argon",
+        modelSlug: "gemini-4-argon",
+        usdPer1M: "4",
+        validFrom: "2026-12-01",
+      }),
+    ];
+
+    expect(
+      trackedPriceUnchanged({
+        nextRows: next,
+        modelSlug: "gemini-4-argon",
+        fetchedAt: new Date("2026-11-10T23:00:00.000Z"),
+        open: [
+          {
+            dimension: "input",
+            unit: "usd_per_1m_tokens",
+            amount: "2",
+            condition: {},
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when output changed and input still matches", () => {
+    expect(
+      trackedPriceUnchanged({
+        nextRows: [price({ usdPer1M: "10" }), price({ dimension: "output", usdPer1M: "40" })],
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open,
+      }),
+    ).toBe(false);
+  });
+
+  it("is false when there is no open price", () => {
+    expect(
+      trackedPriceUnchanged({
+        nextRows: [price()],
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("is true when there is no previous snapshot and today's price matches", () => {
+    expect(
+      trackedPriceUnchanged({
+        nextRows: [price()],
+        modelSlug: "claude-mythos-5.1",
+        fetchedAt: REVIEWED_AT,
+        open,
+      }),
+    ).toBe(true);
   });
 });

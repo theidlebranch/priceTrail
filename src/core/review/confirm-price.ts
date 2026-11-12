@@ -2,6 +2,14 @@ import { Decimal } from "decimal.js";
 import { normalizedPriceSchema, type Condition, type NormalizedPrice } from "@/core/pricing/shape";
 
 /**
+ * A visit writes this when a tracked model's price did not change.
+ * It is not a person's account id. Confirm still requires a person
+ * when the price did change. Nothing in this file publishes a price.
+ */
+export const SAME_PRICE_REVIEWER = "system:same-price";
+export const SAME_PRICE_NOTE = "Same price as the open version. No new period.";
+
+/**
  * Turn one model's parsed rows into the components a confirm can publish.
  *
  * This file does not open a database and does not call new Date().
@@ -104,6 +112,52 @@ export function sameConfirmPrice(
     throw new ReviewRefusal("two rows share the same dimension and tier");
   }
   return nextKeys.every((key) => openKeys.includes(key));
+}
+
+export type OpenPriceComponent = {
+  dimension: string;
+  unit: string;
+  amount: string;
+  condition: unknown;
+};
+
+/**
+ * True when this tracked model should not wait for a person.
+ *
+ * The prices that would be published on fetchedAt must match the open
+ * price. That is every amount that applies on that day: input, output,
+ * cache, and a long-context tier in force that day. "10" and "10.0" are
+ * the same amount. A later dated price is ignored, and so is another
+ * model's row. A missing open price, a difference, or a snapshot this
+ * function cannot read returns false, so the item stays flagged.
+ * This function does not open a database and does not call new Date().
+ */
+export function trackedPriceUnchanged(input: {
+  nextRows: readonly NormalizedPrice[];
+  modelSlug: string;
+  fetchedAt: Date;
+  open: readonly OpenPriceComponent[] | null;
+}): boolean {
+  if (input.open === null || input.open.length === 0) {
+    return false;
+  }
+  if (input.modelSlug.trim().length === 0) {
+    return false;
+  }
+
+  try {
+    const components = componentsForConfirm(
+      { rows: input.nextRows, warnings: [] },
+      input.modelSlug,
+      input.fetchedAt,
+    );
+    return sameConfirmPrice(components, input.open);
+  } catch (error) {
+    if (error instanceof ReviewRefusal) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function utcCalendarDay(value: Date): string {
