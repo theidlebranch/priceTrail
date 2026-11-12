@@ -21,8 +21,12 @@ import {
   assembleSourceHealthRow,
   findSource,
   hasSource,
-  listSourceChecks,
+  listRecentSourceChecks,
+  listSourceCheckPage,
   listSourceHealth,
+  listSourceObservationRefs,
+  readSourceHealthStats,
+  SOURCE_CHECK_PAGE_SIZE,
 } from "@/server/db/repositories/source-health";
 import { fetchLog, observations, sources } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
@@ -42,13 +46,43 @@ describe("assembleSourceHealthRow", () => {
         type: "official",
         active: true,
         lastCheckedAt: NEWER,
-        outcome: "unchanged",
-        fetchedAt: null,
-        httpStatus: 200,
-        note: null,
-        archiveStatus: null,
+        checks: [
+          {
+            id: 2,
+            outcome: "unchanged",
+            fetchedAt: null,
+            httpStatus: 200,
+            note: null,
+            observationId: null,
+            archiveStatus: null,
+            archiveUrl: null,
+          },
+        ],
+        snapshotId: null,
+        snapshotArchiveStatus: null,
+        snapshotArchiveUrl: null,
+        snapshotFetchedAt: null,
+        latestChangeAt: null,
       }),
     ).toThrow(/latest check/);
+  });
+
+  it("throws when a snapshot id arrives without a status or a time", () => {
+    expect(() =>
+      assembleSourceHealthRow({
+        id: 1,
+        url: "https://example.test/health/partial-snapshot",
+        type: "official",
+        active: true,
+        lastCheckedAt: null,
+        checks: [],
+        snapshotId: 9,
+        snapshotArchiveStatus: null,
+        snapshotArchiveUrl: null,
+        snapshotFetchedAt: null,
+        latestChangeAt: null,
+      }),
+    ).toThrow(/snapshot/);
   });
 });
 
@@ -149,37 +183,49 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
         type: "official",
         active: true,
         lastCheckedAt: null,
-        latestCheck: null,
-        archiveStatus: null,
+        checks: [],
+        latestSnapshot: null,
+        latestChangeAt: null,
       });
       expect(byUrl.get(`${prefix}/unchanged`)).toMatchObject({
         lastCheckedAt: NEWER,
-        latestCheck: { outcome: "unchanged", fetchedAt: NEWER, httpStatus: 200, note: null },
-        archiveStatus: null,
+        checks: [{ outcome: "unchanged", fetchedAt: NEWER, httpStatus: 200, note: null }],
+        latestSnapshot: null,
+        latestChangeAt: null,
       });
       expect(byUrl.get(`${prefix}/error`)).toMatchObject({
-        latestCheck: {
-          outcome: "fetch_error",
-          fetchedAt: NEWER,
-          httpStatus: null,
-          note: "network down",
-        },
-        archiveStatus: null,
+        checks: [
+          {
+            outcome: "fetch_error",
+            fetchedAt: NEWER,
+            httpStatus: null,
+            note: "network down",
+          },
+        ],
+        latestSnapshot: null,
+        latestChangeAt: null,
       });
       expect(byUrl.get(`${prefix}/suspect`)).toMatchObject({
-        latestCheck: {
-          outcome: "parser_suspect",
-          fetchedAt: NEWER,
-          httpStatus: 200,
-          note: "0 matching tables",
-        },
-        archiveStatus: null,
+        checks: [
+          {
+            outcome: "parser_suspect",
+            fetchedAt: NEWER,
+            httpStatus: 200,
+            note: "0 matching tables",
+          },
+        ],
+        latestSnapshot: null,
+        latestChangeAt: null,
       });
       expect(byUrl.get(`${prefix}/changed`)).toMatchObject({
         lastCheckedAt: NEWER,
-        latestCheck: { outcome: "changed", fetchedAt: NEWER, httpStatus: 200, note: "new check" },
-        archiveStatus: "failed",
+        latestSnapshot: { archiveStatus: "failed", archiveUrl: null, fetchedAt: NEWER },
+        latestChangeAt: NEWER,
       });
+      expect(byUrl.get(`${prefix}/changed`)?.checks.map((item) => item.note)).toEqual([
+        "new check",
+        "old check",
+      ]);
 
       const packed = JSON.stringify(listed);
       expect(packed).not.toContain(rawMarker);
@@ -200,7 +246,7 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
 
       const listed = (await listSourceHealth(tx)).filter((row) => row.url === `${prefix}/tie`);
       expect(listed).toHaveLength(1);
-      expect(listed[0]?.latestCheck?.note).toBe("higher id");
+      expect(listed[0]?.checks[0]?.note).toBe("higher id");
     });
   });
 
@@ -272,7 +318,7 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
       expect(listed).toHaveLength(1);
       expect(listed[0]?.id).toBe(sourceId);
 
-      const checks = await listSourceChecks(tx, sourceId);
+      const checks = await listSourceCheckPage(tx, sourceId, null);
       expect(checks.map((check) => check.note)).toEqual([
         "new change",
         "quiet new",
@@ -304,7 +350,25 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
       const packed = JSON.stringify(checks);
       expect(packed).not.toContain(rawMarker);
       expect(packed).not.toContain(parsedMarker);
-      expect(await listSourceChecks(tx, 9_007_199_254_740_991)).toEqual([]);
+      expect(await listSourceCheckPage(tx, 9_007_199_254_740_991, null)).toEqual([]);
+
+      const stats = await readSourceHealthStats(tx, sourceId);
+      expect(stats.checkCount).toBe(5);
+      expect(stats.okCount).toBe(4);
+      expect(stats.pendingCount).toBe(0);
+      expect(stats.archivedCount).toBe(1);
+      expect(stats.failedCount).toBe(1);
+      expect(stats.latestChangeAt).toEqual(NEWER);
+      expect(stats.latestChangeObservationId).toBe(checks[0]?.observationId);
+      expect(stats.firstCheckAt).toEqual(OLDER);
+      expect(stats.firstCheckId).toBe(checks[4]?.id);
+
+      const refs = await listSourceObservationRefs(tx, sourceId);
+      expect(refs.map((ref) => ref.archiveStatus)).toEqual(["failed", "archived"]);
+      const packedRefs = JSON.stringify(refs);
+      expect(packedRefs).not.toContain(rawMarker);
+      expect(packedRefs).not.toContain(parsedMarker);
+      expect(await listSourceObservationRefs(tx, 9_007_199_254_740_991)).toEqual([]);
     });
   });
 
@@ -319,6 +383,121 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
         .filter((url) => url.startsWith(prefix));
 
       expect(listed).toEqual([`${prefix}/a`, `${prefix}/z`]);
+    });
+  });
+
+  it("keeps the newest 24 checks and still finds an older price change", async () => {
+    await withHealth(async (tx) => {
+      const prefix = `https://example.test/health/${randomUUID()}`;
+      const start = Date.UTC(2026, 10, 8, 0, 0, 0);
+      const unchanged = Array.from({ length: 25 }, (_, index) => ({
+        fetchedAt: new Date(start + index * 60_000),
+        httpStatus: 200 as const,
+        outcome: "unchanged" as const,
+        note: `step ${index}`,
+      }));
+
+      await plantSource(tx, `${prefix}/window`, {
+        lastCheckedAt: unchanged[24]?.fetchedAt,
+        snapshots: [
+          {
+            fetchedAt: OLDER,
+            archiveStatus: "archived",
+            rawMarker: "raw-window",
+            parsedMarker: "parsed-window",
+          },
+        ],
+        checks: [
+          {
+            fetchedAt: OLDER,
+            httpStatus: 200,
+            outcome: "changed",
+            note: "old change",
+            snapshot: "older-archived",
+          },
+          ...unchanged,
+        ],
+      });
+
+      const listed = (await listSourceHealth(tx)).filter((row) => row.url === `${prefix}/window`);
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.checks).toHaveLength(24);
+      expect(listed[0]?.checks[0]?.note).toBe("step 24");
+      expect(listed[0]?.checks.some((item) => item.note === "step 0")).toBe(false);
+      expect(listed[0]?.checks.some((item) => item.note === "old change")).toBe(false);
+      expect(listed[0]?.latestChangeAt).toEqual(OLDER);
+      expect(listed[0]?.latestSnapshot).toMatchObject({
+        archiveStatus: "archived",
+        fetchedAt: OLDER,
+      });
+      expect(JSON.stringify(listed)).not.toContain("raw-window");
+      expect(JSON.stringify(listed)).not.toContain("parsed-window");
+
+      const sourceId = listed[0]?.id;
+      if (sourceId === undefined) {
+        throw new Error("window source was not listed");
+      }
+      const recent = await listRecentSourceChecks(tx, sourceId);
+      expect(recent).toHaveLength(24);
+      expect(recent[0]?.note).toBe("step 24");
+      expect(recent.some((item) => item.note === "step 0")).toBe(false);
+    });
+  });
+
+  it("pages with fetched_at and id, including two checks that share a timestamp", async () => {
+    await withHealth(async (tx) => {
+      const prefix = `https://example.test/health/${randomUUID()}`;
+      const sourceId = await plantSource(tx, `${prefix}/cursor`, {
+        lastCheckedAt: NEWER,
+        checks: [
+          { fetchedAt: OLDER, httpStatus: 200, outcome: "unchanged", note: "older" },
+          { fetchedAt: NEWER, httpStatus: 200, outcome: "unchanged", note: "lower id" },
+          { fetchedAt: NEWER, httpStatus: 200, outcome: "unchanged", note: "higher id" },
+        ],
+      });
+
+      const first = await listSourceCheckPage(tx, sourceId, null);
+      expect(first.map((item) => item.note)).toEqual(["higher id", "lower id", "older"]);
+      const newest = first[0];
+      if (newest === undefined) {
+        throw new Error("cursor page was empty");
+      }
+      const rest = await listSourceCheckPage(tx, sourceId, {
+        fetchedAt: newest.fetchedAt,
+        id: newest.id,
+      });
+      expect(rest.map((item) => item.note)).toEqual(["lower id", "older"]);
+    });
+  });
+
+  it("returns a full page of 50 and leaves the older check for the next cursor", async () => {
+    await withHealth(async (tx) => {
+      const prefix = `https://example.test/health/${randomUUID()}`;
+      const start = Date.UTC(2026, 0, 1, 0, 0, 0);
+      const checks = Array.from({ length: SOURCE_CHECK_PAGE_SIZE + 1 }, (_, index) => ({
+        fetchedAt: new Date(start + index * 60_000),
+        httpStatus: 200 as const,
+        outcome: "unchanged" as const,
+        note: `step ${index}`,
+      }));
+      const sourceId = await plantSource(tx, `${prefix}/page`, {
+        lastCheckedAt: checks[SOURCE_CHECK_PAGE_SIZE]?.fetchedAt,
+        checks,
+      });
+
+      const page = await listSourceCheckPage(tx, sourceId, null);
+      expect(page).toHaveLength(SOURCE_CHECK_PAGE_SIZE);
+      expect(page[0]?.note).toBe(`step ${SOURCE_CHECK_PAGE_SIZE}`);
+      const oldest = page[SOURCE_CHECK_PAGE_SIZE - 1];
+      if (oldest === undefined) {
+        throw new Error("full page was short");
+      }
+      expect(oldest.note).toBe("step 1");
+      const next = await listSourceCheckPage(tx, sourceId, {
+        fetchedAt: oldest.fetchedAt,
+        id: oldest.id,
+      });
+      expect(next.map((item) => item.note)).toEqual(["step 0"]);
     });
   });
 
