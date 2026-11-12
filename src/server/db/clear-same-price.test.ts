@@ -81,6 +81,29 @@ describe.skipIf(databaseUrl.length === 0)("clearSamePriceFlags", () => {
     });
   });
 
+  it("keeps a flagged item when the open price started after the visit", async () => {
+    await withRollback(async (tx) => {
+      const planted = await plantLaterOpenPrice(tx);
+      const before = await planSamePriceClears(tx);
+
+      expect(before.clear.map((item) => item.id)).not.toContain(planted.itemId);
+      expect(before.keep).toContainEqual({
+        id: planted.itemId,
+        labSlug: planted.labSlug,
+        modelSlug: planted.modelSlug,
+        observationId: planted.observationId,
+      });
+      expect(await statusFor(tx, planted.itemId)).toBe("flagged");
+
+      const after = await clearSamePriceFlags(tx);
+
+      expect(after.clear.map((item) => item.id)).not.toContain(planted.itemId);
+      expect(after.keep.map((item) => item.id)).toContain(planted.itemId);
+      expect(await statusFor(tx, planted.itemId)).toBe("flagged");
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
+    });
+  });
+
   async function withRollback(run: (tx: EvidenceDb) => Promise<void>): Promise<void> {
     try {
       await db.transaction(async (tx) => {
@@ -155,8 +178,8 @@ async function plantPair(tx: EvidenceDb) {
   ]);
   const sameItemId = await insertItem(tx, later, sameOffering.id);
   const changedItemId = await insertItem(tx, later, changedOffering.id);
-  await insertOpenPrice(tx, sameOffering.id, "1");
-  await insertOpenPrice(tx, changedOffering.id, "1");
+  await insertOpenPrice(tx, sameOffering.id, "1", EARLIER);
+  await insertOpenPrice(tx, changedOffering.id, "1", EARLIER);
   return {
     labSlug,
     sameSlug,
@@ -207,11 +230,54 @@ async function insertItem(tx: EvidenceDb, observationId: number, offeringId: num
   return item.id;
 }
 
-async function insertOpenPrice(tx: EvidenceDb, offeringId: number, amount: string): Promise<void> {
+async function plantLaterOpenPrice(tx: EvidenceDb) {
+  const catalog = createCatalogRepository(tx);
+  const labSlug = `lab-${randomUUID()}`;
+  const modelSlug = `later-${randomUUID()}`;
+  const lab = await catalog.insertLab({ name: "Example Lab", slug: labSlug });
+  const model = await catalog.insertModel({
+    labId: lab.id,
+    name: "Later Model",
+    slug: modelSlug,
+  });
+  const offering = await catalog.insertOffering({
+    modelId: model.id,
+    platform: "official-api",
+  });
+  const source = requireInsertedRow(
+    await tx
+      .insert(sources)
+      .values({
+        url: `https://example.test/pricing/${randomUUID()}`,
+        type: "official",
+      })
+      .returning({ id: sources.id }),
+    "insert source",
+  );
+  const observationId = await insertObservation(tx, source.id, EARLIER, [
+    priceRow(modelSlug, "2"),
+  ]);
+  const itemId = await insertItem(tx, observationId, offering.id);
+  await insertOpenPrice(tx, offering.id, "2", LATER);
+  return {
+    labSlug,
+    modelSlug,
+    itemId,
+    offeringId: offering.id,
+    observationId,
+  };
+}
+
+async function insertOpenPrice(
+  tx: EvidenceDb,
+  offeringId: number,
+  amount: string,
+  firstSeenAt: Date,
+): Promise<void> {
   const version = requireInsertedRow(
     await tx
       .insert(priceVersions)
-      .values({ offeringId, firstSeenAt: EARLIER })
+      .values({ offeringId, firstSeenAt })
       .returning({ id: priceVersions.id }),
     "insert price version",
   );

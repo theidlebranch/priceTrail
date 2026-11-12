@@ -22,7 +22,9 @@ import {
  * Settle flagged items whose price for the visit day did not change.
  *
  * A later dated price does not count. The comparison is the price that
- * applied on that visit, against the open price now.
+ * applied on that visit, against the open price now. An open price whose
+ * firstSeenAt is after the visit stays flagged, so a later publish cannot
+ * clear the earlier difference.
  *
  * planSamePriceClears() only reads. clearSamePriceFlags() stamps the
  * matching items confirmed, with reviewed_at set to that snapshot's
@@ -46,6 +48,11 @@ type WaitingItem = SamePriceFlag & {
   offeringId: number;
   fetchedAt: Date;
   parsedData: unknown;
+};
+
+type OpenPrice = {
+  firstSeenAt: Date;
+  components: OpenPriceComponent[];
 };
 
 export async function planSamePriceClears(db: EvidenceDb): Promise<SamePriceClearPlan> {
@@ -96,13 +103,16 @@ async function decideSamePriceFlags(db: EvidenceDb): Promise<{
 
   for (const item of waiting) {
     const nextRows = readRows(item.parsedData);
+    const open = openPrices.get(item.offeringId);
     const unchanged =
       nextRows !== null &&
+      open !== undefined &&
+      open.firstSeenAt.getTime() <= item.fetchedAt.getTime() &&
       trackedPriceUnchanged({
         nextRows,
         modelSlug: item.modelSlug,
         fetchedAt: item.fetchedAt,
-        open: openPrices.get(item.offeringId) ?? null,
+        open: open.components,
       });
     const flag = {
       id: item.id,
@@ -144,8 +154,8 @@ async function listFlaggedOfficialItems(db: EvidenceDb): Promise<WaitingItem[]> 
 async function loadOpenPrices(
   db: EvidenceDb,
   offeringIds: readonly number[],
-): Promise<Map<number, OpenPriceComponent[]>> {
-  const open = new Map<number, OpenPriceComponent[]>();
+): Promise<Map<number, OpenPrice>> {
+  const open = new Map<number, OpenPrice>();
   if (offeringIds.length === 0) {
     return open;
   }
@@ -154,6 +164,7 @@ async function loadOpenPrices(
     .select({
       id: priceVersions.id,
       offeringId: priceVersions.offeringId,
+      firstSeenAt: priceVersions.firstSeenAt,
     })
     .from(priceVersions)
     .where(
@@ -164,18 +175,18 @@ async function loadOpenPrices(
       ),
     );
 
-  const versionIdsByOffering = new Map<number, number[]>();
+  const versionIdsByOffering = new Map<number, { id: number; firstSeenAt: Date }[]>();
   for (const version of versions) {
     const list = versionIdsByOffering.get(version.offeringId) ?? [];
-    list.push(version.id);
+    list.push({ id: version.id, firstSeenAt: version.firstSeenAt });
     versionIdsByOffering.set(version.offeringId, list);
   }
 
   const singleVersionIds: number[] = [];
   for (const ids of versionIdsByOffering.values()) {
-    const versionId = ids.length === 1 ? ids[0] : undefined;
-    if (versionId !== undefined) {
-      singleVersionIds.push(versionId);
+    const version = ids.length === 1 ? ids[0] : undefined;
+    if (version !== undefined) {
+      singleVersionIds.push(version.id);
     }
   }
   if (singleVersionIds.length === 0) {
@@ -206,13 +217,13 @@ async function loadOpenPrices(
   }
 
   for (const [offeringId, ids] of versionIdsByOffering) {
-    const versionId = ids.length === 1 ? ids[0] : undefined;
-    if (versionId === undefined) {
+    const version = ids.length === 1 ? ids[0] : undefined;
+    if (version === undefined) {
       continue;
     }
-    const rows = byVersion.get(versionId);
+    const rows = byVersion.get(version.id);
     if (rows !== undefined && rows.length > 0) {
-      open.set(offeringId, rows);
+      open.set(offeringId, { firstSeenAt: version.firstSeenAt, components: rows });
     }
   }
   return open;
