@@ -16,6 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SAME_PRICE_NOTE, SAME_PRICE_REVIEWER } from "@/core/review/confirm-price";
 import { createDb } from "@/server/db/client";
 import {
   publishPriceVersion,
@@ -386,6 +387,26 @@ describe.skipIf(databaseUrl.length === 0)("publishPriceVersion", () => {
       expect(await amountsFor(tx, published.priceVersionId)).toEqual([
         { dimension: "input", amount: "0", condition: {} },
       ]);
+    });
+  });
+
+  it("throws when a same-price acceptance is passed to publish", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const item = await seedItem(tx, offering.id, "confirmed");
+      await tx
+        .update(observationItems)
+        .set({
+          reviewedBy: SAME_PRICE_REVIEWER,
+          reviewedAt: NEXT_SEEN,
+          reviewNote: SAME_PRICE_NOTE,
+        })
+        .where(eq(observationItems.id, item.id));
+
+      await expect(
+        publishPriceVersion(tx, priceInput({ observationItemId: item.id })),
+      ).rejects.toThrow(/same price/);
+      expect(await versionsFor(tx, offering.id)).toEqual([]);
     });
   });
 

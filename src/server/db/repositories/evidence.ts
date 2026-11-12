@@ -1,9 +1,15 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { normalizedPriceSchema, type NormalizedPrice } from "@/core/pricing/shape";
+import {
+  SAME_PRICE_NOTE,
+  SAME_PRICE_REVIEWER,
+  trackedPriceUnchanged,
+  type OpenPriceComponent,
+} from "@/core/review/confirm-price";
 import { checkParsedPrices } from "@/core/verification/check-parse";
 import { fingerprintParsedPrices } from "@/core/verification/fingerprint";
 import { requireInsertedRow } from "@/server/db/repositories/catalog";
@@ -15,6 +21,8 @@ import {
   observationItems,
   observations,
   offerings,
+  priceComponents,
+  priceVersions,
   sources,
 } from "@/server/db/schema";
 
@@ -25,8 +33,12 @@ import {
  * A repository is the storage door for one job. Callers pass the download
  * and the parsed rows. This file does not fetch the page, parse it, ask
  * Wayback, or open a price period. publishPriceVersion() is the only price
- * writer, and this file does not call it. A new hash is stored as flagged.
- * flagged means the cell check has not run yet. The open price stays open.
+ * writer, and this file does not call it. A new hash stores one item per
+ * tracked offering. The item is confirmed when the prices that apply on
+ * the visit day match the open price. A later dated price does not ask
+ * a person. The reviewer id is system:same-price, and no new price period
+ * is opened. Any other item stays flagged for a person. The open price
+ * stays open.
  *
  * recordArchiveResult() writes only archive_url and archive_status. The
  * page text stays where recordSourceCheck() put it. A failed capture does
@@ -89,6 +101,7 @@ type TrackedOffering = {
 type LatestObservation = {
   fetchedAt: Date;
   contentHash: string;
+  parsedData: unknown;
 };
 
 const OFFICIAL_PLATFORM = "official-api";
@@ -420,6 +433,7 @@ async function loadLatestObservation(
     .select({
       fetchedAt: observations.fetchedAt,
       contentHash: observations.contentHash,
+      parsedData: observations.parsedData,
     })
     .from(observations)
     .where(eq(observations.sourceId, sourceId))
@@ -524,6 +538,83 @@ async function fileVisit(
   return { outcome: "changed", observationId };
 }
 
+/**
+ * The one open price for each offering, when there is exactly one.
+ *
+ * Zero open prices, or two, are left out. The caller then flags that
+ * model. This function only reads. It does not call publishPriceVersion().
+ */
+async function loadOpenPrices(
+  db: EvidenceDb,
+  offeringIds: readonly number[],
+): Promise<Map<number, OpenPriceComponent[]>> {
+  const open = new Map<number, OpenPriceComponent[]>();
+  if (offeringIds.length === 0) {
+    return open;
+  }
+
+  const versions = await db
+    .select({
+      id: priceVersions.id,
+      offeringId: priceVersions.offeringId,
+    })
+    .from(priceVersions)
+    .where(
+      and(
+        inArray(priceVersions.offeringId, [...offeringIds]),
+        isNull(priceVersions.lastSeenAt),
+        isNull(priceVersions.retractedAt),
+      ),
+    );
+
+  const versionByOffering = new Map<number, number>();
+  const skipped = new Set<number>();
+  for (const version of versions) {
+    if (skipped.has(version.offeringId) || versionByOffering.has(version.offeringId)) {
+      versionByOffering.delete(version.offeringId);
+      skipped.add(version.offeringId);
+      continue;
+    }
+    versionByOffering.set(version.offeringId, version.id);
+  }
+
+  const versionIds = [...versionByOffering.values()];
+  if (versionIds.length === 0) {
+    return open;
+  }
+
+  const components = await db
+    .select({
+      priceVersionId: priceComponents.priceVersionId,
+      dimension: priceComponents.dimension,
+      unit: priceComponents.unit,
+      amount: priceComponents.amount,
+      condition: priceComponents.condition,
+    })
+    .from(priceComponents)
+    .where(inArray(priceComponents.priceVersionId, versionIds));
+
+  const byVersion = new Map<number, OpenPriceComponent[]>();
+  for (const component of components) {
+    const list = byVersion.get(component.priceVersionId) ?? [];
+    list.push({
+      dimension: component.dimension,
+      unit: component.unit,
+      amount: component.amount,
+      condition: component.condition,
+    });
+    byVersion.set(component.priceVersionId, list);
+  }
+
+  for (const [offeringId, versionId] of versionByOffering) {
+    const rows = byVersion.get(versionId);
+    if (rows !== undefined && rows.length > 0) {
+      open.set(offeringId, rows);
+    }
+  }
+  return open;
+}
+
 async function insertSnapshot(
   db: EvidenceDb,
   input: {
@@ -536,6 +627,10 @@ async function insertSnapshot(
     tracked: readonly TrackedOffering[];
   },
 ): Promise<number> {
+  const openPrices = await loadOpenPrices(
+    db,
+    input.tracked.map((item) => item.offeringId),
+  );
   const observation = requireInsertedRow(
     await db
       .insert(observations)
@@ -555,13 +650,22 @@ async function insertSnapshot(
   );
 
   for (const item of input.tracked) {
+    const unchanged = trackedPriceUnchanged({
+      nextRows: input.rows,
+      modelSlug: item.modelSlug,
+      fetchedAt: input.fetchedAt,
+      open: openPrices.get(item.offeringId) ?? null,
+    });
     requireInsertedRow(
       await db
         .insert(observationItems)
         .values({
           observationId: observation.id,
           offeringId: item.offeringId,
-          reviewStatus: "flagged",
+          reviewStatus: unchanged ? "confirmed" : "flagged",
+          reviewedBy: unchanged ? SAME_PRICE_REVIEWER : null,
+          reviewedAt: unchanged ? input.fetchedAt : null,
+          reviewNote: unchanged ? SAME_PRICE_NOTE : null,
         })
         .returning({ id: observationItems.id }),
       "insert observation item",

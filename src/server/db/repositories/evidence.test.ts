@@ -24,10 +24,12 @@ import {
   type EvidenceDb,
   type RecordSourceCheckInput,
 } from "@/server/db/repositories/evidence";
+import { SAME_PRICE_NOTE, SAME_PRICE_REVIEWER } from "@/core/review/confirm-price";
 import {
   fetchLog,
   observationItems,
   observations,
+  priceComponents,
   priceVersions,
   sources,
 } from "@/server/db/schema";
@@ -211,6 +213,240 @@ describe.skipIf(databaseUrl.length === 0)("recordSourceCheck", () => {
         .where(eq(observationItems.observationId, filed.observationId ?? 0));
       expect(items).toEqual([{ reviewStatus: "flagged" }]);
       expect(await priceCount(tx, planted.offeringId)).toBe(0);
+    });
+  });
+
+  it("confirms a tracked model whose rows match the open price and does not open another price", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantCatalog(tx);
+      const rows = [priceRow(planted.modelSlug, "1")];
+      await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: FIRST_SEEN,
+          rows,
+        }),
+      );
+      await plantOpenPrice(tx, planted.offeringId, "1", FIRST_SEEN);
+
+      const filed = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: NEXT_SEEN,
+          rows: [...rows, priceRow("not-tracked", "9")],
+        }),
+      );
+
+      expect(filed.outcome).toBe("changed");
+      const items = await tx
+        .select({
+          reviewStatus: observationItems.reviewStatus,
+          reviewedBy: observationItems.reviewedBy,
+          reviewedAt: observationItems.reviewedAt,
+          reviewNote: observationItems.reviewNote,
+        })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, filed.observationId ?? 0));
+      expect(items).toEqual([
+        {
+          reviewStatus: "confirmed",
+          reviewedBy: SAME_PRICE_REVIEWER,
+          reviewedAt: NEXT_SEEN,
+          reviewNote: SAME_PRICE_NOTE,
+        },
+      ]);
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
+    });
+  });
+
+  it("keeps a tracked model flagged when its amount differs from the open price", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantCatalog(tx);
+      await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: FIRST_SEEN,
+          rows: [priceRow(planted.modelSlug, "1")],
+        }),
+      );
+      await plantOpenPrice(tx, planted.offeringId, "1", FIRST_SEEN);
+
+      const filed = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: NEXT_SEEN,
+          rows: [priceRow(planted.modelSlug, "2")],
+        }),
+      );
+
+      const items = await tx
+        .select({
+          reviewStatus: observationItems.reviewStatus,
+          reviewedBy: observationItems.reviewedBy,
+        })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, filed.observationId ?? 0));
+      expect(items).toEqual([{ reviewStatus: "flagged", reviewedBy: null }]);
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
+    });
+  });
+
+  it("confirms a tracked model when a later dated price is new and today matches", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantCatalog(tx);
+      await plantOpenPrice(tx, planted.offeringId, "2", FIRST_SEEN);
+
+      const filed = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: NEXT_SEEN,
+          rows: [
+            priceRow(planted.modelSlug, "2", "input", { validUntil: "2026-11-30" }),
+            priceRow(planted.modelSlug, "4", "input", { validFrom: "2026-12-01" }),
+          ],
+        }),
+      );
+
+      const items = await tx
+        .select({
+          reviewStatus: observationItems.reviewStatus,
+          reviewedBy: observationItems.reviewedBy,
+          reviewNote: observationItems.reviewNote,
+        })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, filed.observationId ?? 0));
+      expect(items).toEqual([
+        {
+          reviewStatus: "confirmed",
+          reviewedBy: SAME_PRICE_REVIEWER,
+          reviewNote: SAME_PRICE_NOTE,
+        },
+      ]);
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
+    });
+  });
+
+  it("asks again after a reject when today's price still differs", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantCatalog(tx);
+      await plantOpenPrice(tx, planted.offeringId, "1", FIRST_SEEN);
+      const wrong = [priceRow(planted.modelSlug, "2")];
+      const first = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: FIRST_SEEN,
+          rows: wrong,
+        }),
+      );
+      const firstItems = await tx
+        .select({ id: observationItems.id })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, first.observationId ?? 0));
+      const firstItem = firstItems[0];
+      if (firstItem === undefined) {
+        throw new Error("first visit did not store a review card");
+      }
+      await tx
+        .update(observationItems)
+        .set({
+          reviewStatus: "rejected",
+          reviewedBy: "github:1",
+          reviewedAt: FIRST_SEEN,
+          reviewNote: "parser invented a dollar",
+        })
+        .where(eq(observationItems.id, firstItem.id));
+
+      const second = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: NEXT_SEEN,
+          rows: [...wrong, priceRow("not-tracked", "9")],
+          rawContent: "second page",
+        }),
+      );
+      const items = await tx
+        .select({
+          reviewStatus: observationItems.reviewStatus,
+          reviewedBy: observationItems.reviewedBy,
+        })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, second.observationId ?? 0));
+      expect(items).toEqual([{ reviewStatus: "flagged", reviewedBy: null }]);
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
+    });
+  });
+
+  it("stays quiet after a reject when a later visit matches the site", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantCatalog(tx);
+      await plantOpenPrice(tx, planted.offeringId, "1", FIRST_SEEN);
+      const first = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: FIRST_SEEN,
+          rows: [priceRow(planted.modelSlug, "2")],
+        }),
+      );
+      const firstItems = await tx
+        .select({ id: observationItems.id })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, first.observationId ?? 0));
+      const firstItem = firstItems[0];
+      if (firstItem === undefined) {
+        throw new Error("first visit did not store a review card");
+      }
+      await tx
+        .update(observationItems)
+        .set({
+          reviewStatus: "rejected",
+          reviewedBy: "github:1",
+          reviewedAt: FIRST_SEEN,
+          reviewNote: "parser invented a dollar",
+        })
+        .where(eq(observationItems.id, firstItem.id));
+
+      const second = await recordSourceCheck(
+        tx,
+        parsedCheck({
+          sourceId: planted.sourceId,
+          labSlug: planted.labSlug,
+          fetchedAt: NEXT_SEEN,
+          rows: [priceRow(planted.modelSlug, "1"), priceRow("not-tracked", "9")],
+          rawContent: "fixed page",
+        }),
+      );
+      const items = await tx
+        .select({
+          reviewStatus: observationItems.reviewStatus,
+          reviewedBy: observationItems.reviewedBy,
+          reviewNote: observationItems.reviewNote,
+        })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, second.observationId ?? 0));
+      expect(items).toEqual([
+        {
+          reviewStatus: "confirmed",
+          reviewedBy: SAME_PRICE_REVIEWER,
+          reviewNote: SAME_PRICE_NOTE,
+        },
+      ]);
+      expect(await priceCount(tx, planted.offeringId)).toBe(1);
     });
   });
 
@@ -662,6 +898,7 @@ function priceRow(
   modelSlug: string,
   amount = "1",
   dimension: NormalizedPrice["dimension"] = "input",
+  extra: Partial<NormalizedPrice> = {},
 ): NormalizedPrice {
   return {
     provider: "openai",
@@ -670,7 +907,38 @@ function priceRow(
     dimension,
     usdPer1M: amount,
     source: "official",
+    ...extra,
   };
+}
+
+async function plantOpenPrice(
+  tx: EvidenceDb,
+  offeringId: number | null,
+  amount: string,
+  firstSeenAt: Date,
+): Promise<void> {
+  if (offeringId === null) {
+    throw new Error("open price needs an offering");
+  }
+  const version = requireInsertedRow(
+    await tx
+      .insert(priceVersions)
+      .values({ offeringId, firstSeenAt })
+      .returning({ id: priceVersions.id }),
+    "insert price version",
+  );
+  requireInsertedRow(
+    await tx
+      .insert(priceComponents)
+      .values({
+        priceVersionId: version.id,
+        dimension: "input",
+        unit: "usd_per_1m_tokens",
+        amount,
+      })
+      .returning({ id: priceComponents.id }),
+    "insert price component",
+  );
 }
 
 function parsedCheck(input: {

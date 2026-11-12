@@ -3,6 +3,7 @@ import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { pricePrecisionLabel, type PricePrecision } from "@/core/pricing/precision";
+import { SAME_PRICE_REVIEWER } from "@/core/review/confirm-price";
 import type { Condition } from "@/core/pricing/shape";
 import * as schema from "@/server/db/schema";
 import { observationItems, offerings, priceComponents, priceVersions } from "@/server/db/schema";
@@ -11,8 +12,10 @@ import { observationItems, offerings, priceComponents, priceVersions } from "@/s
  * The only function that may insert price_versions and price_components.
  *
  * A caller passes an observation item that is already ok or confirmed, plus
- * the amounts and the dates. This file checks the item, then writes. It does
- * not read parsed_data or fetch_log. Those lookups belong to the later pipeline.
+ * the amounts and the dates. This file checks the item, then writes. A card
+ * signed system:same-price is refused: that acceptance means the price did
+ * not change, so it cannot open a period. This file does not read
+ * parsed_data or fetch_log. Those lookups belong to the later pipeline.
  *
  * A normal change closes the open period, then opens a new one. A correction
  * marks the open row retracted and adds a fix that points at it. The two
@@ -112,6 +115,11 @@ export async function publishPriceVersion(
     const item = await loadItem(tx, prepared.observationItemId);
     if (item === undefined) {
       throw new Error(`observation item ${prepared.observationItemId} does not exist`);
+    }
+    if (item.reviewedBy === SAME_PRICE_REVIEWER) {
+      throw new Error(
+        `observation item ${item.id} was accepted as the same price and cannot publish`,
+      );
     }
     if (item.reviewStatus !== "ok" && item.reviewStatus !== "confirmed") {
       throw new Error(
