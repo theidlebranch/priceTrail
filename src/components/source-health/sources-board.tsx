@@ -80,7 +80,7 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
       ) : (
         <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
           <div
-            className={`hidden border-b border-border px-4 py-2.5 text-sm text-muted-foreground md:grid md:gap-4 ${SOURCE_ROW_COLUMNS}`}
+            className={`hidden border-b border-border px-4 py-2.5 text-sm text-muted-foreground lg:grid lg:gap-4 ${SOURCE_ROW_COLUMNS}`}
           >
             <span>Source</span>
             <span>Last 24 checks</span>
@@ -95,7 +95,8 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
         </div>
       )}
       <p className="mt-4 text-sm text-muted-foreground">
-        Wayback: archived, pending, or failed. Only checks that found new prices create a snapshot.
+        Wayback: archived, pending, or failed. A snapshot is stored when the parsed page
+        changes, even when today&apos;s price already matches the site.
       </p>
     </div>
   );

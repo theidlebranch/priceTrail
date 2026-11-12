@@ -124,7 +124,9 @@ function ResultCell({
           <span className="rounded-md border border-status-info px-1.5 text-status-info">first check</span>
         ) : null}
       </span>
-      {note === null ? null : <p className="mt-1 font-mono text-sm text-muted-foreground">{note}</p>}
+      {note === null ? null : (
+        <p className="mt-1 break-all font-mono text-sm text-muted-foreground">{note}</p>
+      )}
       {chips.length === 0 ? null : (
         <span className="mt-1 flex flex-wrap gap-1">
           {chips.map((chip) => (

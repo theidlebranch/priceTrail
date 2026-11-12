@@ -6,7 +6,7 @@ const LEGEND = [
   },
   {
     label: "Changed",
-    title: "The download worked and the parsed prices were new. That check stored a snapshot.",
+    title: "The parsed page changed, so that check stored a snapshot. The price on the site may be the same.",
     className: "bg-status-info",
   },
   {

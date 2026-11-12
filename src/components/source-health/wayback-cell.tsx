@@ -39,7 +39,7 @@ export function WaybackCell({
           ) : (
             <a
               href={wayback.archiveUrl}
-              className="font-mono underline"
+              className="relative z-10 font-mono underline"
               rel="noreferrer"
               target="_blank"
             >

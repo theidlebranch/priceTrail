@@ -86,11 +86,16 @@ describe("SourcesBoard", () => {
     expect(screen.getByText("Nov 7 · next ≈ 18:00")).toBeTruthy();
     expect(screen.getByText("1 of 3 checks")).toBeTruthy();
 
-    expect(linkText(healthy)).toContain("Prices unchanged");
-    expect(linkText(parser)).toContain("Parser failed");
-    expect(linkText(download)).toContain("Download failed");
-    expect(linkText(fresh)).toContain("Not checked yet");
-    expect(linkText(paused)).toContain("Paused");
+    expect(rowText(healthy)).toContain("Prices unchanged");
+    expect(rowText(parser)).toContain("Parser failed");
+    expect(rowText(download)).toContain("Download failed");
+    expect(rowText(fresh)).toContain("Not checked yet");
+    expect(rowText(paused)).toContain("Paused");
+    expect(detailLink(healthy).getAttribute("href")).toBe("/review/sources/1");
+    expect(detailLink(parser).getAttribute("href")).toBe("/review/sources/2");
+    expect(detailLink(download).getAttribute("href")).toBe("/review/sources/3");
+    expect(detailLink(fresh).getAttribute("href")).toBe("/review/sources/4");
+    expect(detailLink(paused).getAttribute("href")).toBe("/review/sources/5");
     expect(screen.getAllByRole("img").length).toBe(5);
     expect(screen.getByRole("link", { name: "Needs attention 2" }).getAttribute("href")).toBe(
       "/review/sources?status=attention",
@@ -116,7 +121,45 @@ describe("SourcesBoard", () => {
     );
     expect(screen.getByText("No sources match this filter.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Healthy 0" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByText(/Wayback: archived, pending, or failed/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Wayback: archived, pending, or failed. A snapshot is stored when the parsed page changes, even when today's price already matches the site.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Changed").closest("li")?.getAttribute("title")).toBe(
+      "The parsed page changed, so that check stored a snapshot. The price on the site may be the same.",
+    );
+  });
+
+  it("keeps the archive permalink outside the detail link", () => {
+    const archiveUrl = "https://web.archive.org/web/20261107120000/https://healthy.example/prices";
+    render(
+      <SourcesBoard
+        view={toSourceBoardView(
+          [
+            row({
+              latestSnapshot: {
+                id: 40,
+                archiveStatus: "archived",
+                archiveUrl,
+                fetchedAt: CHECKED,
+              },
+            }),
+          ],
+          ["https://healthy.example/prices"],
+          "all",
+          NOW,
+        )}
+      />,
+    );
+
+    const detail = detailLink("https://healthy.example/prices");
+    const archive = screen.getByRole("link", { name: "#40" });
+    expect(detail.getAttribute("href")).toBe("/review/sources/4");
+    expect(archive.getAttribute("href")).toBe(archiveUrl);
+    expect(archive.getAttribute("target")).toBe("_blank");
+    expect(detail.contains(archive)).toBe(false);
+    expect(archive.closest("a")).toBe(archive);
   });
 });
 
@@ -187,7 +230,9 @@ describe("SourceDetail", () => {
     expect(screen.getAllByText("No snapshot").length).toBeGreaterThan(0);
     expect(screen.getByText("same capture as #580")).toBeTruthy();
     expect(screen.getByText("first check")).toBeTruthy();
-    expect(screen.getAllByText("0 matching tables").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("0 matching tables").some((node) => node.classList.contains("break-all")),
+    ).toBe(true);
   });
 
   it("reveals the rest of a long group without changing the times", () => {
@@ -238,7 +283,11 @@ describe("SourceDetail", () => {
   });
 });
 
-function linkText(url: string): string {
-  const host = new URL(url).host;
-  return screen.getByRole("link", { name: new RegExp(host) }).textContent ?? "";
+function detailLink(url: string): HTMLElement {
+  const host = new URL(url).host.replaceAll(".", "\\.");
+  return screen.getByRole("link", { name: new RegExp(host) });
+}
+
+function rowText(url: string): string {
+  return detailLink(url).closest("div")?.textContent ?? "";
 }
