@@ -14,6 +14,11 @@ const markupFixture = readFileSync(
   "utf8",
 );
 
+const decisionFixture = readFileSync(
+  path.join(process.cwd(), "tests/fixtures/google-pricing.2026-11-12.html"),
+  "utf8",
+);
+
 type PageRow = {
   label: string;
   free?: string;
@@ -258,6 +263,53 @@ describe("parseGooglePricing", () => {
     expect(() => parseGooglePricing(html)).toThrow(/unrecognized cell/i);
   });
 
+  it("skips a Not applicable cell and keeps the other price", () => {
+    const withReason = markupPage({
+      heading: "Gemini Decision",
+      ids: ["gemini-decision"],
+      tabs: [
+        {
+          title: "Standard",
+          rows: [
+            { label: "Input price", paid: "$0.10" },
+            { label: "Output price", paid: "Not applicable (0 output tokens)" },
+          ],
+        },
+      ],
+    });
+    const bare = markupPage({
+      heading: "Gemini Decision",
+      ids: ["gemini-decision"],
+      tabs: [
+        {
+          title: "Standard",
+          rows: [
+            { label: "Input price", paid: "$0.10" },
+            { label: "Output price", paid: "Not applicable" },
+          ],
+        },
+      ],
+    });
+    const priced = markupPage({
+      heading: "Gemini Decision",
+      ids: ["gemini-decision"],
+      tabs: [
+        {
+          title: "Standard",
+          rows: [{ label: "Output price", paid: "Not applicable ($1.00)" }],
+        },
+      ],
+    });
+
+    for (const html of [withReason, bare]) {
+      const { rows } = parseGooglePricing(html);
+
+      expect(findRow(rows, "gemini-decision", "input")?.usdPer1M).toBe("0.1");
+      expect(findRow(rows, "gemini-decision", "output")).toBeUndefined();
+    }
+    expect(() => parseGooglePricing(priced)).toThrow(/unrecognized cell/i);
+  });
+
   it("throws when a tier phrase is not <= or >", () => {
     const html = page({
       rows: [{ label: "Input price", paid: "$2.00, prompts < 200k tokens" }],
@@ -395,6 +447,83 @@ describe("parseGooglePricing", () => {
     expect(warnings.some((warning) => /multiple model codes/i.test(warning) && /gemini-3.8-live/.test(warning))).toBe(
       false,
     );
+  });
+
+  it("parses the 2026-11-12 page and skips Gemini Decision's missing output price", () => {
+    const { rows } = parseGooglePricing(decisionFixture);
+
+    expect(
+      rows.some((row) => row.modelSlug === "gemini-decision" && row.dimension === "output"),
+    ).toBe(false);
+
+    expect(findRow(rows, "gemini-4-argon", "input", { validUntil: "2026-11-30" })?.usdPer1M).toBe(
+      "2",
+    );
+    expect(findRow(rows, "gemini-4-argon", "input", { validFrom: "2026-12-01" })?.usdPer1M).toBe(
+      "4",
+    );
+    expect(findRow(rows, "gemini-4-argon", "output", { validUntil: "2026-11-30" })?.usdPer1M).toBe(
+      "10",
+    );
+    expect(findRow(rows, "gemini-4-argon", "output", { validFrom: "2026-12-01" })?.usdPer1M).toBe(
+      "20",
+    );
+    expect(
+      findRow(rows, "gemini-4-argon", "cache_read", { validUntil: "2026-11-30" })?.usdPer1M,
+    ).toBe("0.1");
+    expect(
+      findRow(rows, "gemini-4-argon", "cache_read", { validFrom: "2026-12-01" })?.usdPer1M,
+    ).toBe("0.2");
+
+    expect(findRow(rows, "gemini-3.8-flash", "input", { validUntil: "2026-12-31" })?.usdPer1M).toBe(
+      "0.75",
+    );
+    expect(findRow(rows, "gemini-3.8-flash", "input", { validFrom: "2027-01-01" })?.usdPer1M).toBe(
+      "1.5",
+    );
+    expect(
+      findRow(rows, "gemini-3.8-flash", "output", { validUntil: "2026-12-31" })?.usdPer1M,
+    ).toBe("3.75");
+    expect(findRow(rows, "gemini-3.8-flash", "output", { validFrom: "2027-01-01" })?.usdPer1M).toBe(
+      "7.5",
+    );
+    expect(
+      findRow(rows, "gemini-3.8-flash", "cache_read", { validUntil: "2026-12-31" })?.usdPer1M,
+    ).toBe("0.075");
+    expect(
+      findRow(rows, "gemini-3.8-flash", "cache_read", { validFrom: "2027-01-01" })?.usdPer1M,
+    ).toBe("0.15");
+
+    expect(
+      findRow(rows, "gemini-2.5-pro", "input", {
+        condition: { promptTokensAtMost: 200000 },
+      })?.usdPer1M,
+    ).toBe("1.25");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "input", {
+        condition: { promptTokensOver: 200000 },
+      })?.usdPer1M,
+    ).toBe("2.5");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "output", {
+        condition: { promptTokensAtMost: 200000 },
+      })?.usdPer1M,
+    ).toBe("10");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "output", {
+        condition: { promptTokensOver: 200000 },
+      })?.usdPer1M,
+    ).toBe("15");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "cache_read", {
+        condition: { promptTokensAtMost: 200000 },
+      })?.usdPer1M,
+    ).toBe("0.125");
+    expect(
+      findRow(rows, "gemini-2.5-pro", "cache_read", {
+        condition: { promptTokensOver: 200000 },
+      })?.usdPer1M,
+    ).toBe("0.25");
   });
 
   it("throws when a markup page has no Standard tab", () => {

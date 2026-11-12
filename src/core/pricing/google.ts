@@ -514,6 +514,10 @@ function classifySegment(
   if (/^(not available|free of charge)$/i.test(segment)) {
     return null;
   }
+  // "Not applicable ($1)" still has a price, so it falls through and throws.
+  if (/^not applicable(?:\s*\([^)]*\))?$/i.test(segment) && !segment.includes("$")) {
+    return null;
+  }
   if (/implicit caching only/i.test(segment) && !/\$/.test(segment)) {
     return null;
   }
