@@ -12,14 +12,18 @@ const URL = "https://platform.claude.com/docs/en/about-claude/pricing.md";
 
 function entry(overrides: Partial<SourceHealthEntry> = {}): SourceHealthEntry {
   return {
+    id: 4,
+    href: "/review/sources/4",
     url: URL,
     typeText: "official",
     activeText: "Active",
     lastCheckedText: "2026-11-07 12:00:00 UTC",
+    visitColor: "ok",
     outcomeText: "Prices unchanged",
     checkedAtText: "2026-11-07 12:00:00 UTC",
     httpStatusText: "200",
     note: null,
+    archiveColor: "ok",
     archiveText: "Archived.",
     warning: null,
     ...overrides,
@@ -48,41 +52,56 @@ describe("SourceHealthPageHeader", () => {
     expect(screen.queryByText(/need attention/)).toBeNull();
     expect(screen.queryByText(/healthy/)).toBeNull();
     expect(screen.queryByText(/\d+ sources?/)).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Visit" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Wayback" })).toBeNull();
   });
 });
 
 describe("SourceHealthList", () => {
-  it("shows a quiet source with its url, check, and archive, and no amber border", () => {
+  it("links a quiet source to its history and colors the visit and the archive", () => {
     render(<SourceHealthList view={view()} />);
 
     expect(screen.getByText("1 source")).toBeTruthy();
     expect(screen.getByText("0 need attention")).toBeTruthy();
     expect(screen.getByText("1 healthy")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Visit" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Wayback" })).toBeTruthy();
+    expect(screen.getByText("Prices unchanged.")).toBeTruthy();
+    expect(screen.getByText("Parsed prices changed.")).toBeTruthy();
+    expect(screen.getByText("The parser could not read the page.")).toBeTruthy();
+    expect(screen.getByText("The download failed.")).toBeTruthy();
+    expect(screen.getByText("Not checked yet.")).toBeTruthy();
+    expect(screen.getAllByText("Archived.").length).toBeGreaterThan(1);
+    expect(screen.getByText("Archive is still pending.")).toBeTruthy();
+    expect(screen.getByText("Archive failed. The stored copy remains.")).toBeTruthy();
+    expect(screen.getByText("Wayback was not asked.")).toBeTruthy();
 
-    const url = screen.getByText(URL);
-    expect(url.closest("a")).toBeNull();
-    const row = url.closest("li");
-    expect(row?.className).toContain("border-l-transparent");
-    expect(row?.className).not.toContain("border-l-status-warning");
-    expect(row?.textContent).toContain("official");
-    expect(row?.textContent).toContain("Active");
-    expect(row?.textContent).toContain("Last checked 2026-11-07 12:00:00 UTC.");
-    expect(row?.textContent).toContain(
+    const link = screen.getByRole("link", { name: new RegExp(URL) });
+    expect(link.getAttribute("href")).toBe("/review/sources/4");
+    expect(link.className).toContain("border-l-status-ok");
+    expect(link.className).not.toContain("border-l-status-warning");
+    expect(link.textContent).toContain("official");
+    expect(link.textContent).toContain("Active");
+    expect(link.textContent).toContain("Last checked 2026-11-07 12:00:00 UTC.");
+    expect(link.textContent).toContain(
       "Prices unchanged. 2026-11-07 12:00:00 UTC. HTTP status: 200.",
     );
-    expect(row?.textContent).toContain("Archived.");
-    expect(screen.queryByText(/Note:/)).toBeNull();
+    const archived = screen.getAllByText("Archived.").find((node) => node.closest("a") === link);
+    expect(archived?.className).toContain("text-status-ok");
+    expect(screen.queryByText(/^Note:/)).toBeNull();
   });
 
-  it("marks a failed download with an amber border and keeps the note", () => {
+  it("marks a failed download in red and a failed archive in red", () => {
     render(
       <SourceHealthList
         view={view({
           entries: [
             entry({
+              visitColor: "error",
               outcomeText: "The download failed",
               httpStatusText: "no HTTP status",
               note: "network down",
+              archiveColor: "error",
               archiveText: "Archive failed. The stored copy remains.",
               warning: "No checker is wired to this URL.",
             }),
@@ -91,15 +110,19 @@ describe("SourceHealthList", () => {
       />,
     );
 
-    const row = screen.getByText(URL).closest("li");
-    expect(row?.className).toContain("border-l-status-warning");
-    expect(row?.className).not.toContain("border-l-transparent");
-    expect(row?.textContent).toContain(
+    const link = screen.getByRole("link", { name: new RegExp(URL) });
+    expect(link.className).toContain("border-l-status-error");
+    expect(link.className).not.toContain("border-l-status-warning");
+    expect(link.textContent).toContain(
       "The download failed. 2026-11-07 12:00:00 UTC. No HTTP status.",
     );
-    expect(row?.textContent).toContain("Note: network down");
-    expect(row?.textContent).toContain("Archive failed. The stored copy remains.");
-    expect(row?.textContent).toContain("No checker is wired to this URL.");
+    expect(link.textContent).toContain("Note: network down");
+    expect(link.textContent).toContain("Archive failed. The stored copy remains.");
+    expect(link.textContent).toContain("No checker is wired to this URL.");
+    const archive = screen
+      .getAllByText("Archive failed. The stored copy remains.")
+      .find((node) => node.closest("a") === link);
+    expect(archive?.className).toContain("text-status-error");
     expect(screen.getByText("1 needs attention")).toBeTruthy();
     expect(screen.getByText("0 healthy")).toBeTruthy();
   });
@@ -125,16 +148,21 @@ describe("SourceHealthList", () => {
     expect(screen.queryByRole("link", { name: /https:/ })).toBeNull();
   });
 
-  it("keeps a quiet changed price next to an inactive row", () => {
+  it("colors a changed visit blue and leaves an inactive visit on its own color", () => {
     render(
       <SourceHealthList
         view={view({
           entries: [
             entry({
+              id: 8,
+              href: "/review/sources/8",
               url: "https://example.test/changed",
+              visitColor: "info",
               outcomeText: "Parsed prices changed",
             }),
             entry({
+              id: 9,
+              href: "/review/sources/9",
               url: "https://example.test/inactive",
               activeText: "Inactive",
             }),
@@ -143,12 +171,14 @@ describe("SourceHealthList", () => {
       />,
     );
 
-    const changed = screen.getByText("https://example.test/changed").closest("li");
-    const inactive = screen.getByText("https://example.test/inactive").closest("li");
-    expect(changed?.className).toContain("border-l-transparent");
-    expect(changed?.textContent).toContain("Parsed prices changed");
-    expect(inactive?.className).toContain("border-l-status-warning");
-    expect(inactive?.textContent).toContain("Inactive");
+    const changed = screen.getByRole("link", { name: /example\.test\/changed/ });
+    const inactive = screen.getByRole("link", { name: /example\.test\/inactive/ });
+    expect(changed.getAttribute("href")).toBe("/review/sources/8");
+    expect(changed.className).toContain("border-l-status-info");
+    expect(changed.textContent).toContain("Parsed prices changed");
+    expect(inactive.className).toContain("border-l-status-ok");
+    expect(inactive.className).not.toContain("border-l-status-warning");
+    expect(inactive.textContent).toContain("Inactive");
     expect(screen.getByText("2 sources")).toBeTruthy();
     expect(screen.getByText("1 needs attention")).toBeTruthy();
     expect(screen.getByText("1 healthy")).toBeTruthy();
@@ -160,10 +190,12 @@ describe("SourceHealthList", () => {
         view={view({
           entries: [
             entry({
+              visitColor: "neutral",
               lastCheckedText: "Not checked yet.",
               outcomeText: null,
               checkedAtText: null,
               httpStatusText: null,
+              archiveColor: "neutral",
               archiveText: "No snapshot yet.",
             }),
           ],
@@ -171,9 +203,12 @@ describe("SourceHealthList", () => {
       />,
     );
 
-    expect(screen.getByText("Not checked yet.")).toBeTruthy();
-    expect(screen.queryByText(/Last checked/)).toBeNull();
-    expect(screen.getByText("No snapshot yet.")).toBeTruthy();
+    const link = screen.getByRole("link", { name: new RegExp(URL) });
+    expect(link.className).toContain("border-l-status-neutral");
+    expect(link.textContent).toContain("Not checked yet.");
+    expect(link.textContent).not.toContain("Last checked");
+    const archive = screen.getAllByText("No snapshot yet.").find((node) => node.closest("a") === link);
+    expect(archive?.className).toContain("text-status-neutral");
     expect(screen.getByText("1 healthy")).toBeTruthy();
   });
 });

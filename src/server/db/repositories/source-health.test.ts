@@ -16,7 +16,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "@/server/db/client";
 import type { PublishDb } from "@/server/db/publish-price-version";
 import { requireInsertedRow } from "@/server/db/repositories/catalog";
-import { assembleSourceHealthRow, listSourceHealth } from "@/server/db/repositories/source-health";
+import {
+  assembleSourceCheck,
+  assembleSourceHealthRow,
+  findSource,
+  hasSource,
+  listSourceChecks,
+  listSourceHealth,
+} from "@/server/db/repositories/source-health";
 import { fetchLog, observations, sources } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -24,10 +31,13 @@ const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
 const OLDER = new Date("2026-11-01T00:00:00.000Z");
 const NEWER = new Date("2026-11-07T12:00:00.000Z");
 
+const MIDDLE = new Date("2026-11-04T08:00:00.000Z");
+
 describe("assembleSourceHealthRow", () => {
   it("throws when a joined check is missing its outcome or its time", () => {
     expect(() =>
       assembleSourceHealthRow({
+        id: 1,
         url: "https://example.test/health/partial",
         type: "official",
         active: true,
@@ -39,6 +49,38 @@ describe("assembleSourceHealthRow", () => {
         archiveStatus: null,
       }),
     ).toThrow(/latest check/);
+  });
+});
+
+describe("assembleSourceCheck", () => {
+  it("throws when a changed visit has no snapshot", () => {
+    expect(() =>
+      assembleSourceCheck({
+        id: 4,
+        fetchedAt: NEWER,
+        httpStatus: 200,
+        outcome: "changed",
+        note: null,
+        observationId: null,
+        archiveStatus: null,
+        archiveUrl: null,
+      }),
+    ).toThrow(/snapshot/);
+  });
+
+  it("throws when a visit that did not change points at a snapshot", () => {
+    expect(() =>
+      assembleSourceCheck({
+        id: 5,
+        fetchedAt: NEWER,
+        httpStatus: 200,
+        outcome: "unchanged",
+        note: null,
+        observationId: 9,
+        archiveStatus: "archived",
+        archiveUrl: "https://web.archive.org/web/example",
+      }),
+    ).toThrow(/snapshot/);
   });
 });
 
@@ -162,6 +204,110 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
     });
   });
 
+  it("reads every visit for one source, newest first, and leaves the page text out", async () => {
+    await withHealth(async (tx) => {
+      const prefix = `https://example.test/health/${randomUUID()}`;
+      const rawMarker = `SECRET-RAW-${randomUUID()}`;
+      const parsedMarker = `SECRET-PARSED-${randomUUID()}`;
+      const archiveUrl = `https://web.archive.org/web/${randomUUID()}`;
+
+      const sourceId = await plantSource(tx, `${prefix}/history`, {
+        lastCheckedAt: NEWER,
+        snapshots: [
+          {
+            fetchedAt: OLDER,
+            archiveStatus: "archived",
+            archiveUrl,
+            rawMarker,
+            parsedMarker,
+          },
+          {
+            fetchedAt: NEWER,
+            archiveStatus: "failed",
+            rawMarker,
+            parsedMarker,
+          },
+        ],
+        checks: [
+          { fetchedAt: OLDER, httpStatus: 200, outcome: "unchanged", note: "quiet old" },
+          {
+            fetchedAt: OLDER,
+            httpStatus: 200,
+            outcome: "changed",
+            note: "old change",
+            snapshot: "older-archived",
+          },
+          {
+            fetchedAt: MIDDLE,
+            httpStatus: 200,
+            outcome: "parser_suspect",
+            note: "0 matching tables",
+          },
+          { fetchedAt: NEWER, httpStatus: 200, outcome: "unchanged", note: "quiet new" },
+          {
+            fetchedAt: NEWER,
+            httpStatus: 200,
+            outcome: "changed",
+            note: "new change",
+            snapshot: "newer",
+          },
+        ],
+      });
+      await plantSource(tx, `${prefix}/other`, {
+        lastCheckedAt: NEWER,
+        check: { fetchedAt: NEWER, httpStatus: 200, outcome: "unchanged", note: "other source" },
+      });
+
+      expect(await hasSource(tx, sourceId)).toBe(true);
+      expect(await hasSource(tx, 9_007_199_254_740_991)).toBe(false);
+      expect(await findSource(tx, sourceId)).toEqual({
+        id: sourceId,
+        url: `${prefix}/history`,
+        type: "official",
+        active: true,
+      });
+      expect(await findSource(tx, 9_007_199_254_740_991)).toBeNull();
+
+      const listed = (await listSourceHealth(tx)).filter((row) => row.url === `${prefix}/history`);
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.id).toBe(sourceId);
+
+      const checks = await listSourceChecks(tx, sourceId);
+      expect(checks.map((check) => check.note)).toEqual([
+        "new change",
+        "quiet new",
+        "0 matching tables",
+        "old change",
+        "quiet old",
+      ]);
+      expect(checks[0]).toMatchObject({
+        outcome: "changed",
+        fetchedAt: NEWER,
+        httpStatus: 200,
+        archiveStatus: "failed",
+        archiveUrl: null,
+      });
+      expect(checks[0]?.observationId).toEqual(expect.any(Number));
+      expect(checks[3]).toMatchObject({
+        outcome: "changed",
+        fetchedAt: OLDER,
+        archiveStatus: "archived",
+        archiveUrl,
+      });
+      expect(checks[4]).toMatchObject({
+        outcome: "unchanged",
+        observationId: null,
+        archiveStatus: null,
+        archiveUrl: null,
+      });
+
+      const packed = JSON.stringify(checks);
+      expect(packed).not.toContain(rawMarker);
+      expect(packed).not.toContain(parsedMarker);
+      expect(await listSourceChecks(tx, 9_007_199_254_740_991)).toEqual([]);
+    });
+  });
+
   it("orders sources by url", async () => {
     await withHealth(async (tx) => {
       const prefix = `https://example.test/health/${randomUUID()}`;
@@ -207,7 +353,7 @@ async function plantSource(
     checks?: CheckInput[];
     snapshots?: SnapshotInput[];
   } = {},
-): Promise<void> {
+): Promise<number> {
   const source = requireInsertedRow(
     await tx
       .insert(sources)
@@ -228,6 +374,7 @@ async function plantSource(
           rawContent: snapshot.rawMarker,
           rawContentHash: `raw-${randomUUID()}`,
           parsedData: { marker: snapshot.parsedMarker },
+          archiveUrl: snapshot.archiveUrl ?? null,
           archiveStatus: snapshot.archiveStatus,
         })
         .returning({ id: observations.id }),
@@ -258,11 +405,16 @@ async function plantSource(
       "insert fetch log",
     );
   }
+
+  return source.id;
 }
 
 function snapshotKey(snapshot: SnapshotInput, index: number): string {
   if (snapshot.fetchedAt.getTime() === NEWER.getTime() && snapshot.archiveStatus === "failed") {
     return "newer";
+  }
+  if (snapshot.fetchedAt.getTime() === OLDER.getTime() && snapshot.archiveStatus === "archived") {
+    return "older-archived";
   }
   return `snapshot-${index}`;
 }
@@ -278,6 +430,7 @@ type CheckInput = {
 type SnapshotInput = {
   fetchedAt: Date;
   archiveStatus: "pending" | "archived" | "failed";
+  archiveUrl?: string;
   rawMarker: string;
   parsedMarker: string;
 };

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
 import { parseReviewItemId } from "@/app/review/review-list";
+import { parseSourceId } from "@/app/review/source-health";
 import {
   isProtectedReviewPath,
   parseReviewerAllowlist,
@@ -12,6 +13,7 @@ import {
 import { createDb } from "@/server/db/client";
 import { hasTrackedModel } from "@/server/db/repositories/model-detail";
 import { hasReviewItem } from "@/server/db/repositories/review-queue";
+import { hasSource } from "@/server/db/repositories/source-health";
 import { parseDatabaseEnv } from "@/server/env";
 
 /**
@@ -34,9 +36,10 @@ import { parseDatabaseEnv } from "@/server/env";
  * price continues to the page.
  *
  * A missing review item answers 404 the same way, and only after the
- * reviewer is allowed in. A stranger still gets 403, not a hint that
- * the id exists. An id that is not a whole number throws. /review
- * itself is not an item lookup.
+ * reviewer is allowed in. A missing source history page does too.
+ * A stranger still gets 403, not a hint that the id exists. An id that
+ * is not a whole number throws. /review itself is not an item lookup,
+ * and /review/sources is not a source lookup.
  */
 export async function proxy(request: NextRequest) {
   if (isProtectedReviewPath(request.nextUrl.pathname)) {
@@ -44,7 +47,7 @@ export async function proxy(request: NextRequest) {
     if (denied !== null) {
       return denied;
     }
-    return missingReviewItemResponse(request);
+    return missingReviewRecordResponse(request);
   }
 
   const slugs = modelSlugs(request.nextUrl.pathname);
@@ -101,18 +104,29 @@ async function protectReview(request: NextRequest): Promise<NextResponse | null>
   return reviewTextResponse(result);
 }
 
-async function missingReviewItemResponse(request: NextRequest): Promise<NextResponse> {
-  const itemId = reviewItemId(request.nextUrl.pathname);
-  if (itemId === null) {
-    return NextResponse.next();
+async function missingReviewRecordResponse(request: NextRequest): Promise<NextResponse> {
+  const pathname = request.nextUrl.pathname;
+  const itemId = reviewItemId(pathname);
+  if (itemId !== null) {
+    return missingWhenAbsent((db) => hasReviewItem(db, itemId));
   }
 
+  const sourceId = reviewSourceId(pathname);
+  if (sourceId !== null) {
+    return missingWhenAbsent((db) => hasSource(db, sourceId));
+  }
+
+  return NextResponse.next();
+}
+
+async function missingWhenAbsent(
+  present: (db: ReturnType<typeof createDb>["db"]) => Promise<boolean>,
+): Promise<NextResponse> {
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
 
   try {
-    const found = await hasReviewItem(db, itemId);
-    if (!found) {
+    if (!(await present(db))) {
       return notFoundResponse();
     }
   } finally {
@@ -150,9 +164,26 @@ function reviewTextResponse(result: ReviewHttpResult) {
  * The id check throws. A trailing slash is the same item.
  */
 export function reviewItemId(pathname: string): number | null {
+  return reviewPathId(pathname, "items", parseReviewItemId, "Review item id");
+}
+
+/**
+ * /review/sources/<id>, or null when this locked path is not one source.
+ * /review/sources itself is the list, so it is null. A bad id throws.
+ */
+export function reviewSourceId(pathname: string): number | null {
+  return reviewPathId(pathname, "sources", parseSourceId, "Source id");
+}
+
+function reviewPathId(
+  pathname: string,
+  collection: "items" | "sources",
+  parseId: (segment: string) => number,
+  label: string,
+): number | null {
   const path = stripTrailingSlash(pathname);
   const parts = path.split("/");
-  if (parts.length !== 4 || parts[1] !== "review" || parts[2] !== "items") {
+  if (parts.length !== 4 || parts[1] !== "review" || parts[2] !== collection) {
     return null;
   }
 
@@ -161,7 +192,7 @@ export function reviewItemId(pathname: string): number | null {
     return null;
   }
 
-  return parseReviewItemId(decodeReviewSegment(segment));
+  return parseId(decodeReviewSegment(segment, label));
 }
 
 function stripTrailingSlash(pathname: string): string {
@@ -171,12 +202,12 @@ function stripTrailingSlash(pathname: string): string {
   return pathname;
 }
 
-function decodeReviewSegment(segment: string): string {
+function decodeReviewSegment(segment: string, label: string): string {
   try {
     return decodeURIComponent(segment);
   } catch (error) {
     if (error instanceof URIError) {
-      throw new Error("Review item id is not a valid encoded path segment");
+      throw new Error(`${label} is not a valid encoded path segment`);
     }
     throw error;
   }
