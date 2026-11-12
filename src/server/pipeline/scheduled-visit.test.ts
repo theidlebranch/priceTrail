@@ -32,7 +32,9 @@ describe("officialSourceForLab", () => {
   it("returns the three official pages and nothing else", () => {
     expect(officialSourceForLab("anthropic")?.lab).toBe("anthropic");
     expect(officialSourceForLab("openai")?.url).toContain("openai.com");
-    expect(officialSourceForLab("google")?.url).toContain("ai.google.dev");
+    expect(officialSourceForLab("google")?.url).toContain(
+      "aistudio.google.com/docs/pricing.md",
+    );
     expect(officialSourceForLab("Anthropic")).toBeNull();
     expect(officialSourceForLab("")).toBeNull();
   });
