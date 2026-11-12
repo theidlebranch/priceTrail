@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { load } from "cheerio";
 import { describe, expect, it } from "vitest";
 import { parseGooglePricing } from "./google";
 import type { NormalizedPrice } from "./shape";
@@ -526,6 +527,13 @@ describe("parseGooglePricing", () => {
     ).toBe("0.25");
   });
 
+  it("reads the decoded pricing text as plain markdown and returns the same rows", () => {
+    const markdown = decodedPricingMarkup(decisionFixture);
+
+    expect(markdown.includes("<html")).toBe(false);
+    expect(parseGooglePricing(markdown)).toEqual(parseGooglePricing(decisionFixture));
+  });
+
   it("throws when a markup page has no Standard tab", () => {
     const html = markupPage({
       tabs: [{ title: "Batch", rows: [{ label: "Input price", paid: "$1.00" }] }],
@@ -546,3 +554,15 @@ describe("parseGooglePricing", () => {
     expect(warnings.some((warning) => /multiple model codes/i.test(warning))).toBe(true);
   });
 });
+
+function decodedPricingMarkup(html: string): string {
+  const $ = load(html);
+  const noscript = $("noscript")
+    .toArray()
+    .map((node) => $(node).text())
+    .find((text) => text.includes("{% tab") || text.includes("{% table"));
+  if (noscript === undefined) {
+    throw new Error("fixture has no pricing markup");
+  }
+  return load(noscript).root().text();
+}

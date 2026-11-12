@@ -42,7 +42,9 @@ import {
  *
  * recordArchiveResult() writes only archive_url and archive_status. The
  * page text stays where recordSourceCheck() put it. A failed capture does
- * not delete that text.
+ * not delete that text. replaceArchivePermalink() is the one-time repair
+ * for a permalink that already exists. It writes those same two columns
+ * and leaves the page text where it is.
  *
  * The caller passes fetchedAt. This file does not call new Date(), so a
  * test can use a fixed clock. The seed does not use this door. A seed row
@@ -233,6 +235,40 @@ export async function recordArchiveResult(
       .set({ archiveUrl: permalink, archiveStatus: "archived" })
       .where(eq(observations.id, row.id));
     return { kind: "archived", permalink };
+  });
+}
+
+/**
+ * Point one snapshot at a new Wayback permalink.
+ *
+ * recordArchiveResult() leaves a row alone once it is archived, so a later
+ * failure cannot wipe a good link. This repair runs only after a new
+ * capture has already succeeded. A bad permalink throws before the update.
+ * The page text is not in the update. This does not publish a price.
+ */
+export async function replaceArchivePermalink(
+  db: EvidenceDb,
+  input: { observationId: number; permalink: string },
+): Promise<string> {
+  assertObservationId(input.observationId);
+  const permalink = readPermalink(input.permalink);
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: observations.id })
+      .from(observations)
+      .where(eq(observations.id, input.observationId))
+      .for("update");
+    const row = rows[0];
+    if (row === undefined) {
+      throw new Error(`observation ${input.observationId} does not exist`);
+    }
+
+    await tx
+      .update(observations)
+      .set({ archiveUrl: permalink, archiveStatus: "archived" })
+      .where(eq(observations.id, row.id));
+    return permalink;
   });
 }
 

@@ -49,16 +49,28 @@ type ModelSection = {
 type MarkupNode = ReturnType<typeof pricingNodes>[number];
 
 export function parseGooglePricing(html: string): GoogleParseResult {
+  // The live source is the markdown page. That file is the docs markup
+  // itself, with no <html> tag and no lang attribute. An HTML page, including
+  // the older fixtures, still has to be English before we read it.
+  if (!hasHtmlDocument(html)) {
+    return parseMarkupPricing(html);
+  }
+
   const $ = load(html);
   assertEnglish($);
 
-  // The October page is HTML tables. The live page is docs markup inside
-  // the same URL. A pricing-table node means the old reader still applies.
+  // The October page is HTML tables. A later HTML capture keeps the same
+  // docs markup inside <noscript>. A pricing-table node means the old
+  // reader still applies.
   if ($("table.pricing-table").length > 0) {
     return parseHtmlPricing($);
   }
 
   return parseMarkupPricing(markupSource($));
+}
+
+function hasHtmlDocument(page: string): boolean {
+  return /<html[\s>]/i.test(page);
 }
 
 function assertEnglish($: CheerioAPI): void {

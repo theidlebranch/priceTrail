@@ -9,6 +9,8 @@ type Source = {
   kind: "official" | "signal";
   /** Official HTML pages that must be English before we save them. */
   assertEnglishHtml?: boolean;
+  /** Sent as Accept-Language. Markdown has no html lang tag to check. */
+  acceptLanguage?: string;
 };
 
 const SOURCES: Source[] = [
@@ -26,10 +28,10 @@ const SOURCES: Source[] = [
   },
   {
     name: "google",
-    url: "https://ai.google.dev/gemini-api/docs/pricing?hl=en",
-    file: "google-pricing.2026-10-18.html",
+    url: "https://aistudio.google.com/docs/pricing.md?hl=en",
+    file: "google-pricing.md",
     kind: "official",
-    assertEnglishHtml: true,
+    acceptLanguage: "en",
   },
   {
     name: "models.dev",
@@ -51,8 +53,8 @@ async function spike(source: Source): Promise<void> {
   const headers: Record<string, string> = {
     "User-Agent": "PriceTrail-spike/0.1 (personal research project)",
   };
-  if (source.assertEnglishHtml) {
-    headers["Accept-Language"] = "en";
+  if (source.assertEnglishHtml || source.acceptLanguage) {
+    headers["Accept-Language"] = source.acceptLanguage ?? "en";
   }
 
   const res = await fetch(source.url, { headers });

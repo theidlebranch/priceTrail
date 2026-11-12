@@ -29,7 +29,7 @@ function fakeFetch(status: number, body: string): FetchLike {
 
 describe("googleSource", () => {
   it("uses the English pricing URL the catalog records", () => {
-    expect(GOOGLE_PRICING_URL).toBe("https://ai.google.dev/gemini-api/docs/pricing?hl=en");
+    expect(GOOGLE_PRICING_URL).toBe("https://aistudio.google.com/docs/pricing.md?hl=en");
     expect(googleSource.url).toBe(GOOGLE_PRICING_URL);
     expect(googleSource.url).toContain("?hl=en");
     expect(googleSource.lab).toBe(GOOGLE_LAB_SLUG);

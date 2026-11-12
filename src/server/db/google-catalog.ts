@@ -24,7 +24,7 @@ import { sources } from "@/server/db/schema";
 const GOOGLE_LAB_NAME = "Google";
 
 export const GOOGLE_LAB_SLUG = "google";
-export const GOOGLE_PRICING_URL = "https://ai.google.dev/gemini-api/docs/pricing?hl=en";
+export const GOOGLE_PRICING_URL = "https://aistudio.google.com/docs/pricing.md?hl=en";
 
 export const GOOGLE_CATALOG_SLUGS = [
   "gemini-4-argon",

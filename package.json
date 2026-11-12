@@ -24,6 +24,7 @@
     "seed:pending": "tsx --env-file=.env scripts/seed-pending-example.ts",
     "seed:google": "tsx --env-file=.env scripts/seed-google-catalog.ts",
     "review:requeue-google": "tsx --env-file=.env scripts/requeue-google.ts",
+    "archive:google-markdown": "tsx --env-file=.env scripts/rearchive-google-markdown.ts",
     "review:clear-same-price": "tsx --env-file=.env scripts/clear-same-price.ts"
   },
   "dependencies": {
