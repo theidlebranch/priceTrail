@@ -57,6 +57,13 @@
       "when": 1794566217665,
       "tag": "0007_price_version_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794587905723,
+      "tag": "0008_witness_signals",
+      "breakpoints": true
     }
   ]
 }

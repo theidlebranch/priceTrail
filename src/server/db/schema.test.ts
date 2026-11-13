@@ -3,11 +3,15 @@ import { getTableConfig, type PgColumn } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
   archiveStatus,
+  candidateModels,
+  candidateStatus,
   fetchOutcome,
   fetchLog,
   labs,
   modelAliasKind,
   modelAliases,
+  modelSignalKind,
+  modelSignals,
   models,
   observationItems,
   observations,
@@ -19,6 +23,10 @@ import {
   reviewStatus,
   sourceType,
   sources,
+  verificationFlagResolution,
+  verificationFlags,
+  witnessReadOutcome,
+  witnessReads,
 } from "@/server/db/schema";
 
 /**
@@ -564,5 +572,73 @@ describe("evidence tables", () => {
     expect(text).toContain("observation_id IS NOT NULL");
     expect(text).toContain("outcome <> 'changed'");
     expect(text).toContain("observation_id IS NULL");
+  });
+});
+
+describe("witness tables", () => {
+  it("defines a witness read with counts only when the read succeeded", () => {
+    const config = getTableConfig(witnessReads);
+    expect(config.name).toBe("witness_reads");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "source_id",
+      "fetched_at",
+      "outcome",
+      "note",
+      "seen_slugs",
+      "is_baseline",
+      "agreed_count",
+      "not_compared_count",
+    ]);
+
+    const outcome = column(config.columns, "outcome");
+    expect(outcome.enumValues).toEqual(["ok", "fetch_error", "parse_error"]);
+    expect(witnessReadOutcome.enumValues).toEqual(outcome.enumValues);
+    expect(column(config.columns, "agreed_count").notNull).toBe(false);
+    expect(column(config.columns, "not_compared_count").notNull).toBe(false);
+    expect(config.checks).toHaveLength(1);
+    expect(config.checks[0]?.name).toBe("witness_reads_counts_match_outcome");
+    expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
+  });
+
+  it("defines a disagreement as one dimension on one offering", () => {
+    const config = getTableConfig(verificationFlags);
+    expect(config.name).toBe("verification_flags");
+    expect(column(config.columns, "dimension").enumValues).toEqual(priceDimension.enumValues);
+    expect(verificationFlagResolution.enumValues).toEqual([
+      "reverified_same",
+      "price_updated",
+      "human_confirmed",
+      "human_rejected",
+    ]);
+    expect(column(config.columns, "aggregator_value").notNull).toBe(true);
+    expect(column(config.columns, "our_value").notNull).toBe(true);
+    expect(column(config.columns, "resolved_at").notNull).toBe(false);
+    expect(foreignKeyTo(config, "offering_id").onDelete).toBe("restrict");
+    expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
+  });
+
+  it("keeps one candidate row per witness and slug", () => {
+    const config = getTableConfig(candidateModels);
+    expect(config.name).toBe("candidate_models");
+    expect(candidateStatus.enumValues).toEqual(["pending_review", "approved", "rejected"]);
+    expect(column(config.columns, "status").default).toBe("pending_review");
+    expect(column(config.columns, "resolved_model_id").notNull).toBe(false);
+    expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
+      "source_id",
+      "raw_slug",
+    ]);
+    expect(foreignKeyTo(config, "lab_id").onDelete).toBe("restrict");
+  });
+
+  it("defines not-linked and missing as the current signal for one model", () => {
+    const config = getTableConfig(modelSignals);
+    expect(config.name).toBe("model_signals");
+    expect(modelSignalKind.enumValues).toEqual(["not_linked", "missing"]);
+    expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
+      "source_id",
+      "model_id",
+    ]);
+    expect(foreignKeyTo(config, "model_id").onDelete).toBe("restrict");
   });
 });
