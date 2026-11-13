@@ -20,7 +20,7 @@ import { createDb } from "@/server/db/client";
 import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-version";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
 import { findModelDetail, hasTrackedModel } from "@/server/db/repositories/model-detail";
-import { observationItems, observations, sources } from "@/server/db/schema";
+import { observationItems, observations, priceVersionEvidence, sources } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
@@ -89,6 +89,8 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
               {
                 firstSeenAt: FIRST_SEEN,
                 announcedOn: null,
+                archiveUrl: null,
+                archiveStatus: "pending",
                 components: [
                   {
                     dimension: "input",
@@ -104,6 +106,8 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
                 firstSeenAt: FIRST_SEEN,
                 announcedOn: null,
                 lastSeenAt: null,
+                archiveUrl: null,
+                archiveStatus: "pending",
                 components: [
                   {
                     dimension: "input",
@@ -122,6 +126,71 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
       const packed = JSON.stringify(detail);
       expect(packed).not.toContain(RAW_MARKER);
       expect(packed).not.toContain(PARSED_MARKER);
+    });
+  });
+
+  it("returns the Wayback permalink of the snapshot that opened the price", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      const published = await plantPublished(tx, planted.offeringId, "10");
+      const permalink =
+        "https://web.archive.org/web/20260115160000/https://example.test/pricing";
+      await setArchive(tx, published.itemId, permalink, "archived");
+
+      const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
+      const version = detail?.offerings[0]?.openVersions[0];
+
+      expect(version?.archiveUrl).toBe(permalink);
+      expect(version?.archiveStatus).toBe("archived");
+      expect(JSON.stringify(detail)).not.toContain(RAW_MARKER);
+    });
+  });
+
+  it("keeps a later archived visit off the price that an earlier snapshot opened", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      const published = await plantPublished(tx, planted.offeringId, "10");
+      const later =
+        "https://web.archive.org/web/20260602160000/https://example.test/pricing";
+      await plantItemOnSource(tx, planted.offeringId, published.sourceUrl, "confirmed", {
+        usdPer1M: "10",
+      });
+      const laterItems = await tx
+        .select({ id: observationItems.id })
+        .from(observationItems)
+        .where(eq(observationItems.offeringId, planted.offeringId));
+      const laterItem = laterItems.find((item) => item.id !== published.itemId);
+      if (laterItem === undefined) {
+        throw new Error("later observation item is missing");
+      }
+      await setArchive(tx, laterItem.id, later, "archived");
+
+      const detail = await findModelDetail(tx, planted.labSlug, planted.modelSlug);
+
+      expect(detail?.offerings[0]?.openVersions[0]?.archiveUrl).toBeNull();
+      expect(detail?.offerings[0]?.openVersions[0]?.archiveStatus).toBe("pending");
+      expect(JSON.stringify(detail)).not.toContain(later);
+    });
+  });
+
+  it("throws when one published price has two evidence rows", async () => {
+    await withDetail(async (tx) => {
+      const planted = await plantModel(tx);
+      const published = await plantPublished(tx, planted.offeringId, "10");
+      const extraItemId = await plantItem(
+        tx,
+        planted.offeringId,
+        `https://example.test/pricing/${randomUUID()}`,
+        "official",
+      );
+      await tx.insert(priceVersionEvidence).values({
+        priceVersionId: published.priceVersionId,
+        observationItemId: extraItemId,
+      });
+
+      await expect(findModelDetail(tx, planted.labSlug, planted.modelSlug)).rejects.toThrow(
+        /more than one evidence row/,
+      );
     });
   });
 
@@ -165,6 +234,8 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
           firstSeenAt: FIRST_SEEN,
           announcedOn: null,
           lastSeenAt: LAST_SEEN,
+          archiveUrl: null,
+          archiveStatus: "pending",
           components: [
             {
               dimension: "input",
@@ -178,6 +249,8 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
           firstSeenAt: NEXT_SEEN,
           announcedOn: null,
           lastSeenAt: null,
+          archiveUrl: null,
+          archiveStatus: "pending",
           components: [
             {
               dimension: "input",
@@ -428,6 +501,27 @@ async function plantItem(
     "insert observation item",
   );
   return item.id;
+}
+
+async function setArchive(
+  tx: PublishDb,
+  itemId: number,
+  archiveUrl: string,
+  archiveStatus: "pending" | "archived" | "failed",
+): Promise<void> {
+  const rows = await tx
+    .select({ observationId: observationItems.observationId })
+    .from(observationItems)
+    .where(eq(observationItems.id, itemId))
+    .limit(1);
+  const item = rows[0];
+  if (item === undefined) {
+    throw new Error("observation item is missing");
+  }
+  await tx
+    .update(observations)
+    .set({ archiveUrl, archiveStatus })
+    .where(eq(observations.id, item.observationId));
 }
 
 /** A later snapshot of a source the test already inserted. Same URL, so the page still has one official link. */

@@ -109,9 +109,19 @@ export type ModelDetailChangeLine = {
   pctText: string | null;
 };
 
+export type ModelDetailProof =
+  | { kind: "link"; url: string; text: "Archived snapshot" }
+  | { kind: "missing"; text: "No archived snapshot." };
+
 export type ModelDetailChangeEvent = {
   dateLine: string;
   changes: ModelDetailChangeLine[];
+  proof: ModelDetailProof;
+};
+
+export type ModelDetailStartingPrice = {
+  dateLine: string;
+  proof: ModelDetailProof;
 };
 
 type ModelDetailHistory = PriceHistories & {
@@ -130,11 +140,13 @@ export type ModelDetailView = {
     dateLine: string;
     sourceUrl: string;
     sourceLabel: "Official pricing page";
+    proof: ModelDetailProof;
     components: ModelDetailPriceRow[];
     groups?: ModelDetailPriceGroup[];
   } | null;
   history: ModelDetailHistory;
   events: ModelDetailChangeEvent[];
+  startingPrice: ModelDetailStartingPrice | null;
   changeUnderReview: boolean;
 };
 
@@ -145,6 +157,7 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
 
   const offering = read.offerings[0];
   const open = offering === undefined ? null : openVersion(offering);
+  const proofs = offering === undefined ? null : proofByDateLine(offering.historyVersions);
   const changes = offering === undefined ? null : toPriceChanges(offering.historyVersions);
   const shown = open === null ? null : rewriteUnstatedLongContext(open.components);
   const history =
@@ -166,7 +179,17 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
         ? null
         : currentPrice(offering, open, layout),
     history,
-    events: changes === null ? [] : changes.events.map(toEvent),
+    events:
+      changes === null || proofs === null
+        ? []
+        : changes.events.map((event) => ({
+            ...toEvent(event),
+            proof: proofForLine(proofs, event.dateLine),
+          })),
+    startingPrice:
+      changes === null || proofs === null || offering === undefined || changes.events.length === 0
+        ? null
+        : startingPrice(offering.historyVersions, proofs),
     changeUnderReview: offering === undefined ? false : changeUnderReview(offering.reviewStatuses),
   };
 }
@@ -219,9 +242,91 @@ function currentPrice(
     dateLine: dateLine(version.firstSeenAt, version.announcedOn),
     sourceUrl: oneOfficialUrl(offering.officialSourceUrls),
     sourceLabel: "Official pricing page",
+    proof: snapshotProof(version.archiveUrl, version.archiveStatus),
     components: layout.components,
     groups: layout.groups,
   };
+}
+
+/**
+ * The opening snapshot is a Wayback permalink, or a sentence when that
+ * snapshot was never archived. A filled URL that is not that permalink
+ * is a broken row, so the page refuses it instead of linking somewhere else.
+ */
+function snapshotProof(
+  archiveUrl: string | null,
+  archiveStatus: ModelDetailOffering["openVersions"][number]["archiveStatus"],
+): ModelDetailProof {
+  if (
+    archiveUrl === null &&
+    (archiveStatus === null || archiveStatus === "pending" || archiveStatus === "failed")
+  ) {
+    return { kind: "missing", text: "No archived snapshot." };
+  }
+
+  const permalink =
+    archiveStatus === "archived" && archiveUrl !== null ? waybackPermalink(archiveUrl) : null;
+  if (permalink !== null) {
+    return { kind: "link", url: permalink, text: "Archived snapshot" };
+  }
+
+  throw new Error("published price has an archive row that is not a Wayback permalink");
+}
+
+function waybackPermalink(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.hostname !== "web.archive.org") {
+    return null;
+  }
+  if (!/^\/web\/([^/]+)\/(.+)$/.test(url.pathname)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function proofByDateLine(
+  versions: readonly ModelDetailOffering["historyVersions"][number][],
+): Map<string, ModelDetailProof> {
+  const proofs = new Map<string, ModelDetailProof>();
+  for (const version of versions) {
+    const line = dateLine(version.firstSeenAt, version.announcedOn);
+    if (proofs.has(line)) {
+      throw new Error("two periods start on the same day");
+    }
+    proofs.set(line, snapshotProof(version.archiveUrl, version.archiveStatus));
+  }
+  return proofs;
+}
+
+function proofForLine(proofs: ReadonlyMap<string, ModelDetailProof>, dateLineText: string): ModelDetailProof {
+  const proof = proofs.get(dateLineText);
+  if (proof === undefined) {
+    throw new Error(`no snapshot for ${dateLineText}`);
+  }
+  return proof;
+}
+
+function startingPrice(
+  versions: readonly ModelDetailOffering["historyVersions"][number][],
+  proofs: ReadonlyMap<string, ModelDetailProof>,
+): ModelDetailStartingPrice {
+  const earliest = [...versions].sort(
+    (left, right) => left.firstSeenAt.getTime() - right.firstSeenAt.getTime(),
+  )[0];
+  if (earliest === undefined) {
+    throw new Error("a change log needs a starting price");
+  }
+  const line = dateLine(earliest.firstSeenAt, earliest.announcedOn);
+  return { dateLine: line, proof: proofForLine(proofs, line) };
 }
 
 /**
@@ -533,7 +638,9 @@ function headlineFrom(
   };
 }
 
-function toEvent(event: NonNullable<PriceChanges["latest"]>): ModelDetailChangeEvent {
+function toEvent(
+  event: NonNullable<PriceChanges["latest"]>,
+): Omit<ModelDetailChangeEvent, "proof"> {
   return {
     dateLine: event.dateLine,
     changes: event.changes.map((change) => ({

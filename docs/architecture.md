@@ -62,7 +62,7 @@ flowchart TD
   person -->|reject| stopPrice[review_status rejected and publish nothing]
 ```
 
-Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `sources`, `fetch_log`, `observations`, and `observation_items`. `fetch_triggers`, `candidate_models`, `verification_flags`, and `price_version_evidence` are not created yet. They are on the diagram so the path is visible. The row picture of the tables that exist is [price-tables.md](price-tables.md).
+Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, and `observation_items`. `fetch_triggers`, `candidate_models`, and `verification_flags` are not created yet. They are on the diagram so the path is visible. The row picture of the tables that exist is [price-tables.md](price-tables.md).
 
 ```mermaid
 flowchart TD
@@ -79,7 +79,7 @@ flowchart TD
   offerings --> observation_items
   observation_items -->|"ok or confirmed"| publishPriceVersion
   publishPriceVersion --> price_versions
-  publishPriceVersion --> price_version_evidence_later["price_version_evidence (later)"]
+  publishPriceVersion --> price_version_evidence
 
   witnesses[LiteLLM changelog OpenRouter] --> fetch_triggers_later["fetch_triggers (later)"]
   witnesses --> candidate_models_later["candidate_models (later)"]

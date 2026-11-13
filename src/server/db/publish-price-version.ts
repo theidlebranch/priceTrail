@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
@@ -6,7 +6,14 @@ import { pricePrecisionLabel, type PricePrecision } from "@/core/pricing/precisi
 import { SAME_PRICE_REVIEWER } from "@/core/review/confirm-price";
 import type { Condition } from "@/core/pricing/shape";
 import * as schema from "@/server/db/schema";
-import { observationItems, offerings, priceComponents, priceVersions } from "@/server/db/schema";
+import {
+  observationItems,
+  observations,
+  offerings,
+  priceComponents,
+  priceVersionEvidence,
+  priceVersions,
+} from "@/server/db/schema";
 
 /**
  * The only function that may insert price_versions and price_components.
@@ -30,7 +37,9 @@ import { observationItems, offerings, priceComponents, priceVersions } from "@/s
  * price, when no open version row exists yet. The item comes first so two
  * publishes queue on the offering.
  *
- * price_version_evidence is not written here. That table does not exist yet.
+ * The same transaction writes one price_version_evidence row for the
+ * observation item that opened the version. A correction records the item
+ * that published the replacement.
  */
 
 type Schema = typeof schema;
@@ -146,6 +155,69 @@ export async function publishPriceVersion(
       return publishCorrection(tx, item.offeringId, open, prepared);
     }
     return publishPeriod(tx, item.offeringId, open, prepared);
+  });
+}
+
+/**
+ * Point an already published price at the snapshot that opened it.
+ *
+ * A version is linked only when one ok or confirmed item on the same
+ * offering was fetched at first_seen_at. Zero matches, or more than one,
+ * stay unlinked. A version that already has an evidence row is left as it
+ * is. This does not insert a price and it does not call Wayback.
+ */
+export async function linkExistingPriceEvidence(
+  db: PublishDb,
+): Promise<{ linked: number; left: number }> {
+  return db.transaction(async (tx) => {
+    const versions = await tx
+      .select({
+        id: priceVersions.id,
+        offeringId: priceVersions.offeringId,
+        firstSeenAt: priceVersions.firstSeenAt,
+      })
+      .from(priceVersions)
+      .orderBy(priceVersions.id);
+
+    const evidenceRows = await tx
+      .select({ priceVersionId: priceVersionEvidence.priceVersionId })
+      .from(priceVersionEvidence);
+    const alreadyLinked = new Set(evidenceRows.map((row) => row.priceVersionId));
+
+    const candidates = await tx
+      .select({
+        offeringId: observationItems.offeringId,
+        fetchedAt: observations.fetchedAt,
+        observationItemId: observationItems.id,
+      })
+      .from(observationItems)
+      .innerJoin(observations, eq(observations.id, observationItems.observationId))
+      .where(inArray(observationItems.reviewStatus, ["ok", "confirmed"]));
+
+    let linked = 0;
+    let left = 0;
+    for (const version of versions) {
+      if (alreadyLinked.has(version.id)) {
+        continue;
+      }
+      const matches = candidates.filter(
+        (candidate) =>
+          candidate.offeringId === version.offeringId &&
+          candidate.fetchedAt.getTime() === version.firstSeenAt.getTime(),
+      );
+      const match = matches[0];
+      if (matches.length !== 1 || match === undefined) {
+        left += 1;
+        continue;
+      }
+      await tx.insert(priceVersionEvidence).values({
+        priceVersionId: version.id,
+        observationItemId: match.observationItemId,
+      });
+      linked += 1;
+    }
+
+    return { linked, left };
   });
 }
 
@@ -359,6 +431,11 @@ async function insertVersion(
       condition: component.condition,
     })),
   );
+
+  await tx.insert(priceVersionEvidence).values({
+    priceVersionId: version.id,
+    observationItemId: prepared.observationItemId,
+  });
 
   return {
     priceVersionId: version.id,

@@ -2,6 +2,8 @@ import Link from "next/link";
 import type {
   ModelDetailChangeEvent,
   ModelDetailChangeLine,
+  ModelDetailProof,
+  ModelDetailStartingPrice,
   ModelDetailView,
 } from "@/app/models/model-detail-view";
 import { DirectionMark, TieredPrices } from "@/components/tiered-prices";
@@ -60,12 +62,17 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
             >
               {view.price.sourceLabel}
             </a>
+            <SnapshotProof proof={view.price.proof} />
           </p>
         )}
       </header>
 
       <TieredPrices tiers={view.tiers} skipped={view.history.skipped} notes={view.history.notes} />
-      <ChangeLog events={view.events} sinceDay={view.sinceDay} />
+      <ChangeLog
+        events={view.events}
+        sinceDay={view.sinceDay}
+        startingPrice={view.startingPrice}
+      />
     </div>
   );
 }
@@ -73,9 +80,11 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
 function ChangeLog({
   events,
   sinceDay,
+  startingPrice,
 }: {
   events: readonly ModelDetailChangeEvent[];
   sinceDay: string | null;
+  startingPrice: ModelDetailStartingPrice | null;
 }) {
   return (
     <section>
@@ -98,6 +107,9 @@ function ChangeLog({
                 className="absolute top-1 left-0 size-2 -translate-x-1/2 rounded-full border border-border bg-background"
               />
               <p className="font-mono text-xs text-foreground">{event.dateLine}</p>
+              <p className="mt-1 text-sm">
+                <SnapshotProof proof={event.proof} />
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {event.changes.length}{" "}
                 {event.changes.length === 1 ? "component" : "components"} changed
@@ -125,10 +137,39 @@ function ChangeLog({
               </ul>
             </li>
           ))}
+          {startingPrice === null ? null : (
+            <li className="relative pb-0 pl-6">
+              <span
+                aria-hidden="true"
+                className="absolute top-1 left-0 size-2 -translate-x-1/2 rounded-full border border-border bg-background"
+              />
+              <p className="text-sm text-muted-foreground">Starting price</p>
+              <p className="mt-1 font-mono text-xs text-foreground">{startingPrice.dateLine}</p>
+              <p className="mt-1 text-sm">
+                <SnapshotProof proof={startingPrice.proof} />
+              </p>
+            </li>
+          )}
         </ol>
       )}
     </section>
   );
+}
+
+function SnapshotProof({ proof }: { proof: ModelDetailProof }) {
+  if (proof.kind === "link") {
+    return (
+      <a
+        href={proof.url}
+        className="text-primary hover:underline"
+        rel="noreferrer"
+        target="_blank"
+      >
+        {proof.text}
+      </a>
+    );
+  }
+  return <span className="text-muted-foreground">{proof.text}</span>;
 }
 
 function moveText(change: ModelDetailChangeLine): string {

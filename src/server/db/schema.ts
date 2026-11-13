@@ -10,6 +10,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -265,6 +266,31 @@ export const observationItems = pgTable(
       table.observationId,
       table.offeringId,
     ),
+  ],
+);
+
+/**
+ * The snapshot that opened one published price.
+ *
+ * The two ids are the primary key, so one price can later keep a second
+ * proof. This step writes one row: the observation item passed to
+ * publishPriceVersion(). The Wayback permalink stays on the observation.
+ * A blank archive_url means that opening snapshot was never archived.
+ */
+export const priceVersionEvidence = pgTable(
+  "price_version_evidence",
+  {
+    priceVersionId: bigint("price_version_id", { mode: "number" })
+      .notNull()
+      .references(() => priceVersions.id, { onDelete: "restrict" }),
+    observationItemId: bigint("observation_item_id", { mode: "number" })
+      .notNull()
+      .references(() => observationItems.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.priceVersionId, table.observationItemId],
+    }),
   ],
 );
 

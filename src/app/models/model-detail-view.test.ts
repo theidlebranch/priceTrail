@@ -6,6 +6,8 @@ import {
 } from "./model-detail-view";
 
 const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
+const ARCHIVE = `https://web.archive.org/web/20261018233000/${SOURCE}`;
+const OLDER_ARCHIVE = `https://web.archive.org/web/20260115160000/${SOURCE}`;
 const AS_OF = new Date("2026-11-05T12:00:00.000Z");
 
 function read(overrides: Partial<ModelDetailRead> = {}): ModelDetailRead {
@@ -37,6 +39,8 @@ function version(
   return {
     firstSeenAt: new Date("2026-10-18T23:30:00.000Z"),
     announcedOn: null,
+    archiveUrl: null,
+    archiveStatus: null,
     components: [
       component({ dimension: "output", amount: "50" }),
       component({ dimension: "cache_write_1h", amount: "20" }),
@@ -139,10 +143,12 @@ describe("toModelDetailView", () => {
         },
       ],
       events: [],
+      startingPrice: null,
       price: {
         dateLine: "Changed on or before 2026-10-18.",
         sourceUrl: SOURCE,
         sourceLabel: "Official pricing page",
+        proof: { kind: "missing", text: "No archived snapshot." },
         components: [
           priceRow("Input", "$10"),
           priceRow("Cache read", "$0.25", "", "0.025×"),
@@ -754,6 +760,7 @@ describe("toModelDetailView", () => {
     expect(view.events).toEqual([
       {
         dateLine: "Changed on or before 2026-10-18.",
+        proof: { kind: "missing", text: "No archived snapshot." },
         changes: [
           {
             dimensionLabel: "Input",
@@ -774,6 +781,10 @@ describe("toModelDetailView", () => {
         ],
       },
     ]);
+    expect(view.startingPrice).toEqual({
+      dateLine: "Changed on or before 2026-01-15.",
+      proof: { kind: "missing", text: "No archived snapshot." },
+    });
     expect(view.price?.components[0]?.lastChange).toEqual({
       direction: "down",
       pctText: "33.33",
@@ -923,5 +934,132 @@ describe("toModelDetailView", () => {
         AS_OF,
       ),
     ).toThrow(/review status maybe is not known/);
+  });
+
+  it("links the snapshot that opened the current price and keeps the live page", () => {
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [version({ archiveUrl: ARCHIVE, archiveStatus: "archived" })],
+            historyVersions: [
+              {
+                ...version({ archiveUrl: ARCHIVE, archiveStatus: "archived" }),
+                lastSeenAt: null,
+              },
+            ],
+          }),
+        ],
+      }),
+      AS_OF,
+    );
+
+    expect(view.price?.sourceUrl).toBe(SOURCE);
+    expect(view.price?.sourceLabel).toBe("Official pricing page");
+    expect(view.price?.proof).toEqual({
+      kind: "link",
+      url: ARCHIVE,
+      text: "Archived snapshot",
+    });
+    expect(view.startingPrice).toBeNull();
+  });
+
+  it("says the opening snapshot was not archived when Wayback failed", () => {
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [version({ archiveStatus: "failed" })],
+            historyVersions: [{ ...version({ archiveStatus: "failed" }), lastSeenAt: null }],
+          }),
+        ],
+      }),
+      AS_OF,
+    );
+
+    expect(view.price?.proof).toEqual({ kind: "missing", text: "No archived snapshot." });
+  });
+
+  it("gives the later price and the starting price their own snapshots", () => {
+    const older = version({
+      firstSeenAt: new Date("2026-01-15T16:00:00.000Z"),
+      archiveUrl: OLDER_ARCHIVE,
+      archiveStatus: "archived",
+      components: [component({ amount: "15" })],
+    });
+    const current = version({
+      archiveUrl: ARCHIVE,
+      archiveStatus: "archived",
+      components: [component({ amount: "10" })],
+    });
+    const view = toModelDetailView(
+      read({
+        offerings: [
+          offering({
+            openVersions: [current],
+            historyVersions: [
+              { ...older, lastSeenAt: new Date("2026-05-20T16:00:00.000Z") },
+              { ...current, lastSeenAt: null },
+            ],
+          }),
+        ],
+      }),
+      AS_OF,
+    );
+
+    expect(view.price?.proof).toEqual({ kind: "link", url: ARCHIVE, text: "Archived snapshot" });
+    expect(view.events[0]?.proof).toEqual({
+      kind: "link",
+      url: ARCHIVE,
+      text: "Archived snapshot",
+    });
+    expect(view.startingPrice).toEqual({
+      dateLine: "Changed on or before 2026-01-15.",
+      proof: { kind: "link", url: OLDER_ARCHIVE, text: "Archived snapshot" },
+    });
+  });
+
+  it("throws when the stored archive URL is not a Wayback permalink", () => {
+    expect(() =>
+      toModelDetailView(
+        read({
+          offerings: [
+            offering({
+              openVersions: [
+                version({ archiveUrl: "https://example.test/pricing", archiveStatus: "archived" }),
+              ],
+              historyVersions: [
+                {
+                  ...version({
+                    archiveUrl: "https://example.test/pricing",
+                    archiveStatus: "archived",
+                  }),
+                  lastSeenAt: null,
+                },
+              ],
+            }),
+          ],
+        }),
+        AS_OF,
+      ),
+    ).toThrow(/Wayback permalink/);
+  });
+
+  it("throws when a pending snapshot already has a permalink", () => {
+    expect(() =>
+      toModelDetailView(
+        read({
+          offerings: [
+            offering({
+              openVersions: [version({ archiveUrl: ARCHIVE, archiveStatus: "pending" })],
+              historyVersions: [
+                { ...version({ archiveUrl: ARCHIVE, archiveStatus: "pending" }), lastSeenAt: null },
+              ],
+            }),
+          ],
+        }),
+        AS_OF,
+      ),
+    ).toThrow(/Wayback permalink/);
   });
 });

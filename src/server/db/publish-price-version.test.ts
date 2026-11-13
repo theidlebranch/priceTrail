@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SAME_PRICE_NOTE, SAME_PRICE_REVIEWER } from "@/core/review/confirm-price";
 import { createDb } from "@/server/db/client";
 import {
+  linkExistingPriceEvidence,
   publishPriceVersion,
   type PriceComponentInput,
   type PublishDb,
@@ -35,6 +36,7 @@ import {
   observations,
   offerings,
   priceComponents,
+  priceVersionEvidence,
   priceVersions,
   sources,
 } from "@/server/db/schema";
@@ -305,6 +307,8 @@ describe.skipIf(databaseUrl.length === 0)("publishPriceVersion", () => {
         { dimension: "cache_read", amount: "0.10", condition: {} },
         { dimension: "output", amount: "5", condition: {} },
       ]);
+      expect(await evidenceFor(tx, opened.priceVersionId)).toEqual([item.id]);
+      expect(await evidenceFor(tx, changed.priceVersionId)).toEqual([item.id]);
     });
   });
 
@@ -371,6 +375,119 @@ describe.skipIf(databaseUrl.length === 0)("publishPriceVersion", () => {
         replacesVersionId: wrong.priceVersionId,
       });
       expect(versions.filter((version) => version.retractedAt === null)).toHaveLength(1);
+      expect(await evidenceFor(tx, wrong.priceVersionId)).toEqual([item.id]);
+      expect(await evidenceFor(tx, fix.priceVersionId)).toEqual([item.id]);
+    });
+  });
+
+  it("records the replacement item on a correction", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const original = await seedItem(tx, offering.id, "ok");
+      const replacement = await seedItem(tx, offering.id, "confirmed");
+      const wrong = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: original.id,
+          firstSeenAt: NEXT_SEEN,
+          components: [component({ amount: "0.80" })],
+        }),
+      );
+      const fix = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: replacement.id,
+          firstSeenAt: NEXT_SEEN,
+          replacesVersionId: wrong.priceVersionId,
+          retractedAt: RETRACTED,
+          components: [component({ amount: "1" })],
+        }),
+      );
+
+      expect(await evidenceFor(tx, wrong.priceVersionId)).toEqual([original.id]);
+      expect(await evidenceFor(tx, fix.priceVersionId)).toEqual([replacement.id]);
+    });
+  });
+
+  it("links one existing version when the fetch time matches a single confirmed item", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const item = await seedItem(tx, offering.id, "confirmed");
+      const published = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: item.id,
+          firstSeenAt: NEXT_SEEN,
+        }),
+      );
+      await tx
+        .delete(priceVersionEvidence)
+        .where(eq(priceVersionEvidence.priceVersionId, published.priceVersionId));
+
+      await linkExistingPriceEvidence(tx);
+
+      expect(await evidenceFor(tx, published.priceVersionId)).toEqual([item.id]);
+    });
+  });
+
+  it("leaves a version unlinked when the fetch time matches no item", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const item = await seedItem(tx, offering.id, "ok");
+      const published = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: item.id,
+          firstSeenAt: FIRST_SEEN,
+        }),
+      );
+      await tx
+        .delete(priceVersionEvidence)
+        .where(eq(priceVersionEvidence.priceVersionId, published.priceVersionId));
+
+      await linkExistingPriceEvidence(tx);
+
+      expect(await evidenceFor(tx, published.priceVersionId)).toEqual([]);
+    });
+  });
+
+  it("leaves a version unlinked when two confirmed items share the fetch time", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const first = await seedItem(tx, offering.id, "ok");
+      await seedItem(tx, offering.id, "confirmed");
+      const published = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: first.id,
+          firstSeenAt: NEXT_SEEN,
+        }),
+      );
+      await tx
+        .delete(priceVersionEvidence)
+        .where(eq(priceVersionEvidence.priceVersionId, published.priceVersionId));
+
+      await linkExistingPriceEvidence(tx);
+
+      expect(await evidenceFor(tx, published.priceVersionId)).toEqual([]);
+    });
+  });
+
+  it("does not add a second evidence row when the version is already linked", async () => {
+    await withPublish(async (tx) => {
+      const offering = await seedOffering(tx);
+      const item = await seedItem(tx, offering.id, "confirmed");
+      const published = await publishPriceVersion(
+        tx,
+        priceInput({
+          observationItemId: item.id,
+          firstSeenAt: NEXT_SEEN,
+        }),
+      );
+
+      await linkExistingPriceEvidence(tx);
+
+      expect(await evidenceFor(tx, published.priceVersionId)).toEqual([item.id]);
     });
   });
 
@@ -956,6 +1073,15 @@ async function versionsFor(tx: PublishDb, offeringId: number) {
     .orderBy(priceVersions.id);
 }
 
+async function evidenceFor(tx: PublishDb, priceVersionId: number) {
+  const rows = await tx
+    .select({ observationItemId: priceVersionEvidence.observationItemId })
+    .from(priceVersionEvidence)
+    .where(eq(priceVersionEvidence.priceVersionId, priceVersionId))
+    .orderBy(priceVersionEvidence.observationItemId);
+  return rows.map((row) => row.observationItemId);
+}
+
 async function amountsFor(tx: PublishDb, priceVersionId: number) {
   const rows = await tx
     .select()
@@ -1052,6 +1178,9 @@ async function deleteSeed(db: PublishDb, seed: Partial<SeededPublish>): Promise<
       .from(priceVersions)
       .where(eq(priceVersions.offeringId, seed.offeringId));
     for (const version of versions) {
+      await db
+        .delete(priceVersionEvidence)
+        .where(eq(priceVersionEvidence.priceVersionId, version.id));
       await db.delete(priceComponents).where(eq(priceComponents.priceVersionId, version.id));
     }
     await db.delete(priceVersions).where(eq(priceVersions.offeringId, seed.offeringId));

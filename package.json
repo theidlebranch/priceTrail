@@ -25,7 +25,8 @@
     "seed:google": "tsx --env-file=.env scripts/seed-google-catalog.ts",
     "review:requeue-google": "tsx --env-file=.env scripts/requeue-google.ts",
     "archive:google-markdown": "tsx --env-file=.env scripts/rearchive-google-markdown.ts",
-    "review:clear-same-price": "tsx --env-file=.env scripts/clear-same-price.ts"
+    "review:clear-same-price": "tsx --env-file=.env scripts/clear-same-price.ts",
+    "prices:link-evidence": "tsx --env-file=.env scripts/link-price-evidence.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

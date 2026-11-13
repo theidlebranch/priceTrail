@@ -8,6 +8,8 @@ afterEach(() => {
 });
 
 const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
+const ARCHIVE = `https://web.archive.org/web/20261018233000/${SOURCE}`;
+const MISSING_PROOF = { kind: "missing" as const, text: "No archived snapshot." as const };
 
 const HISTORY: ModelDetailView["history"] = {
   series: [
@@ -82,12 +84,14 @@ function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
     ],
     tiers: [],
     events: [],
+    startingPrice: null,
     history: HISTORY,
     changeUnderReview: false,
     price: {
       dateLine: "Changed on or before 2026-10-18.",
       sourceUrl: SOURCE,
       sourceLabel: "Official pricing page",
+      proof: MISSING_PROOF,
       components: [
         row("Input", "$10"),
         row("Cache read", "$0.25", "", "0.025×"),
@@ -131,6 +135,8 @@ describe("ModelDetail", () => {
 
     const link = screen.getByRole("link", { name: "Official pricing page" });
     expect(link.getAttribute("href")).toBe(SOURCE);
+    expect(screen.getByText("No archived snapshot.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Archived snapshot" })).toBeNull();
     expect(screen.queryByText("All prices shown on this page are examples.")).toBeNull();
     expect(screen.queryByText("No current price is published.")).toBeNull();
     expect(screen.queryByText("A possible change is under review.")).toBeNull();
@@ -189,6 +195,7 @@ describe("ModelDetail", () => {
           events: [
             {
               dateLine: "Changed on or before 2026-10-18.",
+              proof: MISSING_PROOF,
               changes: [
                 {
                   dimensionLabel: "Input",
@@ -247,6 +254,7 @@ describe("ModelDetail", () => {
             dateLine: "Changed on or before 2026-10-18.",
             sourceUrl: SOURCE,
             sourceLabel: "Official pricing page",
+            proof: MISSING_PROOF,
             components: [
               row("Cache write (5 minutes)", "$1.25", "prompts over 200,000 tokens"),
               row("Cache write (5 minutes)", "$1.00", "prompts up to 200,000 tokens"),
@@ -285,6 +293,7 @@ describe("ModelDetail", () => {
           events: [
             {
               dateLine: "Changed on or before 2026-10-18.",
+              proof: MISSING_PROOF,
               changes: [
                 {
                   dimensionLabel: "Input",
@@ -301,6 +310,7 @@ describe("ModelDetail", () => {
             dateLine: "Changed on or before 2026-10-18.",
             sourceUrl: SOURCE,
             sourceLabel: "Official pricing page",
+            proof: { kind: "link", url: ARCHIVE, text: "Archived snapshot" },
             components: [
               row("Input", "$10", "", null, {
                 direction: "down",
@@ -320,6 +330,8 @@ describe("ModelDetail", () => {
     ).toBeTruthy();
     expect(screen.getByText("2 price versions since 2026-01-15")).toBeTruthy();
     expect(screen.getByText("1 component changed")).toBeTruthy();
+    const snapshots = screen.getAllByRole("link", { name: "Archived snapshot" });
+    expect(snapshots.map((link) => link.getAttribute("href"))).toEqual([ARCHIVE]);
     expect(screen.getByText("$15 → $10")).toBeTruthy();
     expect(screen.queryByText("No price changes since 2026-01-15.")).toBeNull();
   });
@@ -331,6 +343,7 @@ describe("ModelDetail", () => {
           events: [
             {
               dateLine: "Changed on or before 2026-10-18.",
+              proof: MISSING_PROOF,
               changes: [
                 {
                   dimensionLabel: "Input",
@@ -363,6 +376,53 @@ describe("ModelDetail", () => {
     expect(log?.textContent).toContain("$50 → $40");
   });
 
+  it("shows the opening snapshot on a change and on the starting price", () => {
+    render(
+      <ModelDetail
+        view={view({
+          versionCount: 2,
+          events: [
+            {
+              dateLine: "Changed on or before 2026-10-18.",
+              proof: { kind: "link", url: ARCHIVE, text: "Archived snapshot" },
+              changes: [
+                {
+                  dimensionLabel: "Input",
+                  conditionLabel: "",
+                  fromAmountText: "$15",
+                  toAmountText: "$10",
+                  direction: "down",
+                  pctText: "33.33",
+                },
+              ],
+            },
+          ],
+          startingPrice: {
+            dateLine: "Changed on or before 2026-01-15.",
+            proof: { kind: "missing", text: "No archived snapshot." },
+          },
+          price: {
+            dateLine: "Changed on or before 2026-10-18.",
+            sourceUrl: SOURCE,
+            sourceLabel: "Official pricing page",
+            proof: { kind: "link", url: ARCHIVE, text: "Archived snapshot" },
+            components: [row("Input", "$10")],
+          },
+        })}
+      />,
+    );
+
+    const log = screen.getByRole("heading", { name: "Change log" }).closest("section");
+    expect(log?.textContent).toContain("Starting price");
+    expect(log?.textContent).toContain("Changed on or before 2026-01-15.");
+    expect(log?.textContent).toContain("No archived snapshot.");
+    const snapshots = screen.getAllByRole("link", { name: "Archived snapshot" });
+    expect(snapshots.map((link) => link.getAttribute("href"))).toEqual([ARCHIVE, ARCHIVE]);
+    expect(screen.getByRole("link", { name: "Official pricing page" }).getAttribute("href")).toBe(
+      SOURCE,
+    );
+  });
+
   it("shows a tier next to the amount it belongs to", () => {
     render(
       <ModelDetail
@@ -372,6 +432,7 @@ describe("ModelDetail", () => {
             dateLine: "Changed on or before 2026-10-18.",
             sourceUrl: SOURCE,
             sourceLabel: "Official pricing page",
+            proof: MISSING_PROOF,
             components: [row("Input", "$0.50", "prompts up to 100,000 tokens", "0.5×")],
           },
         })}

@@ -48,6 +48,11 @@ describe("price write guard", () => {
     expectWriteRejected(OTHER_FILE, source, ".delete(priceVersions)");
   });
 
+  it("throws when another file inserts an evidence link", () => {
+    const source = "await db.insert(priceVersionEvidence).values({});";
+    expectWriteRejected(OTHER_FILE, source, ".insert(priceVersionEvidence)");
+  });
+
   it("throws when another file inserts through the schema object", () => {
     const source = "await db.insert(schema.priceVersions).values({});";
     expectWriteRejected(OTHER_FILE, source, ".insert(schema.priceVersions)");

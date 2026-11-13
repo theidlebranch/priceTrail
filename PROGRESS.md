@@ -65,6 +65,8 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - The schedule test expected the old Google host `ai.google.dev`. The source is the markdown page, so that assertion now checks `aistudio.google.com/docs/pricing.md`. CI failed on that one line.
 - The Google source is now the markdown page `https://aistudio.google.com/docs/pricing.md?hl=en`. The HTML page's script sends a browser to Google login, so the old Wayback link said the login URL was not archived even though the pricing file was saved. The parser reads that markdown with the same table reader, and an HTML fixture still has to be English. `pnpm archive:google-markdown` saved the markdown page and pointed observation 732 at `https://web.archive.org/web/20261112154516/https://aistudio.google.com/docs/pricing.md?hl=en`. The stored page text on that row was left as it was. A second run did not ask Wayback again. This does not call `publishPriceVersion()`.
 
+- The model page links each published price to the Wayback snapshot that opened it. `price_version_evidence` stores that pair, and `publishPriceVersion()` writes the row. A blank or failed archive says "No archived snapshot." The live vendor page stays a separate link on the current price. `pnpm prices:link-evidence` linked 13 existing versions and left 0. A later snapshot of the same price is not used. Claude Fable 5.1 still says "No archived snapshot." because the seed snapshot was never saved. gpt-6-sol links the 10 Nov 2026 Wayback capture on the current price and on that change, and the 18 Oct starting price has no snapshot.
+
 ## In progress
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.

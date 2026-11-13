@@ -16,6 +16,8 @@ erDiagram
   offerings ||--o{ price_versions : "offering_id"
   price_versions ||--o{ price_components : "price_version_id"
   price_versions ||--o| price_versions : "replaces_version_id"
+  price_versions ||--o{ price_version_evidence : "price_version_id"
+  observation_items ||--o{ price_version_evidence : "observation_item_id"
   sources ||--o{ observations : "source_id"
   sources ||--o{ fetch_log : "source_id"
   observations |o--o| fetch_log : "observation_id"
@@ -25,7 +27,7 @@ erDiagram
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version does not point at an item. That link is a later table, so it is not on this diagram.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -108,6 +110,16 @@ One item is offering 1 on observation 1. The Haiku input price lives once, in ob
 `review_status` is `ok` so you can see a row a later publish function would be allowed to accept. The database default is `flagged` when a writer forgets to set a status. This example sets `ok` on purpose. `reviewed_by`, `reviewed_at`, and `review_note` are blank because no person reviewed it.
 
 An `ok` item still does not insert a price. Only `publishPriceVersion()` can do that. This picture does not call it.
+
+### price_version_evidence
+
+| price_version_id | observation_item_id |
+| --- | --- |
+| 2 | 1 |
+
+One row says version 2 was opened by item 1. Item 1 sits on the 2 June observation, and version 2's `first_seen_at` is that same time. The Wayback permalink is `observations.archive_url` on that observation. This example observation is still `pending`, so the model page says "No archived snapshot." Version 1 has no row here. The January fetch is not drawn in this picture, so this example does not invent a snapshot for the older price.
+
+The two columns together are the primary key. A later proof for the same price would be a second row. Deleting the version or the item is refused while this row exists.
 
 ### fetch_log
 

@@ -7,7 +7,8 @@ import path from "node:path";
  *
  * A test file is skipped. A test may plant a row the publisher cannot create.
  * A select, a table definition, and a migration that only changes columns
- * are not writes.
+ * are not writes. The watched tables are price versions, price components,
+ * and the evidence link.
  *
  * The method name and the table name live in separate lists. This file must
  * not contain a real write, or the check would fail on itself. A renamed
@@ -19,7 +20,7 @@ const SCAN_ROOTS = ["src", "scripts", "drizzle"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".sql"]);
 
 const DRIZZLE_METHODS = ["insert", "update", "delete"] as const;
-const DRIZZLE_TABLES = ["priceVersions", "priceComponents"] as const;
+const DRIZZLE_TABLES = ["priceVersions", "priceComponents", "priceVersionEvidence"] as const;
 const SQL_TABLES = ["price_versions", "price_components", "price_version_evidence"] as const;
 
 type PriceWriteFile = {

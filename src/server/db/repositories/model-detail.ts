@@ -9,6 +9,7 @@ import {
   observations,
   offerings,
   priceComponents,
+  priceVersionEvidence,
   priceVersions,
   sources,
 } from "@/server/db/schema";
@@ -23,10 +24,12 @@ import {
  * retracted_at blank. historyVersions is every version with
  * retracted_at blank, including closed ones, so the chart can draw
  * the older prices. A retracted row stays out of both lists.
- * A region other than global is left out. The evidence link is
- * sources.url where type is official. raw_content, parsed_data,
- * grounding_result, and archive_url are not selected. A public page
- * does not load the stored page text or an unverified amount.
+ * A region other than global is left out. The live page link is
+ * sources.url where type is official. The proof link is
+ * observations.archive_url through price_version_evidence.
+ * raw_content, parsed_data, and grounding_result are not selected.
+ * A public page does not load the stored page text or an unverified
+ * amount. One public version with two evidence rows throws.
  *
  * reviewStatuses are the official items on this offering. flagged
  * is the only status that means a change is still under review.
@@ -50,10 +53,14 @@ export type ModelDetailComponent = {
   condition: unknown;
 };
 
+type ModelDetailArchiveStatus = "pending" | "archived" | "failed";
+
 type ModelDetailVersion = {
   firstSeenAt: Date;
   announcedOn: string | null;
   components: ModelDetailComponent[];
+  archiveUrl: string | null;
+  archiveStatus: ModelDetailArchiveStatus | null;
 };
 
 type ModelDetailHistoryVersion = ModelDetailVersion & {
@@ -160,6 +167,23 @@ export async function findModelDetail(
           .from(priceComponents)
           .where(inArray(priceComponents.priceVersionId, versionIds));
 
+  const evidenceRows =
+    versionIds.length === 0
+      ? []
+      : await db
+          .select({
+            priceVersionId: priceVersionEvidence.priceVersionId,
+            archiveUrl: observations.archiveUrl,
+            archiveStatus: observations.archiveStatus,
+          })
+          .from(priceVersionEvidence)
+          .innerJoin(
+            observationItems,
+            eq(priceVersionEvidence.observationItemId, observationItems.id),
+          )
+          .innerJoin(observations, eq(observationItems.observationId, observations.id))
+          .where(inArray(priceVersionEvidence.priceVersionId, versionIds));
+
   const sourceRows = await db
     .select({
       offeringId: observationItems.offeringId,
@@ -176,7 +200,7 @@ export async function findModelDetail(
     modelName: model.modelName,
     deprecatedAt: model.deprecatedAt,
     offerings: offeringRows.map((offering) =>
-      offeringDetail(offering.id, versionRows, componentRows, sourceRows),
+      offeringDetail(offering.id, versionRows, componentRows, evidenceRows, sourceRows),
     ),
   };
 }
@@ -197,6 +221,11 @@ function offeringDetail(
     amount: string;
     condition: unknown;
   }[],
+  evidenceRows: {
+    priceVersionId: number;
+    archiveUrl: string | null;
+    archiveStatus: string;
+  }[],
   sourceRows: { offeringId: number; url: string; reviewStatus: string }[],
 ): ModelDetailOffering {
   const historyVersions = versionRows
@@ -205,6 +234,7 @@ function offeringDetail(
       firstSeenAt: version.firstSeenAt,
       announcedOn: version.announcedOn,
       lastSeenAt: version.lastSeenAt,
+      ...archiveFor(version.id, evidenceRows),
       components: componentRows
         .filter((component) => component.priceVersionId === version.id)
         .map((component) => ({
@@ -220,6 +250,8 @@ function offeringDetail(
     .map((version) => ({
       firstSeenAt: version.firstSeenAt,
       announcedOn: version.announcedOn,
+      archiveUrl: version.archiveUrl,
+      archiveStatus: version.archiveStatus,
       components: version.components,
     }));
 
@@ -228,4 +260,33 @@ function offeringDetail(
   const reviewStatuses = forOffering.map((source) => source.reviewStatus).sort();
 
   return { openVersions, historyVersions, officialSourceUrls, reviewStatuses };
+}
+
+function archiveFor(
+  priceVersionId: number,
+  evidenceRows: {
+    priceVersionId: number;
+    archiveUrl: string | null;
+    archiveStatus: string;
+  }[],
+): { archiveUrl: string | null; archiveStatus: ModelDetailArchiveStatus | null } {
+  const matches = evidenceRows.filter((row) => row.priceVersionId === priceVersionId);
+  if (matches.length > 1) {
+    throw new Error(`price version ${priceVersionId} has more than one evidence row`);
+  }
+  const match = matches[0];
+  if (match === undefined) {
+    return { archiveUrl: null, archiveStatus: null };
+  }
+  return {
+    archiveUrl: match.archiveUrl,
+    archiveStatus: readArchiveStatus(match.archiveStatus),
+  };
+}
+
+function readArchiveStatus(status: string): ModelDetailArchiveStatus {
+  if (status === "pending" || status === "archived" || status === "failed") {
+    return status;
+  }
+  throw new Error(`archive status ${status} is not pending, archived, or failed`);
 }
