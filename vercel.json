@@ -15,6 +15,11 @@
       "schedule": "20 */6 * * *",
       "path": "/api/verify/google",
       "requestMethod": "POST"
+    },
+    "signals-litellm": {
+      "schedule": "30 */6 * * *",
+      "path": "/api/signals/litellm",
+      "requestMethod": "POST"
     }
   }
 }

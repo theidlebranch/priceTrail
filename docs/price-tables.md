@@ -23,11 +23,19 @@ erDiagram
   observations |o--o| fetch_log : "observation_id"
   observations ||--o{ observation_items : "observation_id"
   offerings ||--o{ observation_items : "offering_id"
+  sources ||--o{ witness_reads : "source_id"
+  sources ||--o{ verification_flags : "source_id"
+  offerings ||--o{ verification_flags : "offering_id"
+  sources ||--o{ candidate_models : "source_id"
+  labs ||--o{ candidate_models : "lab_id"
+  models ||--o{ candidate_models : "resolved_model_id"
+  sources ||--o{ model_signals : "source_id"
+  models ||--o{ model_signals : "model_id"
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. Those rows do not publish a price.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -255,3 +263,49 @@ This picture is not on the Claude Haiku 4.5 page. It shows the shape. Version 3 
 | 8 | 3 | input | usd_per_1m_tokens | 0.50 | {"promptTokensAtMost": 100000} |
 
 Both rows are `input` on version 3. The unique key is version + dimension + condition, so this is allowed. `{}` is the price with no tier. `{"promptTokensAtMost": 100000}` is the price for prompts up to 100,000 tokens. If condition were blank instead of `{}`, Postgres would treat those blanks as different and could store two "no tier" input prices.
+
+## A witness read is not a price
+
+LiteLLM's cost map is one `sources` row. A read of that file is a `witness_reads` row. It does not publish a price. The rows below are a reading aid. They are not inserted.
+
+The source id 2 is the LiteLLM file. Offering 1 is still Claude Haiku 4.5. The witness says input is `1.20` and the open price says `1`, so one flag is open. `claude-new` is a name we do not track yet. Model 1 was linked on the previous read and is missing from this one.
+
+### sources
+
+| id | url | type | active | last_checked_at |
+| --- | --- | --- | --- | --- |
+| 2 | https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json | aggregator | true | 2026-11-13T16:30:00Z |
+
+`type` `aggregator` means this page is a witness, not the official pricing page. `last_checked_at` on this row can stay blank. The witness read has its own `fetched_at`.
+
+### witness_reads
+
+| id | source_id | fetched_at | outcome | note | seen_slugs | is_baseline | agreed_count | not_compared_count |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2 | 2026-11-13T16:30:00Z | ok |  | ["claude-haiku-4-5", "claude-new"] | true | 0 | 0 |
+
+`outcome` `ok` means the file parsed. `note` is empty on success. `seen_slugs` is the model ids in that file. `is_baseline` is true only for the first success. `agreed_count` is how many linked models matched. It is empty when the read failed.
+
+### verification_flags
+
+| id | offering_id | source_id | dimension | detected_at | aggregator_value | our_value | resolved_at | resolution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 2 | input | 2026-11-13T16:30:00Z | 1.20 | 1 |  |  |
+
+`aggregator_value` is the witness amount. `our_value` is the open price. Both stay decimal strings. `resolved_at` is blank because nobody has cleared this disagreement. `resolution` is blank for the same reason.
+
+### candidate_models
+
+| id | lab_id | raw_name | raw_slug | source_id | first_seen_at | status | resolved_model_id | reviewed_by | reviewed_at | review_note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | claude-new | claude-new | 2 | 2026-11-13T16:30:00Z | pending_review |  |  |  |  |
+
+`raw_name` and `raw_slug` are the same, because the cost map has no separate display name. `status` `pending_review` means a reviewer has not rejected it. `resolved_model_id` stays blank until a later step approves the name. Reject fills `reviewed_by`, `reviewed_at`, and `review_note`.
+
+### model_signals
+
+| id | model_id | source_id | kind | detected_at |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | 2 | missing | 2026-11-13T16:30:00Z |
+
+`kind` `missing` means this tracked model was in the previous file and is not in this one. `not_linked` means we have no witness name for it. Neither kind sets `deprecated_at`.

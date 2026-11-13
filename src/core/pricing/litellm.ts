@@ -95,6 +95,16 @@ function readKeptModel(
     return null;
   }
 
+  if (entry.litellm_provider === "gemini" && !hasGeminiPrefix(key)) {
+    warnings.push(`skipped gemini key without a gemini/ prefix: ${key}`);
+    return null;
+  }
+
+  if (!hasBaseTokenPrice(entry)) {
+    warnings.push(`skipped chat entry with no token price: ${key}`);
+    return null;
+  }
+
   const identity = identityFor(key, entry.litellm_provider);
   const amounts = readCosts(entry, identity.modelSlug, warnings);
   return { ...identity, amounts };
@@ -109,6 +119,21 @@ function asRecord(key: string, raw: unknown): Record<string, unknown> {
 
 function isKeptProvider(value: unknown): value is LiteLLMProvider {
   return typeof value === "string" && Object.hasOwn(PROVIDER_BY_LITELLM, value);
+}
+
+function hasGeminiPrefix(key: string): boolean {
+  const prefix = "gemini/";
+  return key.startsWith(prefix) && key.length > prefix.length;
+}
+
+function hasBaseTokenPrice(entry: Record<string, unknown>): boolean {
+  for (const field of Object.keys(entry)) {
+    const base = withoutOutOfMvpSuffix(field);
+    if (base === "input_cost_per_token" || base === "output_cost_per_token") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function identityFor(

@@ -27,6 +27,7 @@ const memberLinks = [
 const reviewTabs = [
   { label: "Queue", href: "/review" },
   { label: "Sources", href: "/review/sources" },
+  { label: "Signals", href: "/review/signals" },
   { label: "Requests", href: "/review/requests" },
   { label: "Price reports", href: "/review/reports" },
 ];

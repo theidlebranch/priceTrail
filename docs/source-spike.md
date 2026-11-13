@@ -147,6 +147,24 @@ Strip trailing asterisks before matching labels. Any other label is reported as 
   - Gemini API rows are keyed `gemini/<id>` with `litellm_provider: "gemini"`. The bare key `gemini-2.5-pro` is Vertex (`vertex_ai-language-models`). `gemini-4-argon` does not exist as a bare key.
   - We are **not** mapping these token-tier LiteLLM fields yet. They are a witness of "this model has a context split," not a source of truth.
 
+### 3.6 LiteLLM names for the tracked models (2026-11-13)
+
+The cost map was read from the raw URL above. `parseLiteLLM()` keeps `litellm_provider` `anthropic`, `openai`, and `gemini` with `mode` `chat`. Gemini keys drop the `gemini/` prefix, so the slug is the part after that slash.
+
+| Tracked slug | LiteLLM slug | Alias stored |
+| --- | --- | --- |
+| `claude-fable-5.1` | `claude-fable-5-1` | `aggregator_slug` |
+| `claude-mythos-5.1` | `claude-mythos-5-1` | `aggregator_slug` |
+| `gpt-6-astra` | `gpt-6-astra` | none, the slug matches |
+| `gpt-6-luna` | `gpt-6-luna` | none, the slug matches |
+| `gpt-6-sol` | `gpt-6-sol` | none, the slug matches |
+| `gpt-6.1-sol` | `gpt-6.1-sol` | none, the slug matches |
+| `gemini-2.5-pro` | `gemini-2.5-pro` | none, the slug matches |
+| `gemini-3.8-flash` | `gemini-3.8-flash` | none, the slug matches |
+| `gemini-4-argon` | `gemini-4-argon` | none, the slug matches |
+
+The list in `src/server/sources/litellm-signal.ts` is those two Anthropic aliases. A bare `gemini-4-argon` key is Vertex. The kept key is `gemini/gemini-4-argon`.
+
 ---
 
 ## 4. Shared design decisions

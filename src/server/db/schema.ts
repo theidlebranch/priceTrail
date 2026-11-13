@@ -335,3 +335,127 @@ export const fetchLog = pgTable(
     ),
   ],
 );
+
+/**
+ * One attempt to read a witness file, such as the LiteLLM cost map.
+ *
+ * A failed attempt stores the sentence and leaves the previous findings
+ * alone. agreed_count and not_compared_count are empty unless the read
+ * succeeded. seen_slugs is the model ids in that file. The first success
+ * is the baseline: is_baseline is true only then.
+ */
+export const witnessReadOutcome = pgEnum("witness_read_outcome", [
+  "ok",
+  "fetch_error",
+  "parse_error",
+]);
+
+export const witnessReads = pgTable(
+  "witness_reads",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    sourceId: bigint("source_id", { mode: "number" })
+      .notNull()
+      .references(() => sources.id, { onDelete: "restrict" }),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    outcome: witnessReadOutcome("outcome").notNull(),
+    note: text("note").notNull().default(""),
+    seenSlugs: jsonb("seen_slugs").$type<string[]>().notNull().default([]),
+    isBaseline: boolean("is_baseline").notNull().default(false),
+    agreedCount: integer("agreed_count"),
+    notComparedCount: integer("not_compared_count"),
+  },
+  (table) => [
+    check(
+      "witness_reads_counts_match_outcome",
+      sql`(${table.outcome} = 'ok' AND ${table.agreedCount} IS NOT NULL AND ${table.notComparedCount} IS NOT NULL) OR (${table.outcome} <> 'ok' AND ${table.agreedCount} IS NULL AND ${table.notComparedCount} IS NULL AND ${table.isBaseline} = false)`,
+    ),
+  ],
+);
+
+/**
+ * One dimension where a witness amount differs from the open price.
+ * A successful read replaces this source's unresolved rows. A row that
+ * already has resolved_at stays. This table does not publish a price.
+ */
+export const verificationFlagResolution = pgEnum("verification_flag_resolution", [
+  "reverified_same",
+  "price_updated",
+  "human_confirmed",
+  "human_rejected",
+]);
+
+export const verificationFlags = pgTable("verification_flags", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  offeringId: bigint("offering_id", { mode: "number" })
+    .notNull()
+    .references(() => offerings.id, { onDelete: "restrict" }),
+  sourceId: bigint("source_id", { mode: "number" })
+    .notNull()
+    .references(() => sources.id, { onDelete: "restrict" }),
+  dimension: priceDimension("dimension").notNull(),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
+  aggregatorValue: text("aggregator_value").notNull(),
+  ourValue: text("our_value").notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolution: verificationFlagResolution("resolution"),
+});
+
+/**
+ * A model name a witness saw that we do not track yet.
+ * One row per source and slug. Rejected stays rejected so the name
+ * does not come back. Approve is a later step and is not written here.
+ */
+export const candidateStatus = pgEnum("candidate_status", [
+  "pending_review",
+  "approved",
+  "rejected",
+]);
+
+export const candidateModels = pgTable(
+  "candidate_models",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    labId: bigint("lab_id", { mode: "number" })
+      .notNull()
+      .references(() => labs.id, { onDelete: "restrict" }),
+    rawName: text("raw_name").notNull(),
+    rawSlug: text("raw_slug").notNull(),
+    sourceId: bigint("source_id", { mode: "number" })
+      .notNull()
+      .references(() => sources.id, { onDelete: "restrict" }),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    status: candidateStatus("status").notNull().default("pending_review"),
+    resolvedModelId: bigint("resolved_model_id", { mode: "number" }).references(() => models.id, {
+      onDelete: "restrict",
+    }),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+  },
+  (table) => [unique("candidate_models_source_id_raw_slug").on(table.sourceId, table.rawSlug)],
+);
+
+/**
+ * The current not-linked and missing list for one witness.
+ * A successful read replaces this source's rows. not_linked means we
+ * have no match. missing means the previous read matched and this one
+ * does not. Neither kind sets deprecated_at.
+ */
+export const modelSignalKind = pgEnum("model_signal_kind", ["not_linked", "missing"]);
+
+export const modelSignals = pgTable(
+  "model_signals",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    modelId: bigint("model_id", { mode: "number" })
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    sourceId: bigint("source_id", { mode: "number" })
+      .notNull()
+      .references(() => sources.id, { onDelete: "restrict" }),
+    kind: modelSignalKind("kind").notNull(),
+    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [unique("model_signals_source_id_model_id").on(table.sourceId, table.modelId)],
+);
