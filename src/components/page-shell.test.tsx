@@ -173,6 +173,7 @@ describe("SiteHeader", () => {
     const tabs = screen.getByRole("navigation", { name: "Review" });
     expect(tabs.textContent).toContain("Queue");
     expect(tabs.textContent).toContain("Sources");
+    expect(tabs.textContent).toContain("Signals");
     expect(tabs.textContent).toContain("Requests");
     expect(tabs.textContent).toContain("Price reports");
     expect(screen.getByRole("link", { name: "Sources" }).getAttribute("aria-current")).toBe("page");
