@@ -64,6 +64,15 @@ describe("ModelList", () => {
     expect(screen.getByText("2 models")).toBeTruthy();
   });
 
+  it("starts from the header search query", () => {
+    render(<ModelList entries={[fable, mythos, gemini]} initialQuery="mythos" />);
+
+    expect(screen.getByRole("link", { name: /Claude Mythos 5\.1/ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Claude Fable 5\.1/ })).toBeNull();
+    const search = screen.getByRole("searchbox", { name: "Search models" });
+    expect(search instanceof HTMLInputElement && search.value).toBe("mythos");
+  });
+
   it("filters by model name and leaves the lab counts unchanged", () => {
     render(<ModelList entries={[fable, mythos, gemini]} />);
 

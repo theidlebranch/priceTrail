@@ -4,6 +4,7 @@ import {
   configuredReviewProviders,
   isProtectedReviewPath,
   parseReviewerAllowlist,
+  readAllowlistForHeader,
   reviewAuthSecretConfigured,
   reviewDecision,
   reviewHttpResult,
@@ -94,6 +95,24 @@ describe("parseReviewerAllowlist", () => {
   it("throws on an empty slot between commas", () => {
     expect(() => parseReviewerAllowlist("google:123,,github:42")).toThrow(/allowlist/);
     expect(() => parseReviewerAllowlist("google:123,")).toThrow(/allowlist/);
+  });
+});
+
+describe("readAllowlistForHeader", () => {
+  it("keeps a readable list, including a blank list that means nobody", () => {
+    expect(readAllowlistForHeader("google:123, github:42")).toEqual({
+      ok: true,
+      allowlist: new Set(["google:123", "github:42"]),
+    });
+    expect(readAllowlistForHeader("")).toEqual({ ok: true, allowlist: new Set() });
+    expect(readAllowlistForHeader(undefined)).toEqual({ ok: true, allowlist: new Set() });
+  });
+
+  it("returns an empty list when the entry is broken, and does not throw", () => {
+    expect(readAllowlistForHeader("google:123,")).toEqual({
+      ok: false,
+      allowlist: new Set(),
+    });
   });
 });
 

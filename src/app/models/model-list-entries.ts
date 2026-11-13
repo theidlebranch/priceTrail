@@ -66,3 +66,12 @@ function publicSlug(slug: string, kind: "lab" | "model"): string {
   assertPublicSlug(slug, kind);
   return encodeURIComponent(slug);
 }
+
+/**
+ * The header search sends `q`. A repeated query uses the first value.
+ * Blank and missing both mean no filter.
+ */
+export function modelListQuery(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return (raw ?? "").trim();
+}

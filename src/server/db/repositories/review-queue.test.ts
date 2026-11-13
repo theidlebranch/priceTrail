@@ -17,6 +17,7 @@ import { createDb } from "@/server/db/client";
 import type { PublishDb } from "@/server/db/publish-price-version";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
 import {
+  countFlaggedReviewItems,
   findReviewItem,
   hasReviewItem,
   listFlaggedReviewItems,
@@ -97,6 +98,37 @@ describe.skipIf(databaseUrl.length === 0)("review queue reads", () => {
       expect(packed).not.toContain(rawMarker);
       expect(packed).not.toContain(parsedMarker);
       expect(packed).not.toContain("999");
+    });
+  });
+
+  it("counts official flagged items and skips confirmed and aggregator rows", async () => {
+    await withQueue(async (tx) => {
+      const before = await countFlaggedReviewItems(tx);
+      const planted = await plantModel(tx);
+      const prefix = `https://example.test/review/${randomUUID()}`;
+      const rawMarker = `SECRET-RAW-${randomUUID()}`;
+      await plantItem(tx, planted.offeringId, `${prefix}/one`, "official", "flagged", {
+        fetchedAt: NEWER,
+        rawMarker,
+        parsedData: { rows: [], warnings: [] },
+      });
+      await plantItem(tx, planted.offeringId, `${prefix}/two`, "official", "flagged", {
+        fetchedAt: OLDER,
+        rawMarker,
+        parsedData: { rows: [], warnings: [] },
+      });
+      await plantItem(tx, planted.offeringId, `${prefix}/confirmed`, "official", "confirmed", {
+        fetchedAt: NEWER,
+        rawMarker,
+        parsedData: { rows: [], warnings: [] },
+      });
+      await plantItem(tx, planted.offeringId, `${prefix}/aggregator`, "aggregator", "flagged", {
+        fetchedAt: NEWER,
+        rawMarker,
+        parsedData: { rows: [], warnings: [] },
+      });
+
+      expect(await countFlaggedReviewItems(tx)).toBe(before + 2);
     });
   });
 

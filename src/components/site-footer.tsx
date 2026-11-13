@@ -1,12 +1,26 @@
-import Link from "next/link"
+"use client";
 
-const footerLinks = [
-  { label: "Receipts", href: "/#receipts" },
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "Honest by design", href: "/#honest" },
-]
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-export function SiteFooter() {
+const pageLinks = [{ label: "Receipts", href: "/receipts" }];
+
+const landingLinks = [
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Honest by design", href: "#honest" },
+];
+
+/**
+ * Receipts is its own page, so it stays on every route. How it works and
+ * Honest by design are sections of the landing page, so they only show
+ * there and scroll that page.
+ *
+ * The path is request data. The fallback passes an empty path, so the
+ * static shell shows only Receipts until the real path streams in.
+ */
+function SiteFooterBar({ pathname }: { pathname: string }) {
+  const links = pathname === "/" ? [...pageLinks, ...landingLinks] : pageLinks;
+
   return (
     <footer className="border-t border-border bg-card">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
@@ -18,7 +32,7 @@ export function SiteFooter() {
             </p>
           </div>
           <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs">
-            {footerLinks.map((link) => (
+            {links.map((link) => (
               <Link key={link.href} href={link.href} className="text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground">
                 {link.label}
               </Link>
@@ -30,5 +44,14 @@ export function SiteFooter() {
         </div>
       </div>
     </footer>
-  )
+  );
+}
+
+export function SiteFooter() {
+  const pathname = usePathname() ?? "";
+  return <SiteFooterBar pathname={pathname} />;
+}
+
+export function SiteFooterFallback() {
+  return <SiteFooterBar pathname="" />;
 }

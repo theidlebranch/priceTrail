@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertPublicSlug, toModelListEntries, type ModelListRow } from "./model-list-entries";
+import {
+  assertPublicSlug,
+  modelListQuery,
+  toModelListEntries,
+  type ModelListRow,
+} from "./model-list-entries";
 
 function row(overrides: Partial<ModelListRow> = {}): ModelListRow {
   return {
@@ -62,6 +67,13 @@ describe("toModelListEntries", () => {
     expect(() => toModelListEntries([row({ labSlug: "." })])).toThrow(/lab slug/);
     expect(() => toModelListEntries([row({ labSlug: ".." })])).toThrow(/lab slug/);
     expect(() => assertPublicSlug("..", "model")).toThrow(/model slug/);
+  });
+
+  it("reads the header search query and treats a blank value as no filter", () => {
+    expect(modelListQuery(undefined)).toBe("");
+    expect(modelListQuery("  ")).toBe("");
+    expect(modelListQuery("  mythos  ")).toBe("mythos");
+    expect(modelListQuery(["fable", "other"])).toBe("fable");
   });
 
   it("throws when two rows would share one public path", () => {

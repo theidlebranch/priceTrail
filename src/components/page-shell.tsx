@@ -1,24 +1,28 @@
 import { Suspense, type ReactNode } from "react";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
+import { SiteFooter, SiteFooterFallback } from "@/components/site-footer";
+import { SiteHeaderFallback } from "@/components/site-header";
+import { SiteHeaderSlot } from "@/components/site-header-slot";
 
 /**
- * The path is request data. On a model URL it is not known while Next.js
- * builds the static shell, so the header that reads it sits in Suspense.
- * The fallback is the same bar with no link marked current. A known URL
- * such as / or /models does not suspend, so its first HTML still has the
- * real header.
+ * The path and the sign-in cookie are request data. On a model URL they
+ * are not known while Next.js builds the static shell, so the header and
+ * the footer sit in Suspense. The header fallback is the signed-out bar
+ * with no link marked current. The footer fallback shows only Receipts.
+ * The bar is sticky, so a second review row pushes the page down instead
+ * of covering it.
  */
 export function PageShell({ children }: { children: ReactNode }) {
   return (
     <>
       <Suspense fallback={<SiteHeaderFallback />}>
-        <SiteHeader />
+        <SiteHeaderSlot />
       </Suspense>
-      <main id="top" className="min-h-screen pt-14">
+      <main id="top" className="min-h-screen">
         {children}
       </main>
-      <SiteFooter />
+      <Suspense fallback={<SiteFooterFallback />}>
+        <SiteFooter />
+      </Suspense>
     </>
   );
 }
