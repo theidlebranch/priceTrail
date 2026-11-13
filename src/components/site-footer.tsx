@@ -14,9 +14,11 @@ const landingLinks = [
  * Receipts is its own page, so it stays on every route. How it works and
  * Honest by design are sections of the landing page, so they only show
  * there and scroll that page.
+ *
+ * The path is request data. The fallback passes an empty path, so the
+ * static shell shows only Receipts until the real path streams in.
  */
-export function SiteFooter() {
-  const pathname = usePathname() ?? "";
+function SiteFooterBar({ pathname }: { pathname: string }) {
   const links = pathname === "/" ? [...pageLinks, ...landingLinks] : pageLinks;
 
   return (
@@ -43,4 +45,13 @@ export function SiteFooter() {
       </div>
     </footer>
   );
+}
+
+export function SiteFooter() {
+  const pathname = usePathname() ?? "";
+  return <SiteFooterBar pathname={pathname} />;
+}
+
+export function SiteFooterFallback() {
+  return <SiteFooterBar pathname="" />;
 }

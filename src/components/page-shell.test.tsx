@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HeaderViewer } from "@/core/auth/header-viewer";
 import { FinalCtaSection } from "@/components/landing-page/final-cta-section";
 import { PageShell } from "@/components/page-shell";
+import { SiteFooterFallback } from "@/components/site-footer";
 import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
 
 const pathname = vi.hoisted(() => ({ current: "/" }));
@@ -183,6 +184,18 @@ describe("SiteHeader", () => {
     expect(screen.queryByRole("navigation", { name: "Review" })).toBeNull();
     const counted = screen.getByRole("link", { name: /^Review/ });
     expect(counted.textContent?.replace(/\s+/g, "")).toBe("Review3");
+  });
+});
+
+describe("SiteFooterFallback", () => {
+  it("shows the links that stay on every page and hides the landing sections", () => {
+    render(<SiteFooterFallback />);
+
+    const footer = screen.getByRole("contentinfo");
+    expect(footer.textContent).toContain("not affiliated with OpenAI, Anthropic, or Google");
+    expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("href")).toBe("/receipts");
+    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Honest by design" })).toBeNull();
   });
 });
 
