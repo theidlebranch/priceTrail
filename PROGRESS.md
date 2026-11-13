@@ -70,6 +70,8 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 - The model page links each published price to the Wayback snapshot that opened it. `price_version_evidence` stores that pair, and `publishPriceVersion()` writes the row. A blank or failed archive says "No archived snapshot." The live vendor page stays a separate link on the current price. `pnpm prices:link-evidence` linked 13 existing versions and left 0. A later snapshot of the same price is not used. Claude Fable 5.1 still says "No archived snapshot." because the seed snapshot was never saved. gpt-6-sol links the 10 Nov 2026 Wayback capture on the current price and on that change, and the 18 Oct starting price has no snapshot.
 
+- Phase 7 step 33: `readLiteLLMSignal()` reads the LiteLLM cost map for Anthropic, OpenAI, and Google. The first success is a baseline. A later new slug is a card on `/review/signals`. Reject does not publish a price. A disagreement is stored and does not start an official visit. `vercel.json` runs it at minute 30. `pnpm seed:litellm-aliases` was run once and inserted the two Anthropic witness names. A second run inserted nothing. Signal health, approving a new model, and the labs page stay steps 36–38.
+
 ## In progress
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.

@@ -62,7 +62,7 @@ flowchart TD
   person -->|reject| stopPrice[review_status rejected and publish nothing]
 ```
 
-Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, and `observation_items`. `fetch_triggers`, `candidate_models`, and `verification_flags` are not created yet. They are on the diagram so the path is visible. The row picture of the tables that exist is [price-tables.md](price-tables.md).
+Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, `observation_items`, `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. `fetch_triggers` is not created yet. The row picture of the tables that exist is [price-tables.md](price-tables.md).
 
 ```mermaid
 flowchart TD
@@ -82,11 +82,11 @@ flowchart TD
   publishPriceVersion --> price_version_evidence
 
   witnesses[LiteLLM changelog OpenRouter] --> fetch_triggers_later["fetch_triggers (later)"]
-  witnesses --> candidate_models_later["candidate_models (later)"]
-  witnesses --> verification_flags_later["verification_flags (later)"]
+  witnesses --> candidate_models
+  witnesses --> verification_flags
   fetch_triggers_later --> sources
-  candidate_models_later -->|"person approves"| models
-  verification_flags_later --> offerings
+  candidate_models -->|"person approves"| models
+  verification_flags --> offerings
 ```
 
 When something looks wrong, start at the table for that step. A failed download or `parser_suspect` is only a `fetch_log` row, and the page text was not kept. A waiting model is an `observation_items` row with `review_status` `flagged`. A wrong published number starts at `price_versions`, then the item that was allowed to publish, then the snapshot's `raw_content`.
@@ -141,7 +141,9 @@ For each active source:
 
 This isn't a background job with a log file; it's a page the reviewer looks at. It requires a login from day one, because it can publish prices. A reviewer signs in with Google or GitHub. Only accounts listed in the environment can open `/review`. A shared password is not used: it cannot tell two reviewers apart. The decision is [adr/0001-review-login.md](adr/0001-review-login.md).
 
-- **Candidate models**: new slugs Tier 1 spotted. Actions: _Approve_ (creates `models` / `offerings` rows, adds aliases, starts tracking) or _Reject_ (dismiss with an optional note so it doesn't resurface every day).
+- **Candidate models**: new slugs Tier 1 spotted for a lab we already track. A slug from any other lab is ignored. _Reject_ dismisses it so it does not come back. _Approve_ creates the model, one global official offering, and the alias. The model is then listed with no published price until an official visit produces one. Approve is build-plan step 37. The LiteLLM read only stores the card.
+- **Signal health**: each witness job (LiteLLM, then OpenRouter) has a run history, like an official source, without a Wayback archive. The board and the per-signal detail page are build-plan step 36.
+- **Labs**: a public page lists the labs we track. A visitor can suggest another lab. The suggestion is a Request. Accepting it does not invent a parser. That page is build-plan step 38.
 - **Flagged items**: extractions that failed grounding, and verification flags that didn't self-resolve. Shows the extracted values side-by-side with the raw source text they supposedly came from, with the match highlighted (or visibly missing). Actions: _Confirm_ (calls `publishPriceVersion()`, sets `review_status = confirmed`) or _Reject_ (`rejected`, publishes nothing).
 - Every decision records `reviewed_by`, `reviewed_at`, and a `review_note`.
 

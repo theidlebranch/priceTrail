@@ -94,16 +94,20 @@ This file is the order of work. `docs/architecture.md` is the design (the princi
 
 ### Phase 7: Tier 1 signals
 
-33. **LiteLLM feed signal.** It writes to `fetch_triggers` only, never prices. The LiteLLM commits feed was not checked in the source spike; confirm it here.
+33. **LiteLLM signal.** Read the cost map for Anthropic, OpenAI, and Google, and show the result on `/review/signals`. The spec is [docs/superpowers/specs/2026-11-13-litellm-signals-design.md](superpowers/specs/2026-11-13-litellm-signals-design.md). The first successful read is a baseline. A new name is a card with Reject only. This step does not publish a price, does not approve a model, and does not build the multi-signal health board.
+    _Done:_ `readLiteLLMSignal()` in `src/server/pipeline/read-litellm-signal.ts` downloads `https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` and runs `parseLiteLLM()`. A failed download or a bad parse stores a `witness_reads` row and leaves the previous findings. The first success is the baseline and creates no new-name card. A later read adds a `candidate_models` row for a slug that was not in the previous set and is not linked. Reject sets that card to `rejected` and a blank note writes nothing. A linked model with the same decimal amount is a count. A different amount is a `verification_flags` row. A model that was linked and then disappears is `model_signals` `missing`. A model with no witness name is `not_linked`. `0.10` and `0.1` are the same amount. The short tier is compared to the witness base amount. The long tier is not a disagreement. Two open prices throw and store nothing. `/review/signals` is a review tab after Sources. `vercel.json` runs `signals-litellm` at minute 30 every 6 hours UTC. `pnpm signals:litellm` runs the same function. `pnpm seed:litellm-aliases` adds `claude-fable-5-1` and `claude-mythos-5-1`. This step does not call `publishPriceVersion()`. The Neon tests roll back, and `pnpm test` skips them when `DATABASE_URL` is missing.
 34. **OpenRouter and `/models` endpoints.** They feed `candidate_models` and `verification_flags`.
 35. **Trigger-driven verification.** Triggers can prompt an early Tier 2 check. Provider changelog feeds were not checked in the source spike; confirm one here if this step uses them.
+36. **Signal health.** `/review/signals` becomes a board of signal jobs, on the same pattern as `/review/sources`. Each row is one signal (LiteLLM, then OpenRouter). The row shows the last run, whether it succeeded, and the counts of disagreements, new names, and missing models. Open a row for `/review/signals/<id>`: the run history, and the current disagreements, new names, missing models, and not-linked models. There is no Wayback column. A failed run stays on the history and does not erase the last good findings. Step 33 may use `/review/signals` for the single LiteLLM read. This step moves that read to the detail URL. This step does not publish a price.
+37. **Approve a new model.** A pending new-name card is for a lab we already track. Approve creates the model, one global `official-api` offering, and the `aggregator_slug` alias. The model then appears on `/models` with no published price. The next official visit can flag a price. Publishing still goes through `publishPriceVersion()`. Reject is already in step 33: the card stays rejected and does not come back. A slug from a lab we do not track is ignored. LiteLLM must not add a lab by itself.
+38. **Labs page and lab suggestions.** A public page lists the labs we track, with each lab's name and how many models it has. A signed-in visitor can suggest a lab we do not track. That suggestion is a Request (`/review/requests`) and shows on the suggester's Contributions page. A reviewer accepts or declines it. Accepting does not create a parser, a source row, or a schedule. Tracking starts only when a later step has a pricing page and a parser for that lab. This step does not call `publishPriceVersion()`.
 
 ### Phase 8: Polish
 
-36. **Replace landing page example data** with real data.
-37. **README.** What it is, architecture diagram, how evidence works, how to run it.
-38. **Docs and ADRs cleanup.**
-39. **Post-MVP backlog:** RSS/JSON change feed, Wayback backfill, cloud platform APIs.
+39. **Replace landing page example data** with real data.
+40. **README.** What it is, architecture diagram, how evidence works, how to run it.
+41. **Docs and ADRs cleanup.**
+42. **Post-MVP backlog:** RSS/JSON change feed, Wayback backfill, cloud platform APIs.
 
 Tips:
 
