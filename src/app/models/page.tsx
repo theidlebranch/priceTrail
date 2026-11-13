@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { toModelListEntries } from "@/app/models/model-list-entries";
+import { modelListQuery, toModelListEntries } from "@/app/models/model-list-entries";
 import { ModelList } from "@/components/model-list";
 import { ModelsPageHeader } from "@/components/models-page-header";
 import { createDb } from "@/server/db/client";
@@ -16,7 +16,8 @@ export const metadata: Metadata = {
  * The heading is in the Suspense fallback, so it shows before the
  * database returns. The loaded list repeats that heading and adds the
  * row count. The list sits in Suspense so this Next.js version can
- * render it on the request, not at build time.
+ * render it on the request, not at build time. searchParams is a
+ * Promise. The header search sends `q`, and the list starts from it.
  * There is no "use cache": a model added by the seed should show up
  * on the next visit.
  *
@@ -29,11 +30,15 @@ export const metadata: Metadata = {
  * That is not an empty catalog. The empty sentence is only for a
  * query that returned no rows.
  */
-export default function ModelsPage() {
+export default function ModelsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-10">
       <Suspense fallback={<ModelsLoading />}>
-        <ModelListLoader />
+        <ModelListLoader searchParams={searchParams} />
       </Suspense>
     </section>
   );
@@ -48,14 +53,19 @@ function ModelsLoading() {
   );
 }
 
-async function ModelListLoader() {
+async function ModelListLoader({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const query = modelListQuery((await searchParams).q);
   await connection();
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
 
   try {
     const rows = await createCatalogRepository(db).listModels();
-    return <ModelList entries={toModelListEntries(rows)} />;
+    return <ModelList key={query} entries={toModelListEntries(rows)} initialQuery={query} />;
   } finally {
     await close();
   }

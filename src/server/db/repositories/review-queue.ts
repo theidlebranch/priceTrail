@@ -1,4 +1,4 @@
-import { and, desc, eq, type ExtractTablesWithRelations } from "drizzle-orm";
+import { and, desc, eq, sql, type ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import * as schema from "@/server/db/schema";
@@ -71,6 +71,32 @@ export async function hasReviewItem(db: ReviewQueueDb, id: number): Promise<bool
     .limit(1);
 
   return rows.length > 0;
+}
+
+/**
+ * How many official items are still flagged.
+ *
+ * The header badge uses this so it does not load the queue. The same
+ * rows would appear in listFlaggedReviewItems. A confirmed item and an
+ * aggregator item stay out. This does not select the page text.
+ */
+export async function countFlaggedReviewItems(db: ReviewQueueDb): Promise<number> {
+  const rows = await db
+    .select({ waiting: sql<number | string>`count(*)::int` })
+    .from(observationItems)
+    .innerJoin(observations, eq(observationItems.observationId, observations.id))
+    .innerJoin(sources, eq(observations.sourceId, sources.id))
+    .where(and(eq(observationItems.reviewStatus, "flagged"), eq(sources.type, "official")));
+
+  return wholeCount(rows[0]?.waiting);
+}
+
+function wholeCount(value: number | string | undefined): number {
+  const waiting = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(waiting) || waiting < 0) {
+    throw new Error("Flagged review count is not a whole number.");
+  }
+  return waiting;
 }
 
 export async function listFlaggedReviewItems(db: ReviewQueueDb): Promise<FlaggedReviewItem[]> {

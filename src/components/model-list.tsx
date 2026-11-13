@@ -14,8 +14,14 @@ import { cn } from "@/lib/utils";
  * Search and lab chips filter the rows already loaded. They do not ask
  * the database for a new list.
  */
-export function ModelList({ entries }: { entries: readonly ModelListEntry[] }) {
-  const [query, setQuery] = useState("");
+export function ModelList({
+  entries,
+  initialQuery = "",
+}: {
+  entries: readonly ModelListEntry[];
+  initialQuery?: string;
+}) {
+  const [query, setQuery] = useState(initialQuery);
   const [lab, setLab] = useState<string | null>(null);
   const visible = visibleEntries(entries, query, lab);
 
