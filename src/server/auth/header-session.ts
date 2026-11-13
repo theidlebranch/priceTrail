@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { headerViewer, type HeaderViewer } from "@/core/auth/header-viewer";
-import { parseReviewerAllowlist, reviewAuthSecretConfigured } from "@/core/auth/review-access";
+import { readAllowlistForHeader, reviewAuthSecretConfigured } from "@/core/auth/review-access";
 import { createDb } from "@/server/db/client";
 import { countFlaggedReviewItems } from "@/server/db/repositories/review-queue";
 import { parseDatabaseEnv } from "@/server/env";
@@ -14,7 +14,9 @@ import { parseDatabaseEnv } from "@/server/env";
  * refuses to prerender that. A reviewer also asks how many official items
  * are still flagged. If that count fails, the Review link stays and the
  * number is left off, so a count problem does not take down the rest of
- * the site.
+ * the site. A broken allowlist does the same for the header: the visitor
+ * stays a member and Review stays hidden. /review still parses the list
+ * itself and stays closed.
  */
 export async function readHeaderViewer(): Promise<HeaderViewer> {
   if (!reviewAuthSecretConfigured(process.env)) {
@@ -28,7 +30,11 @@ export async function readHeaderViewer(): Promise<HeaderViewer> {
     return { role: "guest" };
   }
 
-  const allowlist = parseReviewerAllowlist(process.env.REVIEWER_ALLOWLIST);
+  const allowlistRead = readAllowlistForHeader(process.env.REVIEWER_ALLOWLIST);
+  if (!allowlistRead.ok) {
+    console.error("Reviewer allowlist could not be read. The header will not show Review.");
+  }
+  const allowlist = allowlistRead.allowlist;
   const viewer = headerViewer({
     secretConfigured: true,
     session,

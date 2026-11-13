@@ -67,6 +67,22 @@ export function parseReviewerAllowlist(value: string | null | undefined): Readon
   return ids;
 }
 
+/**
+ * The public header must not throw when the list is broken.
+ * A blank list is still a real answer: nobody may review.
+ * /review keeps calling parseReviewerAllowlist, so a typo stays closed there.
+ */
+export function readAllowlistForHeader(value: string | null | undefined): {
+  ok: boolean;
+  allowlist: ReadonlySet<string>;
+} {
+  try {
+    return { ok: true, allowlist: parseReviewerAllowlist(value) };
+  } catch {
+    return { ok: false, allowlist: new Set() };
+  }
+}
+
 export function isProtectedReviewPath(pathname: string): boolean {
   const path = stripTrailingSlash(pathname);
   if (path === "/review/sign-in") {

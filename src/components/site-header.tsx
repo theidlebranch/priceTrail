@@ -10,11 +10,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const guestLinks = [
+const guestPageLinks = [
   { label: "Models", href: "/models" },
   { label: "Receipts", href: "/receipts" },
-  { label: "How it works", href: "/#how-it-works" },
 ];
+
+const landingHowItWorks = { label: "How it works", href: "#how-it-works" };
 
 const memberLinks = [
   { label: "Following", href: "/following" },
@@ -64,7 +65,7 @@ function SiteHeaderBar({
   onNavigate?: () => void;
 }) {
   const signedIn = viewer.role !== "guest";
-  const links = signedIn ? memberLinks : guestLinks;
+  const links = linksFor(viewer, pathname);
   const reviewOpen = viewer.role === "reviewer" && isProtectedReviewPath(pathname);
   const home = signedIn ? "/following" : "/";
   const accountMenuId = useId();
@@ -96,6 +97,7 @@ function SiteHeaderBar({
               </Link>
               <AccountMenu
                 label={viewer.label}
+                roleLine={viewer.role === "reviewer" ? "Reviewer" : "Member"}
                 open={accountOpen}
                 menuId={accountMenuId}
                 signOut={signOut}
@@ -375,8 +377,19 @@ function ModelSearch({ className, inputId }: { className?: string; inputId: stri
   );
 }
 
+function linksFor(viewer: HeaderViewer, pathname: string): HeaderLink[] {
+  if (viewer.role !== "guest") {
+    return memberLinks;
+  }
+  if (pathname === "/") {
+    return [...guestPageLinks, landingHowItWorks];
+  }
+  return guestPageLinks;
+}
+
 function AccountMenu({
   label,
+  roleLine,
   open,
   menuId,
   signOut,
@@ -384,6 +397,7 @@ function AccountMenu({
   onNavigate,
 }: {
   label: string;
+  roleLine: string;
   open: boolean;
   menuId: string;
   signOut?: () => Promise<void>;
@@ -439,7 +453,7 @@ function AccountMenu({
         >
           <div className="border-b border-border px-3 py-2">
             <p className="truncate text-sm text-foreground">{label}</p>
-            <p className="text-xs text-muted-foreground">Member</p>
+            <p className="text-xs text-muted-foreground">{roleLine}</p>
           </div>
           <nav aria-label="Account" className="flex flex-col py-1">
             {accountLinks.map((link) => (
@@ -483,7 +497,7 @@ function navClass(active: boolean, mobile: boolean): string {
 }
 
 function linkIsCurrent(href: string, pathname: string): boolean {
-  if (href.startsWith("/#") || pathname.length === 0) {
+  if (href.startsWith("#") || href.startsWith("/#") || pathname.length === 0) {
     return false;
   }
   if (href === "/models") {

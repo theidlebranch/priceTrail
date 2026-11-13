@@ -62,10 +62,32 @@ describe("PageShell", () => {
     expect(footer.textContent).toContain(
       "not affiliated with OpenAI, Anthropic, or Google",
     );
+    const howItWorks = screen.getAllByRole("link", { name: "How it works" });
+    expect(howItWorks.length).toBeGreaterThan(0);
+    for (const link of howItWorks) {
+      expect(link.getAttribute("href")).toBe("#how-it-works");
+    }
     expect(screen.getByRole("link", { name: "Honest by design" }).getAttribute("href")).toBe(
-      "/#honest",
+      "#honest",
     );
     expect(footer.textContent).not.toContain("All prices shown on this page are examples.");
+  });
+
+  it("drops landing-section links once the visitor leaves the home page", () => {
+    pathname.current = "/models";
+    render(
+      <PageShell>
+        <p>Models</p>
+      </PageShell>,
+    );
+
+    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Honest by design" })).toBeNull();
+    const receipts = screen.getAllByRole("link", { name: "Receipts" });
+    expect(receipts.length).toBeGreaterThan(0);
+    for (const link of receipts) {
+      expect(link.getAttribute("href")).toBe("/receipts");
+    }
   });
 });
 
@@ -97,6 +119,7 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("link", { name: "Models" }).className).toContain("text-primary");
 
     expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Honest by design" })).toBeNull();
   });
 
@@ -142,6 +165,9 @@ describe("SiteHeader", () => {
     expect(review.getAttribute("href")).toBe("/review");
     expect(review.getAttribute("aria-current")).toBe("page");
     expect(review.textContent).toBe("Review");
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    expect(screen.getByText("Reviewer")).toBeTruthy();
+    expect(screen.queryByText("Member")).toBeNull();
 
     const tabs = screen.getByRole("navigation", { name: "Review" });
     expect(tabs.textContent).toContain("Queue");
@@ -169,9 +195,7 @@ describe("SiteHeaderFallback", () => {
     expect(models.getAttribute("aria-current")).toBeNull();
 
     expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("href")).toBe("/receipts");
-    expect(screen.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe(
-      "/#how-it-works",
-    );
+    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
     expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe(
       "/sign-in",
     );
