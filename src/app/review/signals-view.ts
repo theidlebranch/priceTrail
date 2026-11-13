@@ -65,19 +65,19 @@ export function toSignalsView(page: LiteLLMSignalPage): SignalsView {
       ours: `$${row.ourValue}`,
       witness: `$${row.aggregatorValue}`,
     })),
-    emptyDisagreements: page.latest === null ? null : "No prices disagree.",
+    emptyDisagreements: emptyFindings(successful, "No prices disagree."),
     candidates: page.candidates.map((row) => ({
       id: row.id,
       label: `${row.labName} ${row.rawSlug}`,
     })),
-    emptyCandidates: page.latest === null ? null : "No new names are waiting.",
+    emptyCandidates: emptyFindings(successful, "No new names are waiting."),
     missing: page.signals
       .filter((row) => row.kind === "missing")
       .map((row) => ({
         key: `missing/${row.labName}/${row.modelName}`,
         model: `${row.labName} ${row.modelName}`,
       })),
-    emptyMissing: page.latest === null ? null : "No tracked model is missing.",
+    emptyMissing: emptyFindings(successful, "No tracked model is missing."),
     notLinked: page.signals
       .filter((row) => row.kind === "not_linked")
       .map((row) => ({
@@ -87,8 +87,15 @@ export function toSignalsView(page: LiteLLMSignalPage): SignalsView {
           ? "The stored witness name is not in this file."
           : "No witness name is stored.",
       })),
-    emptyNotLinked: page.latest === null ? null : "Every tracked model is linked.",
+    emptyNotLinked: emptyFindings(successful, "Every tracked model is linked."),
   };
+}
+
+function emptyFindings(
+  successful: LiteLLMSignalPage["successful"],
+  whenHealthy: string,
+): string {
+  return successful === null ? "Findings are unavailable until a read succeeds." : whenHealthy;
 }
 
 function countSentence(count: number, one: string, many: string): string {

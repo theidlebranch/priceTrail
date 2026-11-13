@@ -139,7 +139,7 @@ export function compareLiteLLMWitness(input: CompareLiteLLMInput): CompareLiteLL
 }
 
 function namesFor(model: TrackedWitnessModel): string[] {
-  return [model.modelSlug, ...model.aliases];
+  return [...new Set([model.modelSlug, ...model.aliases])];
 }
 
 function matchedSlug(model: TrackedWitnessModel, seen: ReadonlySet<string>): string {

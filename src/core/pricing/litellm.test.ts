@@ -369,11 +369,37 @@ describe("parseLiteLLM", () => {
     ).toThrow(/negative/i);
   });
 
-  it("throws when a gemini key has no gemini/ prefix", () => {
+  it("fails the file when the only gemini key has no gemini/ prefix", () => {
     expect(() =>
       parseLiteLLM({
         "gemini-2.5-pro": chatEntry({ litellm_provider: "gemini" }),
       }),
-    ).toThrow(/gemini\//i);
+    ).toThrow(/no kept chat rows/i);
+  });
+
+  it("skips a gemini key with no gemini/ prefix and keeps the other rows", () => {
+    const { rows, warnings } = parseLiteLLM({
+      "gemini-flash-latest": chatEntry({ litellm_provider: "gemini" }),
+      "claude-haiku-4-5": chatEntry(),
+    });
+
+    expect(rows.some((row) => row.modelSlug === "claude-haiku-4-5")).toBe(true);
+    expect(rows.some((row) => row.provider === "google")).toBe(false);
+    expect(warnings).toContain("skipped gemini key without a gemini/ prefix: gemini-flash-latest");
+  });
+
+  it("skips a chat entry with no token price and keeps the other rows", () => {
+    const { rows, warnings } = parseLiteLLM({
+      "openai/container": {
+        litellm_provider: "openai",
+        mode: "chat",
+        code_interpreter_cost_per_session: 0.03,
+      },
+      "gpt-6-sol": chatEntry({ litellm_provider: "openai" }),
+    });
+
+    expect(rows.every((row) => row.modelSlug === "gpt-6-sol")).toBe(true);
+    expect(rows.some((row) => row.modelSlug === "openai/container")).toBe(false);
+    expect(warnings).toContain("skipped chat entry with no token price: openai/container");
   });
 });

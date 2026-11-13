@@ -213,6 +213,50 @@ describe("compareLiteLLMWitness", () => {
     expect(result.disagreements).toEqual([]);
   });
 
+  it("records the model when its page slug is also stored as an alias", () => {
+    const result = compareLiteLLMWitness({
+      rows: [row("gpt-6-sol", "input", "5", "openai")],
+      tracked: [
+        tracked({
+          labSlug: "openai",
+          modelSlug: "gpt-6-sol",
+          aliases: ["gpt-6-sol"],
+          openComponents: [{ dimension: "input", amount: "5", condition: {} }],
+        }),
+      ],
+      previousSlugs: null,
+      existingCandidateSlugs: [],
+    });
+
+    expect(result.agreedCount).toBe(1);
+    expect(result.disagreements).toEqual([]);
+    expect(result.signals).toEqual([]);
+  });
+
+  it("throws when two tracked models share one witness name", () => {
+    expect(() =>
+      compareLiteLLMWitness({
+        rows: [row("gpt-6-sol", "input", "5", "openai")],
+        tracked: [
+          tracked({
+            modelId: 1,
+            labSlug: "openai",
+            modelSlug: "gpt-6-sol",
+            aliases: [],
+          }),
+          tracked({
+            modelId: 2,
+            labSlug: "openai",
+            modelSlug: "gpt-6-luna",
+            aliases: ["gpt-6-sol"],
+          }),
+        ],
+        previousSlugs: null,
+        existingCandidateSlugs: [],
+      }),
+    ).toThrow(/witness name gpt-6-sol is linked to two tracked models/);
+  });
+
   it("throws when one dimension has two comparable amounts", () => {
     expect(() =>
       compareLiteLLMWitness({
