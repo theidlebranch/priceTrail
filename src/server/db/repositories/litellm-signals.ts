@@ -29,6 +29,8 @@ export type LiteLLMSignalPage = {
     fetchedAt: Date;
     agreedCount: number;
     notComparedCount: number;
+    isBaseline: boolean;
+    seenCount: number;
   } | null;
   disagreements: {
     modelName: string;
@@ -36,13 +38,15 @@ export type LiteLLMSignalPage = {
     dimension: string;
     ourValue: string;
     aggregatorValue: string;
+    detectedAt: Date;
   }[];
-  candidates: { id: number; labName: string; rawSlug: string }[];
+  candidates: { id: number; labName: string; rawSlug: string; firstSeenAt: Date }[];
   signals: {
     modelName: string;
     labName: string;
     kind: "not_linked" | "missing";
     hasAlias: boolean;
+    detectedAt: Date;
   }[];
 };
 
@@ -64,6 +68,8 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       note: witnessReads.note,
       agreedCount: witnessReads.agreedCount,
       notComparedCount: witnessReads.notComparedCount,
+      isBaseline: witnessReads.isBaseline,
+      seenSlugs: witnessReads.seenSlugs,
     })
     .from(witnessReads)
     .where(eq(witnessReads.sourceId, sourceId))
@@ -82,13 +88,18 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
             fetchedAt: witnessReads.fetchedAt,
             agreedCount: witnessReads.agreedCount,
             notComparedCount: witnessReads.notComparedCount,
+            isBaseline: witnessReads.isBaseline,
+            seenSlugs: witnessReads.seenSlugs,
           })
           .from(witnessReads)
           .where(and(eq(witnessReads.sourceId, sourceId), eq(witnessReads.outcome, "ok")))
           .orderBy(desc(witnessReads.fetchedAt), desc(witnessReads.id))
           .limit(1);
   const success = successRows[0];
-  if (success !== undefined && (success.agreedCount === null || success.notComparedCount === null)) {
+  if (
+    success !== undefined &&
+    (success.agreedCount === null || success.notComparedCount === null)
+  ) {
     throw new Error("successful witness read is missing its counts");
   }
 
@@ -99,6 +110,7 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       dimension: verificationFlags.dimension,
       ourValue: verificationFlags.ourValue,
       aggregatorValue: verificationFlags.aggregatorValue,
+      detectedAt: verificationFlags.detectedAt,
     })
     .from(verificationFlags)
     .innerJoin(offerings, eq(verificationFlags.offeringId, offerings.id))
@@ -112,6 +124,7 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       id: candidateModels.id,
       labName: labs.name,
       rawSlug: candidateModels.rawSlug,
+      firstSeenAt: candidateModels.firstSeenAt,
     })
     .from(candidateModels)
     .innerJoin(labs, eq(candidateModels.labId, labs.id))
@@ -124,6 +137,7 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       modelName: models.name,
       labName: labs.name,
       kind: modelSignals.kind,
+      detectedAt: modelSignals.detectedAt,
     })
     .from(modelSignals)
     .innerJoin(models, eq(modelSignals.modelId, models.id))
@@ -145,14 +159,7 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
 
   return {
     latest: { outcome: latest.outcome, fetchedAt: latest.fetchedAt, note: latest.note },
-    successful:
-      success === undefined || success.agreedCount === null || success.notComparedCount === null
-        ? null
-        : {
-            fetchedAt: success.fetchedAt,
-            agreedCount: success.agreedCount,
-            notComparedCount: success.notComparedCount,
-          },
+    successful: readSuccessfulRead(success),
     disagreements: disagreementRows,
     candidates: candidateRows,
     signals: signalRows.map((row) => ({
@@ -160,8 +167,39 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       labName: row.labName,
       kind: row.kind,
       hasAlias: withAlias.has(row.modelId),
+      detectedAt: row.detectedAt,
     })),
   };
+}
+
+function readSuccessfulRead(
+  success:
+    | {
+        fetchedAt: Date;
+        agreedCount: number | null;
+        notComparedCount: number | null;
+        isBaseline: boolean;
+        seenSlugs: unknown;
+      }
+    | undefined,
+): LiteLLMSignalPage["successful"] {
+  if (success === undefined || success.agreedCount === null || success.notComparedCount === null) {
+    return null;
+  }
+  return {
+    fetchedAt: success.fetchedAt,
+    agreedCount: success.agreedCount,
+    notComparedCount: success.notComparedCount,
+    isBaseline: success.isBaseline,
+    seenCount: readSeenCount(success.seenSlugs),
+  };
+}
+
+function readSeenCount(value: unknown): number {
+  if (!Array.isArray(value) || value.some((slug) => typeof slug !== "string")) {
+    throw new Error("witness seen_slugs is not a list of strings");
+  }
+  return value.length;
 }
 
 function emptyPage(): LiteLLMSignalPage {

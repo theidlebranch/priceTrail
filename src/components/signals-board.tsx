@@ -30,7 +30,7 @@ export function SignalsBoard({
         <p className="mt-8 text-sm text-muted-foreground">{view.unread}</p>
       ) : (
         <div className="mt-8 space-y-8">
-          <StatusBlock view={view} />
+          <SignalCards view={view} />
           <FindingList title="Disagreements" empty={view.emptyDisagreements}>
             {view.disagreements.map((row) => (
               <li key={row.key} className="border-b border-border px-4 py-4 last:border-b-0">
@@ -38,6 +38,7 @@ export function SignalsBoard({
                 <p className="mt-1 text-sm text-muted-foreground">
                   {row.dimension}: ours {row.ours}, witness {row.witness}
                 </p>
+                <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
               </li>
             ))}
           </FindingList>
@@ -45,6 +46,7 @@ export function SignalsBoard({
             {view.candidates.map((row) => (
               <li key={row.id} className="border-b border-border px-4 py-4 last:border-b-0">
                 <p className="font-mono text-sm">{row.label}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
                 <SignalRejectForm candidateId={row.id} action={rejectAction} />
               </li>
             ))}
@@ -52,7 +54,8 @@ export function SignalsBoard({
           <FindingList title="Missing models" empty={view.emptyMissing}>
             {view.missing.map((row) => (
               <li key={row.key} className="border-b border-border px-4 py-4 text-sm last:border-b-0">
-                {row.model}
+                <p>{row.model}</p>
+                <p className="mt-1 text-muted-foreground">{row.time}</p>
               </li>
             ))}
           </FindingList>
@@ -61,6 +64,7 @@ export function SignalsBoard({
               <li key={row.key} className="border-b border-border px-4 py-4 last:border-b-0">
                 <p className="text-sm font-medium">{row.model}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{row.sentence}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
               </li>
             ))}
           </FindingList>
@@ -70,18 +74,54 @@ export function SignalsBoard({
   );
 }
 
-function StatusBlock({ view }: { view: SignalsView }) {
+function SignalCards({ view }: { view: SignalsView }) {
+  const latest = view.latest;
+  if (latest === null) {
+    return null;
+  }
+  const failed = latest.status !== "Read held";
   return (
-    <div className="space-y-2 text-sm leading-6">
-      {view.failure !== null ? <p className="text-destructive">{view.failure}</p> : null}
-      {view.failureNote !== null ? (
-        <p className="text-muted-foreground">{view.failureNote}</p>
-      ) : null}
-      {view.successful !== null ? <p>{view.successful}</p> : null}
-      {view.agreed !== null ? <p className="tabular-nums text-muted-foreground">{view.agreed}</p> : null}
-      {view.notCompared !== null ? (
-        <p className="tabular-nums text-muted-foreground">{view.notCompared}</p>
-      ) : null}
+    <div className="grid gap-3 md:grid-cols-3">
+      <article className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-muted-foreground" title={latest.fromLastGood ?? undefined}>
+          Latest read
+        </h2>
+        <p className="mt-2 text-2xl leading-none font-semibold tracking-tight">{latest.time}</p>
+        <p className={`mt-2 ${failed ? "text-destructive" : "text-foreground"}`}>{latest.status}</p>
+        {latest.note === null ? null : (
+          <p className="mt-2 text-sm text-muted-foreground">{latest.note}</p>
+        )}
+      </article>
+      <article className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-muted-foreground" title={view.file?.sentence}>
+          Names in the file
+        </h2>
+        {view.file === null ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Findings are unavailable until a read succeeds.
+          </p>
+        ) : (
+          <p className="mt-2 text-3xl leading-none font-semibold tracking-tight tabular-nums">
+            {view.file.count}
+          </p>
+        )}
+      </article>
+      <article className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-muted-foreground" title={view.compared?.meaning}>
+          Compared
+        </h2>
+        {view.compared === null ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Findings are unavailable until a read succeeds.
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 tabular-nums">{view.compared.agreed}</p>
+            <p className="tabular-nums">{view.compared.notCompared}</p>
+            <p className="tabular-nums">{view.compared.disagree}</p>
+          </>
+        )}
+      </article>
     </div>
   );
 }
