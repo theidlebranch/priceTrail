@@ -7,6 +7,10 @@ import { TimeLabel } from "@/components/source-health/time-label";
 import { textToneClass } from "@/components/source-health/tones";
 import { WaybackCell } from "@/components/source-health/wayback-cell";
 
+/** Hover text for the snapshot column. The list does not repeat this under the table. */
+export const LAST_SNAPSHOT_HINT =
+  "Wayback: archived, pending, or failed. A snapshot is stored when the parsed page changes, even when today's price already matches the site.";
+
 /** 24 bars of 6px plus 23 gaps of 4px. The column stays this wide so the strip is one line. */
 export const SOURCE_ROW_COLUMNS =
   "lg:grid-cols-[minmax(0,1.6fr)_236px_9.5rem_9.5rem_minmax(8.5rem,0.9fr)_1.25rem]";
@@ -64,7 +68,9 @@ export function SourceRow({ entry }: { entry: BoardEntry }) {
         )}
       </span>
       <span>
-        <span className="mb-1 block text-muted-foreground lg:hidden">Last snapshot</span>
+        <span className="mb-1 block text-muted-foreground lg:hidden" title={LAST_SNAPSHOT_HINT}>
+          Last snapshot
+        </span>
         <WaybackCell wayback={entry.snapshot} />
         {entry.snapshot.time === null ? null : (
           <span className="mt-1 block">

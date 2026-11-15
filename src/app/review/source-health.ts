@@ -136,6 +136,11 @@ export type SourceBoardView = {
     successText: string;
     okCount: number;
     checkCount: number;
+    /**
+     * How the held visits split, inside the same newest-24 window.
+     * Null when that window has no held visit.
+     */
+    visitMix: string | null;
     newestCheck: TimedLabel | null;
     /** "Nov 12 · next ≈ 18:00 UTC", or "No check yet" when nothing has run. */
     nextText: string;
@@ -281,6 +286,8 @@ export function toSourceBoardView(
   const attention = built.filter((entry) => entry.status === "attention");
   const entries = filter === "all" ? built : built.filter((entry) => entry.status === filter);
   let ok = 0;
+  let matched = 0;
+  let changed = 0;
   let total = 0;
   let newest: Date | null = null;
   for (const row of rows) {
@@ -293,7 +300,11 @@ export function toSourceBoardView(
     if (row.active !== true) {
       continue;
     }
-    ok += checks.filter((check) => check.outcome === "unchanged" || check.outcome === "changed").length;
+    const matchedHere = checks.filter((check) => check.outcome === "unchanged").length;
+    const changedHere = checks.filter((check) => check.outcome === "changed").length;
+    matched += matchedHere;
+    changed += changedHere;
+    ok += matchedHere + changedHere;
     total += checks.length;
   }
 
@@ -316,6 +327,7 @@ export function toSourceBoardView(
       successText: total === 0 ? "—" : `${Math.round((ok / total) * 100)}%`,
       okCount: ok,
       checkCount: total,
+      visitMix: visitMix(matched, changed),
       newestCheck: newest === null ? null : timed(newest, clock, "checked at"),
       nextText: newest === null ? "No check yet" : nextRunText(newest),
     },
@@ -793,6 +805,20 @@ function readArchiveUrl(value: string | null): string | null {
     throw new Error("archive url is empty");
   }
   return value.trim();
+}
+
+/**
+ * The held visits inside the newest-24 window, split by what they stored.
+ * A matching snapshot is `unchanged`. A new snapshot is `changed`.
+ * Zero of both is null, because the card already says there is no visit.
+ */
+function visitMix(matched: number, changed: number): string | null {
+  const matchedText = matched === 0 ? null : `${matched} matched the last snapshot`;
+  const changedText = changed === 0 ? null : `${changed} stored a new one`;
+  if (matchedText !== null && changedText !== null) {
+    return `${matchedText} · ${changedText}`;
+  }
+  return matchedText ?? changedText;
 }
 
 function nextRunText(newest: Date): string {

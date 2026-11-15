@@ -107,12 +107,17 @@ function DetailStats({ stats }: { stats: SourceDetailView["stats"] }) {
           </p>
         </article>
         <article className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-muted-foreground">Parse success</h2>
+          <h2
+            className="text-muted-foreground"
+            title="Every visit since the first check. A matching snapshot counts."
+          >
+            Visits that held
+          </h2>
           <p className="mt-2 text-3xl leading-none font-semibold tracking-tight tabular-nums">
             {stats.successText}
           </p>
           <p className="mt-2 text-muted-foreground">
-            {stats.checkCount === 0 ? "No checks yet" : `${stats.okCount} of ${stats.checkCount} checks`}
+            {stats.checkCount === 0 ? "No visits yet" : `${stats.okCount} of ${stats.checkCount} visits`}
           </p>
         </article>
         <article className="rounded-xl border border-border bg-card p-4">

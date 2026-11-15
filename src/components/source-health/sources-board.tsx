@@ -1,6 +1,10 @@
 import Link from "next/link";
 import type { SourceBoardView } from "@/app/review/source-health";
-import { SOURCE_ROW_COLUMNS, SourceRow } from "@/components/source-health/source-row";
+import {
+  LAST_SNAPSHOT_HINT,
+  SOURCE_ROW_COLUMNS,
+  SourceRow,
+} from "@/components/source-health/source-row";
 import { StripLegend } from "@/components/source-health/strip-legend";
 import { SummaryCards } from "@/components/source-health/summary-cards";
 
@@ -83,7 +87,7 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
             <span>Last 24 checks</span>
             <span>Last check</span>
             <span>Last change</span>
-            <span>Last snapshot</span>
+            <span title={LAST_SNAPSHOT_HINT}>Last snapshot</span>
             <span className="sr-only">Open</span>
           </div>
           {view.entries.map((entry) => (
@@ -91,10 +95,6 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
           ))}
         </div>
       )}
-      <p className="mt-4 text-sm text-muted-foreground">
-        Wayback: archived, pending, or failed. A snapshot is stored when the parsed page
-        changes, even when today&apos;s price already matches the site.
-      </p>
     </div>
   );
 }

@@ -91,6 +91,7 @@ describe("toSourceBoardView", () => {
     expect(view.summary.successText).toBe("100%");
     expect(view.summary.okCount).toBe(1);
     expect(view.summary.checkCount).toBe(1);
+    expect(view.summary.visitMix).toBe("1 matched the last snapshot");
     expect(view.summary.newestCheck).toMatchObject({
       relative: "5h ago",
       short: "Nov 7 · 12:00",
@@ -99,6 +100,27 @@ describe("toSourceBoardView", () => {
     });
     expect(view.summary.nextText).toBe("Nov 7 · next ≈ 18:00 UTC");
     expect(view.counts).toEqual({ all: 1, attention: 0, healthy: 1 });
+  });
+
+  it("splits held visits into a matching snapshot and a new snapshot", () => {
+    const view = toSourceBoardView(
+      [
+        row({
+          checks: [
+            check({ id: 2, outcome: "changed", observationId: 8, archiveStatus: "archived" }),
+            check({ id: 1 }),
+          ],
+        }),
+      ],
+      [ANTHROPIC],
+      "all",
+      NOW,
+    );
+
+    expect(view.summary.okCount).toBe(2);
+    expect(view.summary.visitMix).toBe(
+      "1 matched the last snapshot · 1 stored a new one",
+    );
   });
 
   it("sorts attention, unchecked, healthy, then paused, and filters without changing the counts", () => {
@@ -219,6 +241,7 @@ describe("toSourceBoardView", () => {
     );
 
     expect(view.summary.successText).toBe("—");
+    expect(view.summary.visitMix).toBeNull();
     expect(view.entries).toHaveLength(0);
     expect(view.counts).toEqual({ all: 2, attention: 0, healthy: 0 });
   });
