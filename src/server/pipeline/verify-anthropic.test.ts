@@ -22,7 +22,14 @@ import type { NormalizedPrice } from "@/core/pricing/shape";
 import { createDb } from "@/server/db/client";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
 import type { EvidenceDb } from "@/server/db/repositories/evidence";
-import { fetchLog, observationItems, observations, priceVersions, sources } from "@/server/db/schema";
+import {
+  candidateModels,
+  fetchLog,
+  observationItems,
+  observations,
+  priceVersions,
+  sources,
+} from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 import {
   failureNote,
@@ -314,6 +321,128 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
     });
   });
 
+  it("cards every untracked model on a new page and skips the tracked one", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = testSource({
+        labSlug: planted.labSlug,
+        pageUrl: planted.pageUrl,
+        fetchPage: downloadingPage(planted.pageUrl),
+        parse: () => ({
+          rows: [
+            officialRow("claude-fable-5.1", "Claude Fable 5.1"),
+            officialRow("claude-haiku-4.5", "Claude Haiku 4.5"),
+            officialRow("claude-sonnet-4.5", "Claude Sonnet 4.5", "output"),
+            officialRow("claude-sonnet-4.5", "Claude Sonnet 4.5", "input"),
+          ],
+          warnings: [],
+        }),
+      });
+
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+      });
+
+      expect(result.kind).toBe("changed");
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([
+        { rawSlug: "claude-haiku-4.5", rawName: "Claude Haiku 4.5", status: "pending_review" },
+        { rawSlug: "claude-sonnet-4.5", rawName: "Claude Sonnet 4.5", status: "pending_review" },
+      ]);
+    });
+  });
+
+  it("does not open a second card when the same page is unchanged", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = testSource({
+        labSlug: planted.labSlug,
+        pageUrl: planted.pageUrl,
+        fetchPage: downloadingPage(planted.pageUrl),
+        parse: () => ({
+          rows: [
+            officialRow("claude-fable-5.1", "Claude Fable 5.1"),
+            officialRow("claude-haiku-4.5", "Claude Haiku 4.5"),
+          ],
+          warnings: [],
+        }),
+      });
+
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+        fetchedAt: FIRST_SEEN,
+      });
+      const second = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+        fetchedAt: NEXT_SEEN,
+      });
+
+      expect(second).toEqual({ kind: "unchanged" });
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([
+        { rawSlug: "claude-haiku-4.5", rawName: "Claude Haiku 4.5", status: "pending_review" },
+      ]);
+    });
+  });
+
+  it("does not card a model from a suspect parse when no good snapshot exists", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx);
+      const network = pageFetch(planted.pageUrl, { body: "not a pricing page" });
+
+      const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
+
+      expect(result.kind).toBe("parser_suspect");
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([]);
+    });
+  });
+
+  it("keeps the stored cards when a later parse fails", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const good = testSource({
+        labSlug: planted.labSlug,
+        pageUrl: planted.pageUrl,
+        fetchPage: downloadingPage(planted.pageUrl),
+        parse: () => ({
+          rows: [
+            officialRow("claude-fable-5.1", "Claude Fable 5.1"),
+            officialRow("claude-haiku-4.5", "Claude Haiku 4.5"),
+          ],
+          warnings: [],
+        }),
+      });
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source: good,
+        fetchedAt: FIRST_SEEN,
+      });
+
+      const failed = testSource({
+        labSlug: planted.labSlug,
+        pageUrl: planted.pageUrl,
+        fetchPage: downloadingPage(planted.pageUrl),
+        parse: () => {
+          throw new Error("0 matching tables");
+        },
+      });
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source: failed,
+        fetchedAt: NEXT_SEEN,
+      });
+
+      expect(result.kind).toBe("parser_suspect");
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([
+        { rawSlug: "claude-haiku-4.5", rawName: "Claude Haiku 4.5", status: "pending_review" },
+      ]);
+    });
+  });
+
   it("does not ask Wayback again when the parsed page is unchanged", async () => {
     await withEvidence(async (tx) => {
       const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
@@ -470,6 +599,33 @@ async function plantTracked(
     modelSlug,
     offeringId: offering.id,
   };
+}
+
+function officialRow(
+  modelSlug: string,
+  modelName: string,
+  dimension: NormalizedPrice["dimension"] = "input",
+): NormalizedPrice {
+  return {
+    provider: "anthropic",
+    modelName,
+    modelSlug,
+    dimension,
+    usdPer1M: "1",
+    source: "official",
+  };
+}
+
+async function candidateRows(tx: EvidenceDb, sourceId: number) {
+  return tx
+    .select({
+      rawSlug: candidateModels.rawSlug,
+      rawName: candidateModels.rawName,
+      status: candidateModels.status,
+    })
+    .from(candidateModels)
+    .where(eq(candidateModels.sourceId, sourceId))
+    .orderBy(asc(candidateModels.rawSlug));
 }
 
 function visit(planted: PlantedSource, fetchImpl: FetchLike): Parameters<typeof verifyOfficialSource>[1] {

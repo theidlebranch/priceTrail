@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { toOfficialCandidateEntries } from "@/app/review/official-candidate-view";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { toReviewListEntries } from "@/app/review/review-list";
+import { OfficialCandidateList } from "@/components/official-candidate-list";
 import { ReviewList } from "@/components/review-list";
 import { ReviewPageHeader } from "@/components/review-page-header";
 import { createDb } from "@/server/db/client";
+import { listPendingOfficialCandidates } from "@/server/db/repositories/official-candidates";
 import { listFlaggedReviewItems } from "@/server/db/repositories/review-queue";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -31,7 +34,7 @@ export const metadata: Metadata = {
  * for a query that returned no waiting items.
  *
  * This page does not call publishPriceVersion(). Confirm and reject
- * are on the detail page.
+ * are on the item page. Add and publish is on the new-model page.
  */
 export default function ReviewPage() {
   return (
@@ -59,8 +62,16 @@ async function ReviewListLoader() {
   const { db, close } = createDb(databaseUrl);
 
   try {
-    const rows = await listFlaggedReviewItems(db);
-    return <ReviewList entries={toReviewListEntries(rows)} />;
+    const [rows, candidates] = await Promise.all([
+      listFlaggedReviewItems(db),
+      listPendingOfficialCandidates(db),
+    ]);
+    return (
+      <>
+        <ReviewList entries={toReviewListEntries(rows)} />
+        <OfficialCandidateList entries={toOfficialCandidateEntries(candidates)} />
+      </>
+    );
   } finally {
     await close();
   }

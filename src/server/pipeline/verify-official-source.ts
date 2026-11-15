@@ -6,15 +6,18 @@ import {
   type RecordedSourceCheck,
 } from "@/server/db/repositories/evidence";
 import { fetchLog, sources } from "@/server/db/schema";
+import { syncOfficialCandidates } from "@/server/pipeline/sync-official-candidates";
 import type { FetchLike, ProviderSource } from "@/server/sources/provider-source";
 
 /**
  * Check one official pricing page and, when the parsed prices are new,
- * ask Wayback to save that page.
+ * ask Wayback to save that page. It then opens a card for each model on
+ * the latest stored snapshot that we do not track yet.
  *
  * This chains the pieces that already exist. The caller picks the page
  * (Anthropic, OpenAI, or Google). It does not call publishPriceVersion().
- * A new snapshot stays flagged. The open price stays open.
+ * A new snapshot stays flagged. The open price stays open. A failed
+ * download or a suspect parse does not read the bad page as new models.
  *
  * The caller passes the clock, fetch, and sleep. This file does not call
  * new Date() and does not wait on a real timer, so a test can run without
@@ -61,6 +64,7 @@ export async function verifyOfficialSource(
       labSlug: input.source.lab,
       result: { kind: "fetch_error", note },
     });
+    await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
     return { kind: "fetch_error", note };
   }
 
@@ -76,6 +80,7 @@ export async function verifyOfficialSource(
       labSlug: input.source.lab,
       result: { kind: "parser_suspect", note },
     });
+    await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
     return { kind: "parser_suspect", note };
   }
 
@@ -91,6 +96,8 @@ export async function verifyOfficialSource(
       warnings: parsed.warnings,
     },
   });
+
+  await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
 
   if (filed.outcome === "unchanged") {
     return { kind: "unchanged" };

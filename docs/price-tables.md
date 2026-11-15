@@ -301,8 +301,9 @@ The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The chi
 | id | lab_id | raw_name | raw_slug | source_id | first_seen_at | status | resolved_model_id | reviewed_by | reviewed_at | review_note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 1 | claude-new | claude-new | 2 | 2026-11-13T16:30:00Z | pending_review |  |  |  |  |
+| 2 | 1 | Claude Sonnet 4.6 | claude-sonnet-4.6 | 1 | 2026-11-15T12:00:00Z | pending_review |  |  |  |  |
 
-`raw_name` and `raw_slug` are the same, because the cost map has no separate display name. `status` `pending_review` means a reviewer has not rejected it. `resolved_model_id` stays blank until a later step approves the name. Reject fills `reviewed_by`, `reviewed_at`, and `review_note`.
+`raw_name` and `raw_slug` are the same on row 1, because the cost map has no separate display name. Row 2 is an official pricing page: source id 1 is the Anthropic page from the first story, and `raw_name` is the parsed display name. `status` `pending_review` means a reviewer has not decided. Reject fills `reviewed_by`, `reviewed_at`, and `review_note`, and the slug does not come back. Add and publish on an official card sets `status` to `approved`, fills `resolved_model_id`, and publishes the price through `publishPriceVersion()`. A witness card still has Reject only.
 
 ### model_signals
 

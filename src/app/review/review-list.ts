@@ -48,6 +48,22 @@ export function parseReviewItemId(segment: string): number {
   return id;
 }
 
+/**
+ * The path segment for /review/candidates/<id>. The same whole-number
+ * rule as a review item. The error names the candidate, so a bad card
+ * id is not reported as an item.
+ */
+export function parseOfficialCandidateId(segment: string): number {
+  try {
+    return parseReviewItemId(segment);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Review item id")) {
+      throw new Error("Candidate id is not a whole number.");
+    }
+    throw error;
+  }
+}
+
 export function toReviewListEntries(rows: readonly ReviewListRow[]): ReviewListEntry[] {
   const entries = rows.map((row) => {
     if (row.reviewStatus !== "flagged") {

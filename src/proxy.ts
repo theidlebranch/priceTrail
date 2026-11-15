@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
-import { parseReviewItemId } from "@/app/review/review-list";
+import { parseOfficialCandidateId, parseReviewItemId } from "@/app/review/review-list";
 import { parseSourceId } from "@/app/review/source-health";
 import {
   isProtectedReviewPath,
@@ -12,6 +12,7 @@ import {
 } from "@/core/auth/review-access";
 import { createDb } from "@/server/db/client";
 import { hasTrackedModel } from "@/server/db/repositories/model-detail";
+import { hasOfficialCandidate } from "@/server/db/repositories/official-candidates";
 import { hasReviewItem } from "@/server/db/repositories/review-queue";
 import { hasSignalSource } from "@/server/db/repositories/litellm-signals";
 import { hasSource } from "@/server/db/repositories/source-health";
@@ -41,7 +42,7 @@ import { parseDatabaseEnv } from "@/server/env";
  * A stranger still gets 403, not a hint that the id exists. An id that
  * is not a whole number throws. /review itself is not an item lookup,
  * /review/sources is not a source lookup, and /review/signals is not
- * a signal lookup.
+ * a signal lookup, and /review/candidates is not a candidate lookup.
  */
 export async function proxy(request: NextRequest) {
   if (isProtectedReviewPath(request.nextUrl.pathname)) {
@@ -123,6 +124,11 @@ async function missingReviewRecordResponse(request: NextRequest): Promise<NextRe
     return missingWhenAbsent((db) => hasSignalSource(db, signalId));
   }
 
+  const candidateId = reviewCandidateId(pathname);
+  if (candidateId !== null) {
+    return missingWhenAbsent((db) => hasOfficialCandidate(db, candidateId));
+  }
+
   return NextResponse.next();
 }
 
@@ -190,9 +196,17 @@ export function reviewSignalId(pathname: string): number | null {
   return reviewPathId(pathname, "signals", parseSourceId, "Signal id");
 }
 
+/**
+ * /review/candidates/<id>, or null when this locked path is not one card.
+ * /review itself is the list, so it is null. A bad id throws.
+ */
+export function reviewCandidateId(pathname: string): number | null {
+  return reviewPathId(pathname, "candidates", parseOfficialCandidateId, "Candidate id");
+}
+
 function reviewPathId(
   pathname: string,
-  collection: "items" | "sources" | "signals",
+  collection: "items" | "sources" | "signals" | "candidates",
   parseId: (segment: string) => number,
   label: string,
 ): number | null {

@@ -141,9 +141,9 @@ For each active source:
 
 This isn't a background job with a log file; it's a page the reviewer looks at. It requires a login from day one, because it can publish prices. A reviewer signs in with Google or GitHub. Only accounts listed in the environment can open `/review`. A shared password is not used: it cannot tell two reviewers apart. The decision is [adr/0001-review-login.md](adr/0001-review-login.md).
 
-- **Candidate models**: new slugs Tier 1 spotted for a lab we already track. A slug from any other lab is ignored. _Reject_ dismisses it so it does not come back. _Approve_ creates the model, one global official offering, and the alias. The model is then listed with no published price until an official visit produces one. Approve is build-plan step 37. The LiteLLM read only stores the card.
+- **Candidate models**: a new slug on an official pricing page for a lab we already track becomes a card on `/review`. Add and publish creates the model, one global official offering, and the price, through `publishPriceVersion()`. That is build-plan step 37. A witness can also store a card. Reject dismisses it so it does not come back. Approve on a witness card, with no price yet, is build-plan step 38.
 - **Signal health**: each witness job (LiteLLM, then OpenRouter) has a run history, like an official source, without a Wayback archive. The board and the per-signal detail page are build-plan step 36.
-- **Labs**: a public page lists the labs we track. A visitor can suggest another lab. The suggestion is a Request. Accepting it does not invent a parser. That page is build-plan step 38.
+- **Labs**: a public page lists the labs we track. A visitor can suggest another lab. The suggestion is a Request. Accepting it does not invent a parser. That page is build-plan step 39.
 - **Flagged items**: extractions that failed grounding, and verification flags that didn't self-resolve. Shows the extracted values side-by-side with the raw source text they supposedly came from, with the match highlighted (or visibly missing). Actions: _Confirm_ (calls `publishPriceVersion()`, sets `review_status = confirmed`) or _Reject_ (`rejected`, publishes nothing).
 - Every decision records `reviewed_by`, `reviewed_at`, and a `review_note`.
 
