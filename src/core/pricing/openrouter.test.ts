@@ -49,11 +49,12 @@ describe("parseOpenRouter", () => {
     const sol = rows.filter((row) => row.modelSlug === "gpt-6-sol");
     expect(sol.map((row) => row.dimension).sort()).toEqual([
       "cache_read",
-      "cache_write_5m",
+      "cache_write_30m",
       "input",
       "output",
     ]);
     expect(findRow(rows, "gpt-6-sol", "input")?.usdPer1M).toBe("2");
+    expect(findRow(rows, "gpt-6-sol", "cache_write_30m")?.usdPer1M).toBe("2.5");
     expect(rows.filter((row) => row.modelSlug === "gpt-6-sol-pro")).toHaveLength(2);
 
     expect(findRow(rows, "gemini-2.5-pro", "input")?.usdPer1M).toBe("1.25");

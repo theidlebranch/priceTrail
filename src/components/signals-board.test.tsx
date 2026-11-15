@@ -18,7 +18,7 @@ describe("SignalsBoard", () => {
       signals: [],
     };
     render(<SignalsBoard view={toSignalsView(page)} rejectAction={rejectAction} />);
-    expect(screen.getByRole("heading", { name: "LiteLLM" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "LiteLLM" })).toBeTruthy();
     expect(screen.getByText("LiteLLM has not been read yet.")).toBeTruthy();
     expect(screen.getByText(/It cannot publish a price/)).toBeTruthy();
   });
@@ -47,13 +47,14 @@ describe("SignalsBoard", () => {
       signals: [],
     };
     render(<SignalsBoard view={toSignalsView(page)} rejectAction={rejectAction} />);
-    expect(screen.getByRole("heading", { name: "Latest read" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "Latest read" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "Disagreements" })).toBeTruthy();
     expect(screen.getByText("Read held")).toBeTruthy();
     expect(screen.getByText("8")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Names in the file" }).getAttribute("title")).toBe(
+    expect(screen.getByRole("heading", { level: 3, name: "Names in the file" }).getAttribute("title")).toBe(
       "First read. A new name shows up on the next read.",
     );
-    expect(screen.getByRole("heading", { name: "Compared" }).getAttribute("title")).toMatch(
+    expect(screen.getByRole("heading", { level: 3, name: "Compared" }).getAttribute("title")).toMatch(
       /Agree is a linked model/,
     );
     expect(screen.getByText("1 agrees")).toBeTruthy();

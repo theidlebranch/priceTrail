@@ -27,7 +27,8 @@ const PRICE_FIELD = {
   input_cache_write_1h: "cache_write_1h",
 } as const;
 
-type OpenRouterDimension = (typeof PRICE_FIELD)[keyof typeof PRICE_FIELD];
+type PriceField = keyof typeof PRICE_FIELD;
+type OpenRouterDimension = (typeof PRICE_FIELD)[keyof typeof PRICE_FIELD] | "cache_write_30m";
 
 const BASE_FIELDS = ["prompt", "completion"] as const;
 
@@ -144,7 +145,7 @@ function readModel(raw: unknown, warnings: string[]): KeptModel | null {
       warnings.push(`skipped unknown ${field} for ${modelSlug}`);
       continue;
     }
-    amounts.set(PRICE_FIELD[field], perMillion(pricing[field], field, modelSlug));
+    amounts.set(dimensionFor(field, lab), perMillion(pricing[field], field, modelSlug));
   }
 
   if (Object.hasOwn(pricing, "overrides")) {
@@ -164,6 +165,18 @@ function readModel(raw: unknown, warnings: string[]): KeptModel | null {
     modelSlug,
     amounts,
   };
+}
+
+/**
+ * input_cache_write is that lab's default cache write. Anthropic and
+ * Google default to 5 minutes. OpenAI defaults to 30 minutes. The
+ * 12-hour OpenAI write has no field in this list.
+ */
+function dimensionFor(field: PriceField, lab: Lab): OpenRouterDimension {
+  if (field === "input_cache_write" && lab === "openai") {
+    return "cache_write_30m";
+  }
+  return PRICE_FIELD[field];
 }
 
 function labFor(id: string): Lab | null {

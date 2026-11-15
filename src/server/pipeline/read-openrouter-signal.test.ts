@@ -22,6 +22,7 @@ import {
   candidateModels,
   labs,
   modelAliases,
+  modelSignals,
   models,
   offerings,
   priceComponents,
@@ -243,6 +244,8 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
   async function withRollback(run: (tx: SignalDb) => Promise<void>): Promise<void> {
     try {
       await db.transaction(async (tx) => {
+        // A stored OpenRouter read would make this first read look later.
+        await clearOpenRouterWitness(tx);
         await run(tx);
         throw new RolledBack();
       });
@@ -260,6 +263,21 @@ class RolledBack extends Error {
     super("openrouter signal test rolled back");
     this.name = "RolledBack";
   }
+}
+
+async function clearOpenRouterWitness(tx: SignalDb): Promise<void> {
+  const sourceRows = await tx
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.url, OPENROUTER_MODELS_URL));
+  const sourceId = sourceRows[0]?.id;
+  if (sourceId === undefined) {
+    return;
+  }
+  await tx.delete(verificationFlags).where(eq(verificationFlags.sourceId, sourceId));
+  await tx.delete(modelSignals).where(eq(modelSignals.sourceId, sourceId));
+  await tx.delete(candidateModels).where(eq(candidateModels.sourceId, sourceId));
+  await tx.delete(witnessReads).where(eq(witnessReads.sourceId, sourceId));
 }
 
 async function plantModel(
