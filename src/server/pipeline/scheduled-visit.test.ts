@@ -3,6 +3,7 @@ import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import {
   cronRequestAuthorized,
   officialSourceForLab,
+  officialSourceForUrl,
   officialSourceUrls,
   respondToSchedule,
 } from "@/server/pipeline/scheduled-visit";
@@ -41,6 +42,13 @@ describe("officialSourceForLab", () => {
 
   it("lists the checker urls from the same map the schedule uses", () => {
     expect(officialSourceUrls()).toEqual([anthropicSource.url, openaiSource.url, googleSource.url]);
+  });
+
+  it("finds a page by its URL and ignores a witness URL", () => {
+    expect(officialSourceForUrl(anthropicSource.url)?.lab).toBe("anthropic");
+    expect(officialSourceForUrl(openaiSource.url)?.lab).toBe("openai");
+    expect(officialSourceForUrl(googleSource.url)?.lab).toBe("google");
+    expect(officialSourceForUrl("https://openrouter.ai/api/v1/models")).toBeNull();
   });
 });
 

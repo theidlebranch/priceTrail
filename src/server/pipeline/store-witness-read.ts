@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
@@ -8,10 +8,12 @@ import {
   type LabSlug,
   type OpenComponent,
   type TrackedWitnessModel,
+  type WitnessDisagreement,
 } from "@/core/witness/compare-litellm";
 import * as schema from "@/server/db/schema";
 import {
   candidateModels,
+  fetchTriggers,
   labs,
   modelAliases,
   modelSignals,
@@ -23,6 +25,7 @@ import {
   verificationFlags,
   witnessReads,
 } from "@/server/db/schema";
+import { officialSourceForLab } from "@/server/pipeline/scheduled-visit";
 import { fetchOfficialPage, type FetchLike } from "@/server/sources/provider-source";
 
 /**
@@ -31,7 +34,9 @@ import { fetchOfficialPage, type FetchLike } from "@/server/sources/provider-sou
  * LiteLLM and OpenRouter both call this. A failed download or a bad parse
  * stores only the attempt for that source. The previous disagreements,
  * new names, and missing models stay. Two open prices throw and store
- * nothing. This file does not call publishPriceVersion().
+ * nothing. A disagreement enqueues one pending fetch_triggers row for that
+ * lab's official page. This file does not download that page, and it does
+ * not call publishPriceVersion().
  */
 
 type Schema = typeof schema;
@@ -127,6 +132,12 @@ export async function readWitnessList(
       );
     }
 
+    await enqueueDisagreementTriggers(tx, {
+      tracked,
+      disagreements: compared.disagreements,
+      createdAt: input.fetchedAt,
+    });
+
     await tx.delete(modelSignals).where(eq(modelSignals.sourceId, source.id));
     if (compared.signals.length > 0) {
       await tx.insert(modelSignals).values(
@@ -166,6 +177,70 @@ export async function readWitnessList(
       newModelCount: compared.newModels.length,
     };
   });
+}
+
+/**
+ * One pending visit per lab that disagreed. The official page row has to
+ * exist and be active. Zero rows, two rows, or an inactive row throws,
+ * and this transaction stores nothing. A pending row for that page is
+ * left as it is.
+ */
+async function enqueueDisagreementTriggers(
+  tx: SignalDb,
+  input: {
+    tracked: readonly TrackedWitnessModel[];
+    disagreements: readonly WitnessDisagreement[];
+    createdAt: Date;
+  },
+): Promise<void> {
+  if (input.disagreements.length === 0) {
+    return;
+  }
+
+  const labByOffering = new Map<number, LabSlug>();
+  for (const model of input.tracked) {
+    if (model.offeringId !== null) {
+      labByOffering.set(model.offeringId, model.labSlug);
+    }
+  }
+
+  const labsToVisit = new Set<LabSlug>();
+  for (const row of input.disagreements) {
+    const lab = labByOffering.get(row.offeringId);
+    if (lab === undefined) {
+      throw new Error(`disagreement offering ${row.offeringId} has no lab`);
+    }
+    labsToVisit.add(lab);
+  }
+
+  for (const lab of labsToVisit) {
+    const page = officialSourceForLab(lab);
+    if (page === null) {
+      throw new Error(`lab ${lab} has no official page`);
+    }
+    const rows = await tx
+      .select({ id: sources.id, type: sources.type, active: sources.active })
+      .from(sources)
+      .where(eq(sources.url, page.url));
+    if (rows.length !== 1) {
+      throw new Error(`official source for ${lab} must be one row`);
+    }
+    const official = rows[0];
+    if (official === undefined || official.type !== "official" || !official.active) {
+      throw new Error(`official source for ${lab} is not an active official page`);
+    }
+    await tx
+      .insert(fetchTriggers)
+      .values({
+        sourceId: official.id,
+        reason: "aggregator_disagreement",
+        createdAt: input.createdAt,
+      })
+      .onConflictDoNothing({
+        target: fetchTriggers.sourceId,
+        where: sql`${fetchTriggers.processedAt} IS NULL`,
+      });
+  }
 }
 
 async function recordFailure(

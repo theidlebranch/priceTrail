@@ -25,6 +25,21 @@
       "schedule": "40 */6 * * *",
       "path": "/api/signals/openrouter",
       "requestMethod": "POST"
+    },
+    "drain-triggers-1": {
+      "schedule": "50 */6 * * *",
+      "path": "/api/triggers/drain",
+      "requestMethod": "POST"
+    },
+    "drain-triggers-2": {
+      "schedule": "52 */6 * * *",
+      "path": "/api/triggers/drain",
+      "requestMethod": "POST"
+    },
+    "drain-triggers-3": {
+      "schedule": "54 */6 * * *",
+      "path": "/api/triggers/drain",
+      "requestMethod": "POST"
     }
   }
 }

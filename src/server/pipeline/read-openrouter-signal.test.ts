@@ -20,6 +20,7 @@ import { readOpenRouterSignal } from "@/server/pipeline/read-openrouter-signal";
 import type { SignalDb } from "@/server/pipeline/store-witness-read";
 import {
   candidateModels,
+  fetchTriggers,
   labs,
   modelAliases,
   modelSignals,
@@ -31,6 +32,7 @@ import {
   verificationFlags,
   witnessReads,
 } from "@/server/db/schema";
+import { anthropicSource } from "@/server/sources/anthropic-source";
 import { OPENROUTER_MODELS_URL } from "@/server/sources/openrouter-signal";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -56,6 +58,7 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
   it("stores a disagreement on the first read and does not publish a price", async () => {
     await withRollback(async (tx) => {
       const planted = await plantModel(tx);
+      await plantOfficialSource(tx);
       const before = await versionsFor(tx, planted.offeringId);
       const seen: string[] = [];
       const result = await readOpenRouterSignal(tx, {
@@ -80,6 +83,13 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
         { ourValue: "10", aggregatorValue: "20", dimension: "input" },
       ]);
       expect(await versionsFor(tx, planted.offeringId)).toEqual(before);
+      expect(await triggersAt(tx, FIRST)).toEqual([
+        {
+          url: anthropicSource.url,
+          reason: "aggregator_disagreement",
+          processedAt: null,
+        },
+      ]);
     });
   });
 
@@ -114,12 +124,15 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
       expect(cards).toEqual([
         { rawSlug: "brand-new-model", rawName: "Anthropic: Brand New", status: "pending_review" },
       ]);
+      expect(await triggersAt(tx, FIRST)).toEqual([]);
+      expect(await triggersAt(tx, SECOND)).toEqual([]);
     });
   });
 
   it("leaves the previous disagreement in place when the download fails", async () => {
     await withRollback(async (tx) => {
       const planted = await plantModel(tx);
+      await plantOfficialSource(tx);
       await readOpenRouterSignal(tx, {
         fetchedAt: FIRST,
         fetchImpl: fakeFetch(
@@ -135,12 +148,14 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
 
       expect(result.kind).toBe("fetch_error");
       expect(await flagsFor(tx, planted.offeringId)).toHaveLength(1);
+      expect(await triggersAt(tx, SECOND)).toEqual([]);
     });
   });
 
   it("keeps a resolved flag when the next read replaces the open disagreements", async () => {
     await withRollback(async (tx) => {
       const planted = await plantModel(tx);
+      await plantOfficialSource(tx);
       await readOpenRouterSignal(tx, {
         fetchedAt: FIRST,
         fetchImpl: fakeFetch(
@@ -232,6 +247,7 @@ describe.skipIf(databaseUrl.length === 0)("readOpenRouterSignal", () => {
       expect(result).toMatchObject({ kind: "ok", disagreementCount: 0 });
       const flags = await flagsFor(tx, planted.offeringId);
       expect(flags).toEqual([]);
+      expect(await triggersAt(tx, FIRST)).toEqual([]);
       const cards = await tx
         .select({ rawSlug: candidateModels.rawSlug })
         .from(candidateModels)
@@ -278,6 +294,28 @@ async function clearOpenRouterWitness(tx: SignalDb): Promise<void> {
   await tx.delete(modelSignals).where(eq(modelSignals.sourceId, sourceId));
   await tx.delete(candidateModels).where(eq(candidateModels.sourceId, sourceId));
   await tx.delete(witnessReads).where(eq(witnessReads.sourceId, sourceId));
+}
+
+async function plantOfficialSource(tx: SignalDb): Promise<void> {
+  await tx
+    .insert(sources)
+    .values({ url: anthropicSource.url, type: "official", active: true })
+    .onConflictDoNothing();
+}
+
+async function triggersAt(
+  tx: SignalDb,
+  createdAt: Date,
+): Promise<{ url: string; reason: string; processedAt: Date | null }[]> {
+  return tx
+    .select({
+      url: sources.url,
+      reason: fetchTriggers.reason,
+      processedAt: fetchTriggers.processedAt,
+    })
+    .from(fetchTriggers)
+    .innerJoin(sources, eq(fetchTriggers.sourceId, sources.id))
+    .where(eq(fetchTriggers.createdAt, createdAt));
 }
 
 async function plantModel(

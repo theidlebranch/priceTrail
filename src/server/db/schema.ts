@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -458,4 +459,35 @@ export const modelSignals = pgTable(
     detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
   },
   (table) => [unique("model_signals_source_id_model_id").on(table.sourceId, table.modelId)],
+);
+
+/**
+ * A request to visit one official pricing page sooner than the schedule.
+ *
+ * source_id is that official page, not the witness that noticed the
+ * disagreement. reason names why the visit was asked for. This step only
+ * writes aggregator_disagreement. created_at is when the witness read
+ * stored the disagreement. processed_at stays blank until that visit is
+ * filed. One blank processed_at per source, so two witnesses cannot queue
+ * the same page twice before the visit runs. This table does not publish
+ * a price.
+ */
+export const fetchTriggerReason = pgEnum("fetch_trigger_reason", ["aggregator_disagreement"]);
+
+export const fetchTriggers = pgTable(
+  "fetch_triggers",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    sourceId: bigint("source_id", { mode: "number" })
+      .notNull()
+      .references(() => sources.id, { onDelete: "restrict" }),
+    reason: fetchTriggerReason("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("fetch_triggers_one_pending_source")
+      .on(table.sourceId)
+      .where(sql`${table.processedAt} IS NULL`),
+  ],
 );

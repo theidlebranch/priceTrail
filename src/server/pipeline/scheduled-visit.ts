@@ -37,6 +37,19 @@ export function officialSourceForLab(lab: string): ProviderSource | null {
 }
 
 /**
+ * The official page for a stored URL. The trigger row points at that URL.
+ * A witness URL, or a page we no longer check, has no visit.
+ */
+export function officialSourceForUrl(url: string): ProviderSource | null {
+  for (const source of Object.values(OFFICIAL_SOURCES)) {
+    if (source.url === url) {
+      return source;
+    }
+  }
+  return null;
+}
+
+/**
  * The page URLs the schedule looks up. The health page compares these
  * with sources.url. A second copy of the strings would drift.
  */

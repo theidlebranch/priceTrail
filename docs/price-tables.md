@@ -31,11 +31,12 @@ erDiagram
   models ||--o{ candidate_models : "resolved_model_id"
   sources ||--o{ model_signals : "source_id"
   models ||--o{ model_signals : "model_id"
+  sources ||--o{ fetch_triggers : "source_id"
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. Those rows do not publish a price.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. Those rows do not publish a price.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -310,3 +311,11 @@ The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The chi
 | 1 | 1 | 2 | missing | 2026-11-13T16:30:00Z |
 
 `kind` `missing` means this tracked model was in the previous file and is not in this one. `not_linked` means we have no witness name for it. Neither kind sets `deprecated_at`.
+
+### fetch_triggers
+
+| id | source_id | reason | created_at | processed_at |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | aggregator_disagreement | 2026-11-13T16:30:00Z |  |
+
+`source_id` 1 is the Anthropic pricing page from the first story, not the LiteLLM row. `reason` `aggregator_disagreement` means a witness amount differed from the open price. `created_at` is the witness read that stored the flag. `processed_at` is blank until that official visit is filed. A second pending row for source 1 is rejected.

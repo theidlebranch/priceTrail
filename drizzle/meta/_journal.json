@@ -64,6 +64,13 @@
       "when": 1794587905723,
       "tag": "0008_witness_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794758560088,
+      "tag": "0009_fetch_triggers",
+      "breakpoints": true
     }
   ]
 }
