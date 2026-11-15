@@ -76,6 +76,7 @@ const OUTCOME_LABEL: Record<FetchOutcome, string> = {
   changed: "Changed",
   parser_suspect: "Parser failed",
   fetch_error: "Download failed",
+  witness_ok: "Read held",
 };
 
 export type BoardFilter = "all" | "attention" | "healthy";
@@ -296,8 +297,9 @@ export function toSourceBoardView(
     if (latest !== undefined && (newest === null || latest.fetchedAt.getTime() > newest.getTime())) {
       newest = latest.fetchedAt;
     }
-    // Paused sources stay on the board, but they are not part of the percent.
-    if (row.active !== true) {
+    // Paused sources stay on the board, and so do witness rows. Neither is
+    // part of the pricing-page percent. A witness strip is its own read.
+    if (row.active !== true || row.type === "aggregator") {
       continue;
     }
     const matchedHere = checks.filter((check) => check.outcome === "unchanged").length;
@@ -626,6 +628,7 @@ function historyCheck(check: HealthCheck, now: Date): HistoryCheckView {
 function outcomeTone(outcome: FetchOutcome): HealthTone {
   switch (outcome) {
     case "unchanged":
+    case "witness_ok":
       return "unchanged";
     case "changed":
       return "changed";
@@ -686,7 +689,8 @@ function readOutcome(value: string): FetchOutcome {
     value === "unchanged" ||
     value === "changed" ||
     value === "parser_suspect" ||
-    value === "fetch_error"
+    value === "fetch_error" ||
+    value === "witness_ok"
   ) {
     return value;
   }
@@ -701,6 +705,9 @@ function readArchive(value: string): ArchiveState {
 }
 
 function readHttpStatus(outcome: FetchOutcome, status: number | null): number | null {
+  if (outcome === "witness_ok") {
+    return null;
+  }
   if (outcome === "fetch_error") {
     if (status === null) {
       return null;
@@ -724,6 +731,9 @@ function readNote(outcome: FetchOutcome, note: string | null): string | null {
     throw new Error("note is not text");
   }
   const trimmed = note?.trim() ?? "";
+  if (outcome === "witness_ok") {
+    return trimmed === "" ? null : trimmed;
+  }
   if (outcome === "parser_suspect" || outcome === "fetch_error") {
     if (trimmed === "") {
       throw new Error("a filed check was stored without a note");
@@ -744,6 +754,9 @@ function scheduleNote(
   row: { active: boolean; type: string },
   wired: ReadonlySet<string>,
 ): string | null {
+  if (row.type === "aggregator") {
+    return null;
+  }
   if (!wired.has(url)) {
     return NO_CHECKER;
   }
@@ -751,6 +764,20 @@ function scheduleNote(
     return WILL_NOT_DOWNLOAD;
   }
   return null;
+}
+
+/**
+ * The held visits inside the newest-24 window, split by what they stored.
+ * A matching snapshot is `unchanged`. A new snapshot is `changed`.
+ * Zero of both is null, because the card already says there is no visit.
+ */
+function visitMix(matched: number, changed: number): string | null {
+  const matchedText = matched === 0 ? null : `${matched} matched the last snapshot`;
+  const changedText = changed === 0 ? null : `${changed} stored a new one`;
+  if (matchedText !== null && changedText !== null) {
+    return `${matchedText} · ${changedText}`;
+  }
+  return matchedText ?? changedText;
 }
 
 function readWiredUrls(wiredUrls: readonly string[]): Set<string> {
@@ -805,20 +832,6 @@ function readArchiveUrl(value: string | null): string | null {
     throw new Error("archive url is empty");
   }
   return value.trim();
-}
-
-/**
- * The held visits inside the newest-24 window, split by what they stored.
- * A matching snapshot is `unchanged`. A new snapshot is `changed`.
- * Zero of both is null, because the card already says there is no visit.
- */
-function visitMix(matched: number, changed: number): string | null {
-  const matchedText = matched === 0 ? null : `${matched} matched the last snapshot`;
-  const changedText = changed === 0 ? null : `${changed} stored a new one`;
-  if (matchedText !== null && changedText !== null) {
-    return `${matchedText} · ${changedText}`;
-  }
-  return matchedText ?? changedText;
 }
 
 function nextRunText(newest: Date): string {

@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, lt, or, sql, type ExtractTablesWithRelations } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql, type ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { HEALTH_CONFIG } from "@/core/source-health";
 import * as schema from "@/server/db/schema";
-import { fetchLog, observations, sources } from "@/server/db/schema";
+import { fetchLog, observations, sources, witnessReads } from "@/server/db/schema";
 
 /**
  * Read door for the source health pages.
@@ -201,7 +201,7 @@ export async function listSourceHealth(db: SourceHealthDb): Promise<SourceHealth
     .leftJoinLateral(latestChange, sql`true`)
     .orderBy(asc(sources.url));
 
-  return rows.map(assembleSourceHealthRow);
+  return attachWitnessChecks(db, rows.map(assembleSourceHealthRow));
 }
 
 /**
@@ -275,6 +275,13 @@ export async function readSourceHealthStats(
   db: SourceHealthDb,
   sourceId: number,
 ): Promise<SourceHealthStats> {
+  const sourceType = await readSourceType(db, sourceId);
+  if (sourceType === null) {
+    throw new Error("source disappeared before the page could read it");
+  }
+  if (sourceType === "aggregator") {
+    return readWitnessHealthStats(db, sourceId);
+  }
   const rows = await db
     .select({
       checkCount: sql<number>`(select count(*)::int from ${fetchLog} where ${fetchLog.sourceId} = "sources"."id")`,
@@ -303,6 +310,9 @@ export async function listRecentSourceChecks(
   db: SourceHealthDb,
   sourceId: number,
 ): Promise<SourceCheckRow[]> {
+  if ((await readSourceType(db, sourceId)) === "aggregator") {
+    return selectWitnessChecks(db, sourceId, null, HEALTH_CONFIG.STRIP_LENGTH);
+  }
   return selectSourceChecks(db, sourceId, null, HEALTH_CONFIG.STRIP_LENGTH);
 }
 
@@ -316,6 +326,9 @@ export async function listSourceCheckPage(
   sourceId: number,
   cursor: SourceCheckCursor | null,
 ): Promise<SourceCheckRow[]> {
+  if ((await readSourceType(db, sourceId)) === "aggregator") {
+    return selectWitnessChecks(db, sourceId, cursor, SOURCE_CHECK_PAGE_SIZE);
+  }
   return selectSourceChecks(db, sourceId, cursor, SOURCE_CHECK_PAGE_SIZE);
 }
 
@@ -394,6 +407,152 @@ export function assembleSourceCheck(row: JoinedSourceCheck): SourceCheckRow {
     observationId: row.observationId,
     archiveStatus: row.archiveStatus,
     archiveUrl: row.archiveUrl,
+  };
+}
+
+/**
+ * A witness source stores its attempts in witness_reads, not fetch_log.
+ * The list still shows those attempts as the last 24 checks. This does
+ * not write a visit and does not publish a price.
+ */
+async function attachWitnessChecks(
+  db: SourceHealthDb,
+  rows: SourceHealthRow[],
+): Promise<SourceHealthRow[]> {
+  const aggregatorIds = rows.filter((row) => row.type === "aggregator").map((row) => row.id);
+  if (aggregatorIds.length === 0) {
+    return rows;
+  }
+  const reads = await db
+    .select({
+      id: witnessReads.id,
+      sourceId: witnessReads.sourceId,
+      fetchedAt: witnessReads.fetchedAt,
+      outcome: witnessReads.outcome,
+      note: witnessReads.note,
+    })
+    .from(witnessReads)
+    .where(inArray(witnessReads.sourceId, aggregatorIds))
+    .orderBy(desc(witnessReads.fetchedAt), desc(witnessReads.id));
+
+  const bySource = new Map<number, SourceCheckRow[]>();
+  for (const read of reads) {
+    const list = bySource.get(read.sourceId) ?? [];
+    if (list.length >= HEALTH_CONFIG.STRIP_LENGTH) {
+      continue;
+    }
+    list.push(witnessCheck(read));
+    bySource.set(read.sourceId, list);
+  }
+
+  return rows.map((row) => {
+    if (row.type !== "aggregator") {
+      return row;
+    }
+    const checks = bySource.get(row.id) ?? [];
+    const newest = checks[0];
+    return {
+      ...row,
+      checks,
+      lastCheckedAt: newest === undefined ? null : newest.fetchedAt,
+      latestSnapshot: null,
+      latestChangeAt: null,
+    };
+  });
+}
+
+async function readSourceType(db: SourceHealthDb, sourceId: number): Promise<string | null> {
+  const rows = await db
+    .select({ type: sources.type })
+    .from(sources)
+    .where(eq(sources.id, sourceId))
+    .limit(1);
+  return rows[0]?.type ?? null;
+}
+
+async function readWitnessHealthStats(
+  db: SourceHealthDb,
+  sourceId: number,
+): Promise<SourceHealthStats> {
+  const counts = await db
+    .select({
+      checkCount: sql<number>`count(*)::int`,
+      okCount: sql<number>`count(*) filter (where ${witnessReads.outcome} = 'ok')::int`,
+    })
+    .from(witnessReads)
+    .where(eq(witnessReads.sourceId, sourceId));
+  const first = await db
+    .select({ id: witnessReads.id, fetchedAt: witnessReads.fetchedAt })
+    .from(witnessReads)
+    .where(eq(witnessReads.sourceId, sourceId))
+    .orderBy(asc(witnessReads.fetchedAt), asc(witnessReads.id))
+    .limit(1);
+  const count = counts[0];
+  return assembleSourceHealthStats({
+    checkCount: count?.checkCount ?? 0,
+    okCount: count?.okCount ?? 0,
+    firstCheckId: first[0]?.id ?? null,
+    firstCheckAt: first[0]?.fetchedAt ?? null,
+    pendingCount: 0,
+    archivedCount: 0,
+    failedCount: 0,
+    latestChangeAt: null,
+    latestChangeObservationId: null,
+  });
+}
+
+async function selectWitnessChecks(
+  db: SourceHealthDb,
+  sourceId: number,
+  cursor: SourceCheckCursor | null,
+  limit: number,
+): Promise<SourceCheckRow[]> {
+  const olderThanCursor =
+    cursor === null
+      ? undefined
+      : or(
+          lt(witnessReads.fetchedAt, cursor.fetchedAt),
+          and(eq(witnessReads.fetchedAt, cursor.fetchedAt), lt(witnessReads.id, cursor.id)),
+        );
+  const rows = await db
+    .select({
+      id: witnessReads.id,
+      fetchedAt: witnessReads.fetchedAt,
+      outcome: witnessReads.outcome,
+      note: witnessReads.note,
+    })
+    .from(witnessReads)
+    .where(
+      olderThanCursor === undefined
+        ? eq(witnessReads.sourceId, sourceId)
+        : and(eq(witnessReads.sourceId, sourceId), olderThanCursor),
+    )
+    .orderBy(desc(witnessReads.fetchedAt), desc(witnessReads.id))
+    .limit(limit);
+  return rows.map(witnessCheck);
+}
+
+function witnessCheck(row: {
+  id: number;
+  fetchedAt: Date;
+  outcome: "ok" | "fetch_error" | "parse_error";
+  note: string;
+}): SourceCheckRow {
+  const note = row.note.trim() === "" ? null : row.note.trim();
+  const outcome =
+    row.outcome === "ok" ? "witness_ok" : row.outcome === "parse_error" ? "parser_suspect" : "fetch_error";
+  if (note === null && outcome !== "witness_ok") {
+    throw new Error("a filed check was stored without a note");
+  }
+  return {
+    id: row.id,
+    fetchedAt: row.fetchedAt,
+    httpStatus: null,
+    outcome,
+    note,
+    observationId: null,
+    archiveStatus: null,
+    archiveUrl: null,
   };
 }
 

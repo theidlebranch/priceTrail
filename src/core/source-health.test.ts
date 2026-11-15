@@ -57,7 +57,7 @@ describe("assessSourceHealth", () => {
     expect(health.strip).toHaveLength(24);
     expect(health.strip.every((slot) => slot.outcome === null)).toBe(true);
     expect(health.stripLabel).toBe(
-      "0 unchanged, 0 changed, 0 parser failed, 0 download failed, 24 empty",
+      "0 unchanged, 0 changed, 0 read held, 0 parser failed, 0 download failed, 24 empty",
     );
   });
 
@@ -303,7 +303,7 @@ describe("assessSourceHealth", () => {
     expect(health.strip[23]?.outcome).toBe("changed");
     expect(health.strip[23]?.title).toContain("HTTP 200");
     expect(health.stripLabel).toBe(
-      "0 unchanged, 1 changed, 0 parser failed, 1 download failed, 22 empty",
+      "0 unchanged, 1 changed, 0 read held, 0 parser failed, 1 download failed, 22 empty",
     );
   });
 

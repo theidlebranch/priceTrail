@@ -123,6 +123,35 @@ describe("toSourceBoardView", () => {
     );
   });
 
+  it("shows a witness read as Read held and leaves it out of the pricing-page percent", () => {
+    const witness = "https://example.test/litellm.json";
+    const view = toSourceBoardView(
+      [
+        row(),
+        row({
+          id: 8,
+          url: witness,
+          type: "aggregator",
+          checks: [check({ id: 8, outcome: "witness_ok", httpStatus: null, note: null })],
+        }),
+      ],
+      [ANTHROPIC],
+      "all",
+      NOW,
+    );
+
+    expect(view.summary.okCount).toBe(1);
+    expect(view.summary.checkCount).toBe(1);
+    expect(view.entries.find((entry) => entry.url === witness)).toMatchObject({
+      status: "healthy",
+      reason: "Read held",
+      scheduleNote: null,
+      lastChange: null,
+      snapshot: { kind: "none" },
+    });
+    expect(view.entries.find((entry) => entry.url === witness)?.strip.some((slot) => slot.title.startsWith("Read held ·"))).toBe(true);
+  });
+
   it("sorts attention, unchecked, healthy, then paused, and filters without changing the counts", () => {
     const view = toSourceBoardView(
       [
@@ -210,7 +239,7 @@ describe("toSourceBoardView", () => {
     ]);
     expect(view.entries.find((entry) => entry.url === extra)).toMatchObject({
       status: "healthy",
-      scheduleNote: "The next visit will stop before download.",
+      scheduleNote: null,
     });
     expect(view.entries.find((entry) => entry.url === quiet)).toMatchObject({
       status: "healthy",

@@ -36,6 +36,7 @@ export function barClass(outcome: FetchOutcome | null): string {
     case null:
       return "bg-border";
     case "unchanged":
+    case "witness_ok":
       return "bg-status-ok";
     case "changed":
       return "bg-status-info";

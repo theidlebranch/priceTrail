@@ -28,7 +28,7 @@ import {
   readSourceHealthStats,
   SOURCE_CHECK_PAGE_SIZE,
 } from "@/server/db/repositories/source-health";
-import { fetchLog, observations, sources } from "@/server/db/schema";
+import { fetchLog, observations, sources, witnessReads } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
@@ -498,6 +498,62 @@ describe.skipIf(databaseUrl.length === 0)("source health reads", () => {
         id: oldest.id,
       });
       expect(next.map((item) => item.note)).toEqual(["step 0"]);
+    });
+  });
+
+  it("fills an aggregator strip from witness reads", async () => {
+    await withHealth(async (tx) => {
+      const url = `https://example.test/health/${randomUUID()}/litellm.json`;
+      const source = requireInsertedRow(
+        await tx.insert(sources).values({ url, type: "aggregator" }).returning(),
+        "insert source",
+      );
+      await tx.insert(witnessReads).values([
+        {
+          sourceId: source.id,
+          fetchedAt: OLDER,
+          outcome: "parse_error",
+          note: "LiteLLM parse failed",
+          seenSlugs: [],
+          isBaseline: false,
+        },
+        {
+          sourceId: source.id,
+          fetchedAt: NEWER,
+          outcome: "ok",
+          note: "",
+          seenSlugs: ["claude-fable"],
+          isBaseline: true,
+          agreedCount: 1,
+          notComparedCount: 0,
+        },
+      ]);
+
+      const listed = (await listSourceHealth(tx)).find((row) => row.url === url);
+      expect(listed?.checks.map((check) => check.outcome)).toEqual(["witness_ok", "parser_suspect"]);
+      expect(listed?.lastCheckedAt).toEqual(NEWER);
+      expect(listed?.latestSnapshot).toBeNull();
+      expect(listed?.latestChangeAt).toBeNull();
+      expect(listed?.checks[0]).toMatchObject({ httpStatus: null, note: null });
+      expect(listed?.checks[1]?.note).toBe("LiteLLM parse failed");
+
+      const stats = await readSourceHealthStats(tx, source.id);
+      expect(stats).toMatchObject({
+        checkCount: 2,
+        okCount: 1,
+        firstCheckAt: OLDER,
+        latestChangeAt: null,
+        archivedCount: 0,
+      });
+      expect(await listRecentSourceChecks(tx, source.id)).toMatchObject([
+        { outcome: "witness_ok" },
+        { outcome: "parser_suspect", note: "LiteLLM parse failed" },
+      ]);
+      const page = await listSourceCheckPage(tx, source.id, {
+        fetchedAt: NEWER,
+        id: listed?.checks[0]?.id ?? 0,
+      });
+      expect(page.map((check) => check.outcome)).toEqual(["parser_suspect"]);
     });
   });
 
