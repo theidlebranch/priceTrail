@@ -266,15 +266,16 @@ Both rows are `input` on version 3. The unique key is version + dimension + cond
 
 ## A witness read is not a price
 
-LiteLLM's cost map is one `sources` row. A read of that file is a `witness_reads` row. It does not publish a price. The rows below are a reading aid. They are not inserted.
+LiteLLM's cost map is one `sources` row. OpenRouter's model list is a second aggregator row. A read of either URL is a `witness_reads` row for that source. It does not publish a price. The rows below are a reading aid. They are not inserted.
 
-The source id 2 is the LiteLLM file. Offering 1 is still Claude Haiku 4.5. The witness says input is `1.20` and the open price says `1`, so one flag is open. `claude-new` is a name we do not track yet. Model 1 was linked on the previous read and is missing from this one.
+The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The child rows below belong to LiteLLM. An OpenRouter disagreement, new name, or missing model uses the same columns with `source_id` 3. Offering 1 is still Claude Haiku 4.5. The witness says input is `1.20` and the open price says `1`, so one flag is open. `claude-new` is a name we do not track yet. Model 1 was linked on the previous read and is missing from this one. OpenRouter can store a display name in `raw_name` that differs from `raw_slug`. LiteLLM's file has no separate name, so those two columns match.
 
 ### sources
 
 | id | url | type | active | last_checked_at |
 | --- | --- | --- | --- | --- |
 | 2 | https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json | aggregator | true | 2026-11-13T16:30:00Z |
+| 3 | https://openrouter.ai/api/v1/models | aggregator | true | 2026-11-15T16:40:00Z |
 
 `type` `aggregator` means this page is a witness, not the official pricing page. `last_checked_at` on this row can stay blank. The witness read has its own `fetched_at`.
 

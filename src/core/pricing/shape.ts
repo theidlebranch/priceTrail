@@ -30,7 +30,7 @@ export const normalizedPriceSchema = z.object({
   condition: conditionSchema.optional(),
   validFrom: z.string().optional(),
   validUntil: z.string().optional(),
-  source: z.enum(["official", "models.dev", "litellm"]),
+  source: z.enum(["official", "models.dev", "litellm", "openrouter"]),
   note: z.string().min(1).optional(),
 });
 

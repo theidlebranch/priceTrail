@@ -18,7 +18,7 @@ describe("SignalsBoard", () => {
       signals: [],
     };
     render(<SignalsBoard view={toSignalsView(page)} rejectAction={rejectAction} />);
-    expect(screen.getByRole("heading", { name: "Signals" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "LiteLLM" })).toBeTruthy();
     expect(screen.getByText("LiteLLM has not been read yet.")).toBeTruthy();
     expect(screen.getByText(/It cannot publish a price/)).toBeTruthy();
   });
