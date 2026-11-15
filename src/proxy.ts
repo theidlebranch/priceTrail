@@ -13,6 +13,7 @@ import {
 import { createDb } from "@/server/db/client";
 import { hasTrackedModel } from "@/server/db/repositories/model-detail";
 import { hasReviewItem } from "@/server/db/repositories/review-queue";
+import { hasSignalSource } from "@/server/db/repositories/litellm-signals";
 import { hasSource } from "@/server/db/repositories/source-health";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -39,7 +40,8 @@ import { parseDatabaseEnv } from "@/server/env";
  * reviewer is allowed in. A missing source history page does too.
  * A stranger still gets 403, not a hint that the id exists. An id that
  * is not a whole number throws. /review itself is not an item lookup,
- * and /review/sources is not a source lookup.
+ * /review/sources is not a source lookup, and /review/signals is not
+ * a signal lookup.
  */
 export async function proxy(request: NextRequest) {
   if (isProtectedReviewPath(request.nextUrl.pathname)) {
@@ -116,6 +118,11 @@ async function missingReviewRecordResponse(request: NextRequest): Promise<NextRe
     return missingWhenAbsent((db) => hasSource(db, sourceId));
   }
 
+  const signalId = reviewSignalId(pathname);
+  if (signalId !== null) {
+    return missingWhenAbsent((db) => hasSignalSource(db, signalId));
+  }
+
   return NextResponse.next();
 }
 
@@ -175,9 +182,17 @@ export function reviewSourceId(pathname: string): number | null {
   return reviewPathId(pathname, "sources", parseSourceId, "Source id");
 }
 
+/**
+ * /review/signals/<id>, or null when this locked path is not one signal.
+ * /review/signals itself is the list, so it is null. A bad id throws.
+ */
+export function reviewSignalId(pathname: string): number | null {
+  return reviewPathId(pathname, "signals", parseSourceId, "Signal id");
+}
+
 function reviewPathId(
   pathname: string,
-  collection: "items" | "sources",
+  collection: "items" | "sources" | "signals",
   parseId: (segment: string) => number,
   label: string,
 ): number | null {

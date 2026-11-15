@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { OPENROUTER_COPY, toSignalsView } from "@/app/review/signals-view";
-import type { LiteLLMSignalPage } from "@/server/db/repositories/litellm-signals";
+import { OPENROUTER_COPY, toSignalBoardView, toSignalHistory, toSignalsView } from "@/app/review/signals-view";
+import {
+  SIGNAL_JOB_URLS,
+  WITNESS_READ_PAGE_SIZE,
+  type LiteLLMSignalPage,
+  type SignalJobRow,
+  type WitnessReadRow,
+} from "@/server/db/repositories/litellm-signals";
 
 const DETECTED = new Date("2026-11-13T16:30:00.000Z");
 const GOOD = new Date("2026-11-13T10:30:00.000Z");
@@ -166,3 +172,201 @@ describe("toSignalsView", () => {
     ]);
   });
 });
+
+describe("toSignalBoardView", () => {
+  it("lists LiteLLM before OpenRouter, and an unread job has no link or counts", () => {
+    const view = toSignalBoardView([
+      job(SIGNAL_JOB_URLS[1]),
+      job(SIGNAL_JOB_URLS[0]),
+    ]);
+
+    expect(view.entries.map((entry) => entry.title)).toEqual(["LiteLLM", "OpenRouter"]);
+    expect(view.entries[0]).toMatchObject({
+      href: null,
+      lastRun: null,
+      status: "LiteLLM has not been read yet.",
+      failed: false,
+      disagreements: null,
+      newNames: null,
+      missing: null,
+    });
+    expect(JSON.stringify(view)).not.toMatch(/wayback|archive/i);
+  });
+
+  it("keeps a failed first read from looking like zero disagreements", () => {
+    const view = toSignalBoardView(
+      bothJobs({
+        openrouter: {
+          sourceId: 8,
+          latest: {
+            outcome: "parse_error",
+            fetchedAt: DETECTED,
+            note: "OpenRouter parse failed",
+          },
+        },
+      }),
+    );
+    const openrouter = view.entries[1];
+
+    expect(openrouter).toMatchObject({
+      href: "/review/signals/8",
+      lastRun: "Nov 13 · 16:30 UTC",
+      status: "Could not parse",
+      note: "OpenRouter parse failed",
+      failed: true,
+      fromLastGood: null,
+      disagreements: null,
+      newNames: null,
+      missing: null,
+    });
+  });
+
+  it("keeps the last good counts when a later read fails", () => {
+    const view = toSignalBoardView(
+      bothJobs({
+        litellm: {
+          sourceId: 3,
+          latest: {
+            outcome: "fetch_error",
+            fetchedAt: DETECTED,
+            note: "LiteLLM fetch failed: HTTP 500",
+          },
+          hasSuccessfulRead: true,
+          disagreementCount: 1,
+          newNameCount: 2,
+          missingCount: 0,
+        },
+      }),
+    );
+
+    expect(view.entries[0]).toMatchObject({
+      href: "/review/signals/3",
+      status: "Could not download",
+      failed: true,
+      fromLastGood: "These counts are from the last good read.",
+      disagreements: "1 disagreement",
+      newNames: "2 new names",
+      missing: "0 missing models",
+    });
+  });
+
+  it("shows a real zero after a read that found no disagreements", () => {
+    const view = toSignalBoardView(
+      bothJobs({
+        litellm: {
+          sourceId: 3,
+          latest: { outcome: "ok", fetchedAt: GOOD, note: "" },
+          hasSuccessfulRead: true,
+          disagreementCount: 0,
+          newNameCount: 0,
+          missingCount: 0,
+        },
+      }),
+    );
+
+    expect(view.entries[0]).toMatchObject({
+      status: "Read held",
+      failed: false,
+      fromLastGood: null,
+      disagreements: "0 disagreements",
+      newNames: "0 new names",
+      missing: "0 missing models",
+    });
+  });
+
+  it("throws when one of the two jobs is missing", () => {
+    expect(() => toSignalBoardView([job(SIGNAL_JOB_URLS[0])])).toThrow(/LiteLLM and OpenRouter/);
+  });
+});
+
+describe("toSignalHistory", () => {
+  it("keeps a failed run on the list and shows the stored counts for a good run", () => {
+    const view = toSignalHistory(
+      [
+        read({ id: 9, outcome: "fetch_error", note: "download failed", agreedCount: null, notComparedCount: null }),
+        read({ id: 4, outcome: "ok", note: "", agreedCount: 2, notComparedCount: 1, fetchedAt: GOOD }),
+      ],
+      3,
+      null,
+    );
+
+    expect(view.empty).toBeNull();
+    expect(view.olderHref).toBeNull();
+    expect(view.rows[0]).toMatchObject({
+      status: "Could not download",
+      note: "download failed",
+      counts: null,
+      failed: true,
+    });
+    expect(view.rows[1]).toMatchObject({
+      status: "Read held",
+      counts: "2 agree, 1 not compared",
+      failed: false,
+    });
+    expect(JSON.stringify(view)).not.toMatch(/wayback|archive/i);
+  });
+
+  it("links to the older page from the last row on a full page", () => {
+    const oldest = new Date("2026-11-01T00:00:00.000Z");
+    const rows = Array.from({ length: WITNESS_READ_PAGE_SIZE }, (_, index) =>
+      read({
+        id: WITNESS_READ_PAGE_SIZE - index,
+        fetchedAt: new Date(oldest.getTime() + (WITNESS_READ_PAGE_SIZE - index) * 60_000),
+      }),
+    );
+    rows[rows.length - 1] = read({ id: 1, fetchedAt: oldest });
+    const view = toSignalHistory(rows, 6, null);
+
+    expect(view.olderHref).toBe(
+      `/review/signals/6?before=${encodeURIComponent(oldest.toISOString())}&beforeId=1`,
+    );
+  });
+
+  it("says there is nothing older when the next page is empty", () => {
+    const view = toSignalHistory([], 6, { fetchedAt: GOOD, id: 1 });
+    expect(view.empty).toBe("No older reads.");
+    expect(view.olderHref).toBeNull();
+  });
+
+  it("throws when a successful row has no counts", () => {
+    expect(() =>
+      toSignalHistory(
+        [read({ agreedCount: null, notComparedCount: null })],
+        3,
+        null,
+      ),
+    ).toThrow(/missing its counts/);
+  });
+});
+
+function job(url: string, overrides: Partial<SignalJobRow> = {}): SignalJobRow {
+  return {
+    url,
+    sourceId: null,
+    latest: null,
+    hasSuccessfulRead: false,
+    disagreementCount: null,
+    newNameCount: null,
+    missingCount: null,
+    ...overrides,
+  };
+}
+
+function bothJobs(overrides: {
+  litellm?: Partial<SignalJobRow>;
+  openrouter?: Partial<SignalJobRow>;
+}): SignalJobRow[] {
+  return [job(SIGNAL_JOB_URLS[0], overrides.litellm), job(SIGNAL_JOB_URLS[1], overrides.openrouter)];
+}
+
+function read(overrides: Partial<WitnessReadRow> = {}): WitnessReadRow {
+  return {
+    id: 4,
+    fetchedAt: DETECTED,
+    outcome: "ok",
+    note: "",
+    agreedCount: 1,
+    notComparedCount: 0,
+    ...overrides,
+  };
+}

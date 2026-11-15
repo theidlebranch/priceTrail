@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { rejectCandidateAction } from "@/app/review/reject-candidate-action";
-import { OPENROUTER_COPY, toSignalsView } from "@/app/review/signals-view";
+import { toSignalBoardView } from "@/app/review/signals-view";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
-import { SignalsBoard } from "@/components/signals-board";
+import { SignalJobBoard } from "@/components/signals-board";
 import { createDb } from "@/server/db/client";
-import { findLiteLLMSignalPage, findOpenRouterSignalPage } from "@/server/db/repositories/litellm-signals";
+import { listSignalJobs } from "@/server/db/repositories/litellm-signals";
 import { parseDatabaseEnv } from "@/server/env";
 
 export const metadata: Metadata = {
@@ -14,12 +13,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * The witness page. LiteLLM and OpenRouter are two sections.
- * The signal-health board is a later step. The proxy already locks
- * /review. requireAllowedReviewer() repeats that check. connection()
- * runs before the database opens so the page is not prerendered.
+ * Two jobs: LiteLLM, then OpenRouter. Each row is the last run and the
+ * counts from the last good read. The findings themselves are on
+ * /review/signals/<id>.
  *
- * This page does not call publishPriceVersion().
+ * The proxy already locks /review. requireAllowedReviewer() repeats that
+ * check. connection() runs before the database opens so the page is not
+ * prerendered. A missing URL or a failed query throws. An unread witness
+ * is still a row.
+ *
+ * This page does not call publishPriceVersion(). It only reads.
  */
 export default function SignalsPage() {
   return (
@@ -46,24 +49,8 @@ async function SignalsLoader() {
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
   try {
-    const litellm = await findLiteLLMSignalPage(db);
-    const openrouter = await findOpenRouterSignalPage(db);
-    return (
-      <>
-        <h1 className="text-page-title font-semibold tracking-tight">Signals</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-          A witness is another site&apos;s price list. It can disagree with this site, and it can name a
-          model we do not track. It cannot publish a price.
-        </p>
-        <div className="mt-12 space-y-16">
-          <SignalsBoard view={toSignalsView(litellm)} rejectAction={rejectCandidateAction} />
-          <SignalsBoard
-            view={toSignalsView(openrouter, OPENROUTER_COPY)}
-            rejectAction={rejectCandidateAction}
-          />
-        </div>
-      </>
-    );
+    const jobs = await listSignalJobs(db);
+    return <SignalJobBoard view={toSignalBoardView(jobs)} />;
   } finally {
     await close();
   }

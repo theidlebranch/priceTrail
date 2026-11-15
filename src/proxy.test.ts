@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
-import { modelSlugs, reviewItemId, reviewSourceId } from "@/proxy";
+import { modelSlugs, reviewItemId, reviewSignalId, reviewSourceId } from "@/proxy";
 
 describe("modelSlugs", () => {
   it("decodes an encoded list link to the stored slug", () => {
@@ -64,5 +64,24 @@ describe("reviewSourceId", () => {
 
   it("throws on a broken percent sequence instead of looking it up", () => {
     expect(() => reviewSourceId("/review/sources/%")).toThrow(/encoded path segment/);
+  });
+});
+
+describe("reviewSignalId", () => {
+  it("reads a whole-number signal id and ignores the signal list", () => {
+    expect(reviewSignalId("/review/signals/4")).toBe(4);
+    expect(reviewSignalId("/review/signals/4/")).toBe(4);
+    expect(reviewSignalId("/review/signals")).toBeNull();
+    expect(reviewSignalId("/review")).toBeNull();
+    expect(reviewSignalId("/review/sources/4")).toBeNull();
+  });
+
+  it("throws when the id is not a whole number", () => {
+    expect(() => reviewSignalId("/review/signals/01")).toThrow(/whole number/);
+    expect(() => reviewSignalId("/review/signals/nope")).toThrow(/whole number/);
+  });
+
+  it("throws on a broken percent sequence instead of looking it up", () => {
+    expect(() => reviewSignalId("/review/signals/%")).toThrow(/encoded path segment/);
   });
 });

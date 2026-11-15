@@ -1,5 +1,12 @@
-import type { LiteLLMSignalPage } from "@/server/db/repositories/litellm-signals";
 import { formatUtcCompact } from "@/core/source-health";
+import {
+  SIGNAL_JOB_URLS,
+  WITNESS_READ_PAGE_SIZE,
+  type SignalJobRow,
+  type WitnessReadCursor,
+  type WitnessReadRow,
+  type LiteLLMSignalPage,
+} from "@/server/db/repositories/litellm-signals";
 
 /**
  * Sentences for /review/signals.
@@ -192,4 +199,179 @@ function dimensionLabel(dimension: string): string {
     throw new Error(`price dimension ${dimension} is unknown`);
   }
   return label;
+}
+
+/**
+ * The job board is always LiteLLM, then OpenRouter.
+ * Counts stay empty until a read has succeeded. A later failure
+ * keeps the last good counts and says so.
+ */
+const BOARD_COPY: Record<(typeof SIGNAL_JOB_URLS)[number], WitnessCopy> = {
+  [SIGNAL_JOB_URLS[0]]: LITELLM_COPY,
+  [SIGNAL_JOB_URLS[1]]: OPENROUTER_COPY,
+};
+
+export type SignalBoardEntry = {
+  title: string;
+  href: string | null;
+  lastRun: string | null;
+  status: string;
+  note: string | null;
+  failed: boolean;
+  fromLastGood: string | null;
+  disagreements: string | null;
+  newNames: string | null;
+  missing: string | null;
+};
+
+export type SignalBoardView = {
+  entries: SignalBoardEntry[];
+};
+
+export type SignalHistoryRow = {
+  id: number;
+  time: string;
+  status: string;
+  note: string | null;
+  counts: string | null;
+  failed: boolean;
+};
+
+export type SignalHistoryView = {
+  rows: SignalHistoryRow[];
+  olderHref: string | null;
+  empty: string | null;
+};
+
+export function witnessCopyForUrl(url: string): WitnessCopy {
+  if (!isJobUrl(url)) {
+    throw new Error("signal url is not a witness this page reads");
+  }
+  return BOARD_COPY[url];
+}
+
+export function toSignalBoardView(jobs: readonly SignalJobRow[]): SignalBoardView {
+  const byUrl = new Map(jobs.map((job) => [job.url, job]));
+  if (byUrl.size !== jobs.length || jobs.length !== SIGNAL_JOB_URLS.length) {
+    throw new Error("signal board expects LiteLLM and OpenRouter");
+  }
+  return {
+    entries: SIGNAL_JOB_URLS.map((url) => {
+      const job = byUrl.get(url);
+      if (job === undefined) {
+        throw new Error("signal board expects LiteLLM and OpenRouter");
+      }
+      return toBoardEntry(job, BOARD_COPY[url]);
+    }),
+  };
+}
+
+/**
+ * `rows` are newest first, and this page is at most 50 of them.
+ * The older link uses the last row, which is the oldest on this page.
+ * A failed row stays in the list. There is no archive column.
+ */
+export function toSignalHistory(
+  rows: readonly WitnessReadRow[],
+  sourceId: number,
+  cursor: WitnessReadCursor | null,
+): SignalHistoryView {
+  if (!Number.isSafeInteger(sourceId) || sourceId < 1) {
+    throw new Error("signal id is not a whole number");
+  }
+  if (rows.length > WITNESS_READ_PAGE_SIZE) {
+    throw new Error("a signal history page keeps at most 50 reads");
+  }
+  const oldest = rows[rows.length - 1];
+  return {
+    rows: rows.map(toHistoryRow),
+    olderHref:
+      rows.length === WITNESS_READ_PAGE_SIZE && oldest !== undefined
+        ? `/review/signals/${sourceId}?before=${encodeURIComponent(oldest.fetchedAt.toISOString())}&beforeId=${oldest.id}`
+        : null,
+    empty:
+      rows.length === 0
+        ? cursor === null
+          ? "This signal has not been read yet."
+          : "No older reads."
+        : null,
+  };
+}
+
+function toBoardEntry(job: SignalJobRow, copy: WitnessCopy): SignalBoardEntry {
+  const latest = job.latest;
+  if (latest === null && job.hasSuccessfulRead) {
+    throw new Error("a signal job has counts and no read");
+  }
+  if (job.sourceId === null && (latest !== null || job.hasSuccessfulRead)) {
+    throw new Error("a missing signal source has a read");
+  }
+  if (job.sourceId !== null && (!Number.isSafeInteger(job.sourceId) || job.sourceId < 1)) {
+    throw new Error("signal id is not a whole number");
+  }
+  const failed = latest !== null && latest.outcome !== "ok";
+  if (failed && latest.note.trim() === "") {
+    throw new Error("a filed check was stored without a note");
+  }
+  const counts = boardCounts(job);
+  return {
+    title: copy.title,
+    href: job.sourceId === null ? null : `/review/signals/${job.sourceId}`,
+    lastRun: latest === null ? null : stamp(latest.fetchedAt),
+    status: latest === null ? copy.unread : readStatus(latest.outcome),
+    note: failed ? latest.note.trim() : null,
+    failed,
+    fromLastGood: failed && job.hasSuccessfulRead ? FROM_LAST_GOOD : null,
+    disagreements: counts?.disagreements ?? null,
+    newNames: counts?.newNames ?? null,
+    missing: counts?.missing ?? null,
+  };
+}
+
+function boardCounts(
+  job: SignalJobRow,
+): { disagreements: string; newNames: string; missing: string } | null {
+  const counts = [job.disagreementCount, job.newNameCount, job.missingCount];
+  const anyCount = counts.some((count) => count !== null);
+  const allCounts = counts.every((count) => count !== null);
+  if (job.hasSuccessfulRead !== allCounts || anyCount !== allCounts) {
+    throw new Error("signal counts do not match the last good read");
+  }
+  if (!allCounts) {
+    return null;
+  }
+  return {
+    disagreements: tally(job.disagreementCount ?? 0, "disagreement", "disagreements"),
+    newNames: tally(job.newNameCount ?? 0, "new name", "new names"),
+    missing: tally(job.missingCount ?? 0, "missing model", "missing models"),
+  };
+}
+
+function toHistoryRow(row: WitnessReadRow): SignalHistoryRow {
+  const failed = row.outcome !== "ok";
+  if (failed && row.note.trim() === "") {
+    throw new Error("a filed check was stored without a note");
+  }
+  return {
+    id: row.id,
+    time: stamp(row.fetchedAt),
+    status: readStatus(row.outcome),
+    note: row.note.trim() === "" ? null : row.note.trim(),
+    counts:
+      row.outcome === "ok"
+        ? `${tally(readHistoryCount(row.agreedCount), "agrees", "agree")}, ${tally(readHistoryCount(row.notComparedCount), "not compared", "not compared")}`
+        : null,
+    failed,
+  };
+}
+
+function readHistoryCount(value: number | null): number {
+  if (value === null) {
+    throw new Error("successful witness read is missing its counts");
+  }
+  return value;
+}
+
+function isJobUrl(url: string): url is (typeof SIGNAL_JOB_URLS)[number] {
+  return SIGNAL_JOB_URLS.some((jobUrl) => jobUrl === url);
 }

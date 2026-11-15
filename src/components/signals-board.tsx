@@ -1,29 +1,115 @@
 import type { ReactNode } from "react";
-import type { SignalsView } from "@/app/review/signals-view";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import type { SignalBoardView, SignalsView } from "@/app/review/signals-view";
 import {
   SignalRejectForm,
   type RejectCandidateState,
 } from "@/components/signal-reject-form";
 
 /**
- * One witness section. The page stacks LiteLLM and then OpenRouter.
- * Reject is the only decision. Approving a name is a later step.
- * The page passes the action, so this file does not open a database.
+ * The two witness jobs. Findings stay on the detail page.
+ * A job that has never been stored is not a link.
+ * This file does not open a database.
+ */
+export function SignalJobBoard({ view }: { view: SignalBoardView }) {
+  return (
+    <div>
+      <header>
+        <h1 className="text-page-title font-semibold tracking-tight">Signals</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+          A witness is another site&apos;s price list. It can disagree with this site, and it can name a
+          model we do not track. It cannot publish a price.
+        </p>
+        <div className="mt-4">
+          <Link
+            href="/review"
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Review queue
+          </Link>
+        </div>
+      </header>
+      <ul className="mt-8 overflow-hidden rounded-xl border border-border">
+        {view.entries.map((entry) => (
+          <li
+            key={entry.title}
+            className={`border-b border-border last:border-b-0 ${
+              entry.failed ? "border-l-2 border-l-status-warning" : ""
+            }`}
+          >
+            {entry.href === null ? (
+              <JobBody entry={entry} />
+            ) : (
+              <Link
+                href={entry.href}
+                className="flex items-start justify-between gap-4 px-4 py-4 hover:bg-secondary"
+              >
+                <JobBody entry={entry} linked />
+                <ChevronRight className="mt-0.5 size-4 shrink-0 text-tertiary-foreground" aria-hidden="true" />
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function JobBody({
+  entry,
+  linked = false,
+}: {
+  entry: SignalBoardView["entries"][number];
+  linked?: boolean;
+}) {
+  return (
+    <div className={linked ? "min-w-0" : "px-4 py-4"}>
+      <p className="font-medium text-foreground">{entry.title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{entry.status}</p>
+      {entry.lastRun === null ? null : (
+        <p className="mt-1 text-sm text-muted-foreground">{entry.lastRun}</p>
+      )}
+      {entry.note === null ? null : <p className="mt-1 text-sm text-foreground">{entry.note}</p>}
+      {entry.fromLastGood === null ? null : (
+        <p className="mt-1 text-sm text-muted-foreground">{entry.fromLastGood}</p>
+      )}
+      {entry.disagreements === null ? null : (
+        <p className="mt-2 text-sm tabular-nums text-foreground">
+          {entry.disagreements}. {entry.newNames}. {entry.missing}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One witness's findings. Reject is the only decision.
+ * Approving a name is a later step. The page passes the action,
+ * so this file does not open a database.
  */
 export function SignalsBoard({
   view,
   rejectAction,
+  heading = "section",
 }: {
   view: SignalsView;
   rejectAction: (
     previous: RejectCandidateState,
     formData: FormData,
   ) => Promise<RejectCandidateState>;
+  heading?: "page" | "section";
 }) {
+  const titleClass =
+    heading === "page" ? "text-page-title font-semibold tracking-tight" : "text-2xl font-semibold tracking-tight";
   return (
     <div>
       <header>
-        <h2 className="text-2xl font-semibold tracking-tight">{view.title}</h2>
+        {heading === "page" ? (
+          <h1 className={titleClass}>{view.title}</h1>
+        ) : (
+          <h2 className={titleClass}>{view.title}</h2>
+        )}
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{view.description}</p>
       </header>
       {view.unread !== null ? (
