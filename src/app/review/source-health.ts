@@ -717,6 +717,12 @@ function readHttpStatus(outcome: FetchOutcome, status: number | null): number | 
     }
     return status;
   }
+  // A witness file stores no HTTP status, so a parse failure arrives
+  // here with none. An official parser failure still has a status, and
+  // that status still has to be 200-299.
+  if (outcome === "parser_suspect" && status === null) {
+    return null;
+  }
   if (status === null) {
     throw new Error("a successful check needs an HTTP status");
   }
