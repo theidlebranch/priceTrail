@@ -80,10 +80,11 @@ describe("SourcesBoard", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Sources" })).toBeTruthy();
     expect(screen.getByText(/A warning here never publishes a price/)).toBeTruthy();
-    expect(screen.getByText("All times UTC")).toBeTruthy();
+    expect(screen.queryByText("All times UTC")).toBeNull();
     expect(screen.getByRole("link", { name: "Review queue" }).getAttribute("href")).toBe("/review");
     expect(screen.getByRole("heading", { name: "Latest run" })).toBeTruthy();
-    expect(screen.getByText("Nov 7 · next ≈ 18:00")).toBeTruthy();
+    expect(screen.getByText("Nov 7 · next ≈ 18:00 UTC")).toBeTruthy();
+    expect(screen.getByText("12:00 UTC")).toBeTruthy();
     expect(screen.getByText("1 of 3 checks")).toBeTruthy();
 
     expect(rowText(healthy)).toContain("Prices unchanged");
@@ -223,6 +224,7 @@ describe("SourceDetail", () => {
     );
 
     expect(screen.getByRole("heading", { name: "healthy.example" })).toBeTruthy();
+    expect(screen.queryByText("All times UTC")).toBeNull();
     expect(screen.getByRole("link", { name: "Open page" }).getAttribute("rel")).toContain("noreferrer");
     expect(screen.getByRole("heading", { name: "Parser failed" })).toBeTruthy();
     expect(screen.getByText(/The site answered with HTTP 200/)).toBeTruthy();

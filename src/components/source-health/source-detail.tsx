@@ -47,9 +47,6 @@ export function SourceDetail({ view }: { view: SourceDetailView }) {
         <span className="rounded-full border border-border px-2.5 py-1 text-sm text-muted-foreground">
           {view.scheduleLabel}
         </span>
-        <span className="rounded-full border border-border px-2.5 py-1 text-sm text-muted-foreground">
-          All times UTC
-        </span>
       </div>
       <AttentionPanel attention={view.attention} />
       <DetailStats stats={view.stats} />
@@ -128,7 +125,7 @@ function DetailStats({ stats }: { stats: SourceDetailView["stats"] }) {
                 <TimeLabel time={stats.lastChange} display="date" />
               </p>
               <p className="mt-2 text-muted-foreground">
-                <span className="tabular-nums">{stats.lastChange.clock}</span>
+                <span className="tabular-nums">{stats.lastChange.clock} UTC</span>
                 <span> · snapshot </span>
                 {stats.lastChange.archiveUrl === null ? (
                   <span className="font-mono">#{stats.lastChange.snapshotId}</span>

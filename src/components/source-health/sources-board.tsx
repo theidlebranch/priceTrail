@@ -23,16 +23,13 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
           Pages we fetch every 6 hours, parse and archive on Wayback. A warning here never
           publishes a price.
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4">
           <Link
             href="/review"
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             Review queue
           </Link>
-          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-            All times UTC
-          </span>
         </div>
       </header>
       <SummaryCards summary={view.summary} />

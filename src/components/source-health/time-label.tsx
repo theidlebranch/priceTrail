@@ -15,13 +15,19 @@ export function TimeLabel({
     <time dateTime={time.dateTime} className="tabular-nums">
       {display === "stacked" ? (
         <>
-          <span className="block text-foreground">{time.short}</span>
+          <span className="block text-foreground">{stamp(time.short)}</span>
           <span className="block text-muted-foreground">{time.relative}</span>
         </>
       ) : (
-        <span>{display === "date" ? time.date : display === "clock" ? time.clock : time.short}</span>
+        <span>
+          {display === "date" ? time.date : display === "clock" ? stamp(time.clock) : stamp(time.short)}
+        </span>
       )}
       <span className="sr-only"> {time.absolute}</span>
     </time>
   );
+}
+
+function stamp(value: string): string {
+  return `${value} UTC`;
 }

@@ -97,7 +97,7 @@ describe("toSourceBoardView", () => {
       clock: "12:00",
       date: "Nov 7",
     });
-    expect(view.summary.nextText).toBe("Nov 7 · next ≈ 18:00");
+    expect(view.summary.nextText).toBe("Nov 7 · next ≈ 18:00 UTC");
     expect(view.counts).toEqual({ all: 1, attention: 0, healthy: 1 });
   });
 

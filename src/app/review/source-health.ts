@@ -137,7 +137,7 @@ export type SourceBoardView = {
     okCount: number;
     checkCount: number;
     newestCheck: TimedLabel | null;
-    /** "Nov 12 · next ≈ 18:00", or "No check yet" when nothing has run. */
+    /** "Nov 12 · next ≈ 18:00 UTC", or "No check yet" when nothing has run. */
     nextText: string;
   };
   entries: BoardEntry[];
@@ -797,7 +797,7 @@ function readArchiveUrl(value: string | null): string | null {
 
 function nextRunText(newest: Date): string {
   const next = new Date(newest.getTime() + HEALTH_CONFIG.CRON_INTERVAL_HOURS * 3_600_000);
-  return `${formatUtcCompact(newest).date} · next ≈ ${formatUtcCompact(next).clock}`;
+  return `${formatUtcCompact(newest).date} · next ≈ ${formatUtcCompact(next).clock} UTC`;
 }
 
 function timed(value: Date, now: Date, label: string): TimedLabel {
