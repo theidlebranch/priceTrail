@@ -8,6 +8,10 @@ updates:
       default-days: 3
     commit-message:
       prefix: "deps"
+    ignore:
+      # @vercel/otel's tracing libraries accept @opentelemetry/api below 1.10 only.
+      - dependency-name: "@opentelemetry/api"
+        versions: ["1.10.x"]
     groups:
       minor-and-patch:
         applies-to: version-updates
