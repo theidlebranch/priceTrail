@@ -7,6 +7,8 @@ import {
   candidateStatus,
   fetchOutcome,
   fetchLog,
+  fetchTriggerReason,
+  fetchTriggers,
   labs,
   modelAliasKind,
   modelAliases,
@@ -640,5 +642,35 @@ describe("witness tables", () => {
       "model_id",
     ]);
     expect(foreignKeyTo(config, "model_id").onDelete).toBe("restrict");
+  });
+
+  it("keeps one pending trigger per official source", () => {
+    const config = getTableConfig(fetchTriggers);
+    expect(config.name).toBe("fetch_triggers");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "source_id",
+      "reason",
+      "created_at",
+      "processed_at",
+    ]);
+    expect(fetchTriggerReason.enumValues).toEqual(["aggregator_disagreement"]);
+    expect(column(config.columns, "reason").enumValues).toEqual(["aggregator_disagreement"]);
+    expect(column(config.columns, "created_at").notNull).toBe(true);
+    expect(column(config.columns, "processed_at").notNull).toBe(false);
+    expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
+
+    expect(config.indexes).toHaveLength(1);
+    const pending = config.indexes[0];
+    expect(pending).toBeDefined();
+    expect(pending!.config.name).toBe("fetch_triggers_one_pending_source");
+    expect(pending!.config.unique).toBe(true);
+    expect(pending!.config.columns.map((entry) => ("name" in entry ? entry.name : ""))).toEqual([
+      "source_id",
+    ]);
+    expect(pending!.config.where).toBeDefined();
+    const where = checkText(pending!.config.where!).replace(/\s+/g, " ");
+    expect(where).toContain("processed_at");
+    expect(where.toLowerCase()).toContain("is null");
   });
 });

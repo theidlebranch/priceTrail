@@ -62,7 +62,7 @@ flowchart TD
   person -->|reject| stopPrice[review_status rejected and publish nothing]
 ```
 
-Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, `observation_items`, `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. `fetch_triggers` is not created yet. The row picture of the tables that exist is [price-tables.md](price-tables.md).
+Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, `observation_items`, `witness_reads`, `verification_flags`, `candidate_models`, `model_signals`, and `fetch_triggers`. The row picture of the tables that exist is [price-tables.md](price-tables.md).
 
 ```mermaid
 flowchart TD
@@ -81,10 +81,10 @@ flowchart TD
   publishPriceVersion --> price_versions
   publishPriceVersion --> price_version_evidence
 
-  witnesses[LiteLLM changelog OpenRouter] --> fetch_triggers_later["fetch_triggers (later)"]
+  witnesses[LiteLLM OpenRouter] --> fetch_triggers
   witnesses --> candidate_models
   witnesses --> verification_flags
-  fetch_triggers_later --> sources
+  fetch_triggers --> sources
   candidate_models -->|"person approves"| models
   verification_flags --> offerings
 ```
@@ -189,8 +189,10 @@ fetch_log (id, source_id, fetched_at, http_status,
 
 -- Tier 1 -> Tier 2 work queue.
 fetch_triggers (id, source_id, reason, created_at, processed_at)
-  -- reason: 'schedule' | 'litellm_commit' | 'changelog_entry'
-  --         | 'aggregator_disagreement' | 'manual'
+  -- source_id is the official page to visit.
+  -- reason: 'aggregator_disagreement'
+  -- One row with a blank processed_at per source_id.
+  -- Later steps may add schedule, litellm_commit, changelog_entry, and manual.
 
 -- Tier 2 + 3 output, PAGE-LEVEL. One row per fetch whose parsed content
 -- CHANGED (unchanged fetches live only in fetch_log).
