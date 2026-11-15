@@ -19,6 +19,7 @@ import { readLiteLLMSignal, type SignalDb } from "@/server/pipeline/read-litellm
 import { rejectCandidateModel } from "@/server/review/reject-candidate";
 import {
   candidateModels,
+  fetchTriggers,
   labs,
   modelAliases,
   modelSignals,
@@ -30,7 +31,9 @@ import {
   verificationFlags,
   witnessReads,
 } from "@/server/db/schema";
+import { anthropicSource } from "@/server/sources/anthropic-source";
 import { LITELLM_COST_MAP_URL } from "@/server/sources/litellm-signal";
+import { openaiSource } from "@/server/sources/openai-source";
 import { parseDatabaseEnv } from "@/server/env";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
@@ -56,6 +59,7 @@ describe.skipIf(databaseUrl.length === 0)("readLiteLLMSignal", () => {
     await withRollback(async (tx) => {
       await clearWitness(tx);
       const planted = await plantModel(tx);
+      await plantOfficialSource(tx, anthropicSource.url);
       const result = await readLiteLLMSignal(tx, {
         fetchedAt: FIRST,
         fetchImpl: fakeFetch(costMap({ [planted.alias]: 0.00002, "claude-extra": 0.00001 })),
@@ -64,6 +68,13 @@ describe.skipIf(databaseUrl.length === 0)("readLiteLLMSignal", () => {
       expect(result).toMatchObject({ kind: "ok", isBaseline: true, newModelCount: 0 });
       const flags = await flagsFor(tx, planted.offeringId);
       expect(flags).toEqual([{ ourValue: "10", aggregatorValue: "20", dimension: "input" }]);
+      expect(await triggersAt(tx, FIRST)).toEqual([
+        {
+          url: anthropicSource.url,
+          reason: "aggregator_disagreement",
+          processedAt: null,
+        },
+      ]);
       const cards = await tx
         .select({ rawSlug: candidateModels.rawSlug })
         .from(candidateModels)
@@ -91,6 +102,8 @@ describe.skipIf(databaseUrl.length === 0)("readLiteLLMSignal", () => {
         .from(candidateModels)
         .where(eq(candidateModels.rawSlug, "claude-new-name"));
       expect(cards).toEqual([{ rawSlug: "claude-new-name", status: "pending_review" }]);
+      expect(await triggersAt(tx, FIRST)).toEqual([]);
+      expect(await triggersAt(tx, SECOND)).toEqual([]);
     });
   });
 
@@ -145,6 +158,7 @@ describe.skipIf(databaseUrl.length === 0)("readLiteLLMSignal", () => {
     await withRollback(async (tx) => {
       await clearWitness(tx);
       const planted = await plantModel(tx);
+      await plantOfficialSource(tx, anthropicSource.url);
       await readLiteLLMSignal(tx, {
         fetchedAt: FIRST,
         fetchImpl: fakeFetch(costMap({ [planted.alias]: 0.00002 })),
@@ -158,6 +172,88 @@ describe.skipIf(databaseUrl.length === 0)("readLiteLLMSignal", () => {
 
       expect(result.kind).toBe("fetch_error");
       expect(await flagsFor(tx, planted.offeringId)).toHaveLength(1);
+      expect(await triggersAt(tx, FIRST)).toHaveLength(1);
+      expect(await triggersAt(tx, SECOND)).toEqual([]);
+    });
+  });
+
+  it("keeps one pending trigger when a later read disagrees about the same lab", async () => {
+    await withRollback(async (tx) => {
+      await clearWitness(tx);
+      const planted = await plantModel(tx);
+      await plantOfficialSource(tx, anthropicSource.url);
+      await readLiteLLMSignal(tx, {
+        fetchedAt: FIRST,
+        fetchImpl: fakeFetch(costMap({ [planted.alias]: 0.00002 })),
+      });
+      await readLiteLLMSignal(tx, {
+        fetchedAt: SECOND,
+        fetchImpl: fakeFetch(costMap({ [planted.alias]: 0.00003 })),
+      });
+
+      expect(await triggersAt(tx, FIRST)).toHaveLength(1);
+      expect(await triggersAt(tx, SECOND)).toEqual([]);
+    });
+  });
+
+  it("queues one trigger per lab that disagreed", async () => {
+    await withRollback(async (tx) => {
+      await clearWitness(tx);
+      const anthropic = await plantModel(tx, { labSlug: "anthropic" });
+      const openai = await plantModel(tx, { labSlug: "openai" });
+      await plantOfficialSource(tx, anthropicSource.url);
+      await plantOfficialSource(tx, openaiSource.url);
+      await readLiteLLMSignal(tx, {
+        fetchedAt: FIRST,
+        fetchImpl: fakeFetch(
+          costMap({
+            [anthropic.alias]: 0.00002,
+            [openai.alias]: 0.00002,
+          }, {
+            [openai.alias]: "openai",
+          }),
+        ),
+      });
+
+      expect(await triggersAt(tx, FIRST)).toEqual(
+        [
+          {
+            url: anthropicSource.url,
+            reason: "aggregator_disagreement",
+            processedAt: null,
+          },
+          {
+            url: openaiSource.url,
+            reason: "aggregator_disagreement",
+            processedAt: null,
+          },
+        ].sort((left, right) => left.url.localeCompare(right.url)),
+      );
+    });
+  });
+
+  it("throws and stores nothing when the official page row is missing", async () => {
+    await withRollback(async (tx) => {
+      await clearWitness(tx);
+      const planted = await plantModel(tx);
+      await tx
+        .update(sources)
+        .set({ url: `${anthropicSource.url}#moved` })
+        .where(eq(sources.url, anthropicSource.url));
+
+      await expect(
+        readLiteLLMSignal(tx, {
+          fetchedAt: FIRST,
+          fetchImpl: fakeFetch(costMap({ [planted.alias]: 0.00002 })),
+        }),
+      ).rejects.toThrow(/official source for anthropic must be one row/);
+      const reads = await tx
+        .select({ id: witnessReads.id })
+        .from(witnessReads)
+        .innerJoin(sources, eq(witnessReads.sourceId, sources.id))
+        .where(eq(sources.url, LITELLM_COST_MAP_URL));
+      expect(reads).toEqual([]);
+      expect(await triggersAt(tx, FIRST)).toEqual([]);
     });
   });
 
@@ -245,21 +341,41 @@ async function clearWitness(tx: SignalDb): Promise<void> {
   await tx.delete(witnessReads).where(eq(witnessReads.sourceId, sourceId));
 }
 
+async function plantOfficialSource(tx: SignalDb, url: string): Promise<void> {
+  await tx.insert(sources).values({ url, type: "official", active: true }).onConflictDoNothing();
+}
+
+async function triggersAt(
+  tx: SignalDb,
+  createdAt: Date,
+): Promise<{ url: string; reason: string; processedAt: Date | null }[]> {
+  const rows = await tx
+    .select({
+      url: sources.url,
+      reason: fetchTriggers.reason,
+      processedAt: fetchTriggers.processedAt,
+    })
+    .from(fetchTriggers)
+    .innerJoin(sources, eq(fetchTriggers.sourceId, sources.id))
+    .where(eq(fetchTriggers.createdAt, createdAt));
+  return rows.sort((left, right) => left.url.localeCompare(right.url));
+}
+
 async function plantModel(
   tx: SignalDb,
-  options: { withAlias?: boolean } = {},
+  options: { withAlias?: boolean; labSlug?: "anthropic" | "openai" } = {},
 ): Promise<{ modelId: number; offeringId: number; alias: string }> {
   const withAlias = options.withAlias ?? true;
+  const labSlug = options.labSlug ?? "anthropic";
   const suffix = randomUUID();
-  const labRows = await tx
-    .select({ id: labs.id })
-    .from(labs)
-    .where(eq(labs.slug, "anthropic"))
-    .limit(1);
+  const labRows = await tx.select({ id: labs.id }).from(labs).where(eq(labs.slug, labSlug)).limit(1);
   const lab =
     labRows[0] ??
     requireInsertedRow(
-      await tx.insert(labs).values({ name: "Anthropic", slug: "anthropic" }).returning(),
+      await tx
+        .insert(labs)
+        .values({ name: labSlug === "anthropic" ? "Anthropic" : "OpenAI", slug: labSlug })
+        .returning(),
       "lab",
     );
   const model = requireInsertedRow(
@@ -318,11 +434,14 @@ async function flagsFor(
     .where(and(eq(verificationFlags.offeringId, offeringId), eq(verificationFlags.dimension, "input")));
 }
 
-function costMap(inputs: Record<string, number>): string {
+function costMap(
+  inputs: Record<string, number>,
+  providers: Record<string, string> = {},
+): string {
   const body: Record<string, unknown> = {};
   for (const [key, input] of Object.entries(inputs)) {
     body[key] = {
-      litellm_provider: "anthropic",
+      litellm_provider: providers[key] ?? "anthropic",
       mode: "chat",
       input_cost_per_token: input,
       output_cost_per_token: input,

@@ -8,8 +8,9 @@ import type { FetchLike } from "@/server/sources/provider-source";
  *
  * A failed download or a bad parse stores only this source's attempt.
  * The previous disagreements, new names, and missing models stay.
- * Two open prices throw and store nothing. This file does not call
- * publishPriceVersion(), and it does not start an official visit.
+ * Two open prices throw and store nothing. A disagreement enqueues one
+ * pending visit of that lab's official page. This file does not download
+ * that page, and it does not call publishPriceVersion().
  */
 
 export async function readOpenRouterSignal(
