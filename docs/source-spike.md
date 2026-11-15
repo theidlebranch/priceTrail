@@ -165,6 +165,24 @@ The cost map was read from the raw URL above. `parseLiteLLM()` keeps `litellm_pr
 
 The list in `src/server/sources/litellm-signal.ts` is those two Anthropic aliases. A bare `gemini-4-argon` key is Vertex. The kept key is `gemini/gemini-4-argon`.
 
+### 3.7 OpenRouter names for the tracked models (2026-11-15)
+
+The public list is `https://openrouter.ai/api/v1/models`. No API key. `parseOpenRouter()` keeps ids that start with `anthropic/`, `openai/`, or `google/`. The slug is the part after that slash. An id with `:` (`:batch`, `:free`) is another billing mode and is not a row. `pricing.overrides` is a long-context price and is not a row. Prices in the file are USD per token. The parser multiplies by one million with `decimal.js`.
+
+| Tracked slug | OpenRouter id | Alias stored |
+| --- | --- | --- |
+| `claude-fable-5.1` | `anthropic/claude-fable-5.1` | none, the slug matches |
+| `claude-mythos-5.1` | not in the list | none |
+| `gpt-6-astra` | `openai/gpt-6-astra` | none, the slug matches |
+| `gpt-6-luna` | `openai/gpt-6-luna` | none, the slug matches |
+| `gpt-6-sol` | `openai/gpt-6-sol` | none, the slug matches |
+| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | none, the slug matches |
+| `gemini-2.5-pro` | `google/gemini-2.5-pro` | none, the slug matches |
+| `gemini-3.8-flash` | `google/gemini-3.8-flash` | none, the slug matches |
+| `gemini-4-argon` | `google/gemini-4-argon` | none, the slug matches |
+
+The LiteLLM aliases stay. They are a different spelling (`claude-fable-5-1`). OpenRouter does not use that spelling, so no second alias is stored. `aggregator_slug` is one list for every witness. A model still links when the OpenRouter slug equals the tracked slug.
+
 ---
 
 ## 4. Shared design decisions
@@ -197,7 +215,7 @@ type NormalizedPrice = {
   condition?: Condition;
   validFrom?: string; // ISO date as written on the page ("2026-12-01"), no time zone invented
   validUntil?: string; // inclusive, as written
-  source: "official" | "models.dev" | "litellm";
+  source: "official" | "models.dev" | "litellm" | "openrouter";
   note?: string; // non-tier parenthetical ("retired...", "limited availability")
 };
 ```

@@ -59,14 +59,33 @@ export type SignalsView = {
   emptyNotLinked: string | null;
 };
 
-export function toSignalsView(page: LiteLLMSignalPage): SignalsView {
+export type WitnessCopy = {
+  title: string;
+  description: string;
+  unread: string;
+};
+
+const LITELLM_COPY: WitnessCopy = {
+  title: "LiteLLM",
+  description:
+    "LiteLLM's cost map is a second price list for Anthropic, OpenAI, and Google. It can disagree with this site, and it can name a model we do not track. It cannot publish a price.",
+  unread: "LiteLLM has not been read yet.",
+};
+
+export const OPENROUTER_COPY: WitnessCopy = {
+  title: "OpenRouter",
+  description:
+    "OpenRouter's model list is a second price list for Anthropic, OpenAI, and Google. It can disagree with this site, and it can name a model we do not track. It cannot publish a price.",
+  unread: "OpenRouter has not been read yet.",
+};
+
+export function toSignalsView(page: LiteLLMSignalPage, copy: WitnessCopy = LITELLM_COPY): SignalsView {
   const successful = page.successful;
   const latest = page.latest;
   return {
-    title: "Signals",
-    description:
-      "LiteLLM's cost map is a second price list for Anthropic, OpenAI, and Google. It can disagree with this site, and it can name a model we do not track. It cannot publish a price.",
-    unread: latest === null ? "LiteLLM has not been read yet." : null,
+    title: copy.title,
+    description: copy.description,
+    unread: latest === null ? copy.unread : null,
     latest: latest === null ? null : latestCard(latest, successful !== null),
     file:
       successful === null
@@ -97,7 +116,7 @@ export function toSignalsView(page: LiteLLMSignalPage): SignalsView {
     emptyDisagreements: emptyFindings(successful, "No prices disagree."),
     candidates: page.candidates.map((row) => ({
       id: row.id,
-      label: `${row.labName} ${row.rawSlug}`,
+      label: row.rawName === row.rawSlug ? `${row.labName} ${row.rawSlug}` : `${row.rawName} (${row.rawSlug})`,
       time: stamp(row.firstSeenAt),
     })),
     emptyCandidates: emptyFindings(successful, "No new names are waiting."),

@@ -33,6 +33,11 @@ export type CompareLiteLLMInput = {
   /** Null means this is the first successful read. */
   previousSlugs: readonly string[] | null;
   existingCandidateSlugs: readonly string[];
+  /**
+   * Which witness these rows came from. LiteLLM is the default, so the
+   * existing call stays the same. OpenRouter passes "openrouter".
+   */
+  source?: "litellm" | "openrouter";
 };
 
 export type WitnessDisagreement = {
@@ -46,6 +51,8 @@ export type WitnessDisagreement = {
 export type WitnessNewModel = {
   labSlug: LabSlug;
   rawSlug: string;
+  /** LiteLLM has no separate name, so this is the slug. OpenRouter uses the display name. */
+  rawName: string;
 };
 
 export type WitnessModelSignal = {
@@ -67,11 +74,12 @@ const LABS = new Set<LabSlug>(["anthropic", "openai", "google"]);
 
 type WitnessModel = {
   provider: LabSlug;
+  modelName: string;
   amounts: Map<PriceDimension, string>;
 };
 
 export function compareLiteLLMWitness(input: CompareLiteLLMInput): CompareLiteLLMResult {
-  const witness = indexWitness(input.rows);
+  const witness = indexWitness(input.rows, input.source ?? "litellm");
   const seenSlugs = [...witness.keys()].sort((left, right) => left.localeCompare(right));
   const seen = new Set(seenSlugs);
   const previous = input.previousSlugs === null ? null : new Set(input.previousSlugs);
@@ -265,15 +273,18 @@ function newModels(
     if (row === undefined) {
       throw new Error(`witness slug ${slug} has no lab`);
     }
-    found.push({ labSlug: row.provider, rawSlug: slug });
+    found.push({ labSlug: row.provider, rawSlug: slug, rawName: row.modelName });
   }
   return found;
 }
 
-function indexWitness(rows: readonly NormalizedPrice[]): Map<string, WitnessModel> {
+function indexWitness(
+  rows: readonly NormalizedPrice[],
+  source: "litellm" | "openrouter",
+): Map<string, WitnessModel> {
   const witness = new Map<string, WitnessModel>();
   for (const row of rows) {
-    if (row.source !== "litellm") {
+    if (row.source !== source) {
       throw new Error(`witness row source is ${row.source}`);
     }
     if (!isLab(row.provider)) {
@@ -284,10 +295,14 @@ function indexWitness(rows: readonly NormalizedPrice[]): Map<string, WitnessMode
     }
     const current = witness.get(row.modelSlug) ?? {
       provider: row.provider,
+      modelName: row.modelName,
       amounts: new Map(),
     };
     if (current.provider !== row.provider) {
       throw new Error(`witness slug ${row.modelSlug} belongs to two labs`);
+    }
+    if (current.modelName !== row.modelName) {
+      throw new Error(`witness slug ${row.modelSlug} has two names`);
     }
     if (current.amounts.has(row.dimension)) {
       throw new Error(`two witness amounts for ${row.dimension} on ${row.modelSlug}`);

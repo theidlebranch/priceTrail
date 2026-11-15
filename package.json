@@ -28,6 +28,7 @@
     "review:clear-same-price": "tsx --env-file=.env scripts/clear-same-price.ts",
     "prices:link-evidence": "tsx --env-file=.env scripts/link-price-evidence.ts",
     "signals:litellm": "tsx --env-file=.env scripts/read-litellm-signal.ts",
+    "signals:openrouter": "tsx --env-file=.env scripts/read-openrouter-signal.ts",
     "seed:litellm-aliases": "tsx --env-file=.env scripts/seed-litellm-aliases.ts"
   },
   "dependencies": {

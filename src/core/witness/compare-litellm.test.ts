@@ -164,7 +164,9 @@ describe("compareLiteLLMWitness", () => {
     });
 
     expect(first.newModels).toEqual([]);
-    expect(second.newModels).toEqual([{ labSlug: "anthropic", rawSlug: "claude-new" }]);
+    expect(second.newModels).toEqual([
+      { labSlug: "anthropic", rawSlug: "claude-new", rawName: "claude-new" },
+    ]);
   });
 
   it("does not open a second card for a slug that already has one", () => {
@@ -255,6 +257,51 @@ describe("compareLiteLLMWitness", () => {
         existingCandidateSlugs: [],
       }),
     ).toThrow(/witness name gpt-6-sol is linked to two tracked models/);
+  });
+
+  it("links a dotted page slug when a hyphen alias is also stored", () => {
+    const result = compareLiteLLMWitness({
+      rows: [
+        {
+          ...row("claude-fable-5.1", "input", "10"),
+          source: "openrouter",
+          modelName: "Anthropic: Claude Fable 5.1",
+        },
+      ],
+      tracked: [tracked()],
+      previousSlugs: ["claude-fable-5.1"],
+      existingCandidateSlugs: [],
+      source: "openrouter",
+    });
+
+    expect(result.agreedCount).toBe(1);
+    expect(result.signals).toEqual([]);
+    expect(result.newModels).toEqual([]);
+  });
+
+  it("keeps the OpenRouter display name on a new card", () => {
+    const result = compareLiteLLMWitness({
+      rows: [
+        {
+          ...row("claude-fable-5.1", "input", "10"),
+          source: "openrouter",
+          modelName: "Anthropic: Claude Fable 5.1",
+        },
+        {
+          ...row("claude-new", "input", "2"),
+          source: "openrouter",
+          modelName: "Anthropic: Claude New",
+        },
+      ],
+      tracked: [tracked()],
+      previousSlugs: ["claude-fable-5.1"],
+      existingCandidateSlugs: [],
+      source: "openrouter",
+    });
+
+    expect(result.newModels).toEqual([
+      { labSlug: "anthropic", rawSlug: "claude-new", rawName: "Anthropic: Claude New" },
+    ]);
   });
 
   it("throws when one dimension has two comparable amounts", () => {

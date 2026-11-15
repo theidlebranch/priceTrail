@@ -6,7 +6,7 @@ import {
 } from "@/components/signal-reject-form";
 
 /**
- * The LiteLLM witness page. Lists are the rows already loaded.
+ * One witness section. The page stacks LiteLLM and then OpenRouter.
  * Reject is the only decision. Approving a name is a later step.
  * The page passes the action, so this file does not open a database.
  */
@@ -23,7 +23,7 @@ export function SignalsBoard({
   return (
     <div>
       <header>
-        <h1 className="text-page-title font-semibold tracking-tight">{view.title}</h1>
+        <h2 className="text-2xl font-semibold tracking-tight">{view.title}</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{view.description}</p>
       </header>
       {view.unread !== null ? (
@@ -83,9 +83,9 @@ function SignalCards({ view }: { view: SignalsView }) {
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <article className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-muted-foreground" title={latest.fromLastGood ?? undefined}>
+        <h3 className="text-muted-foreground" title={latest.fromLastGood ?? undefined}>
           Latest read
-        </h2>
+        </h3>
         <p className="mt-2 text-2xl leading-none font-semibold tracking-tight">{latest.time}</p>
         <p className={`mt-2 ${failed ? "text-destructive" : "text-foreground"}`}>{latest.status}</p>
         {latest.note === null ? null : (
@@ -93,9 +93,9 @@ function SignalCards({ view }: { view: SignalsView }) {
         )}
       </article>
       <article className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-muted-foreground" title={view.file?.sentence}>
+        <h3 className="text-muted-foreground" title={view.file?.sentence}>
           Names in the file
-        </h2>
+        </h3>
         {view.file === null ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Findings are unavailable until a read succeeds.
@@ -107,9 +107,9 @@ function SignalCards({ view }: { view: SignalsView }) {
         )}
       </article>
       <article className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-muted-foreground" title={view.compared?.meaning}>
+        <h3 className="text-muted-foreground" title={view.compared?.meaning}>
           Compared
-        </h2>
+        </h3>
         {view.compared === null ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Findings are unavailable until a read succeeds.
@@ -139,7 +139,7 @@ function FindingList({
   const present = items.some((item) => item !== null && item !== undefined && item !== false);
   return (
     <section>
-      <h2 className="text-base font-medium">{title}</h2>
+      <h3 className="text-base font-medium">{title}</h3>
       {present ? (
         <ul className="mt-3 overflow-hidden rounded-xl border border-border">{children}</ul>
       ) : (

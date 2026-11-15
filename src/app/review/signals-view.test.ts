@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toSignalsView } from "@/app/review/signals-view";
+import { OPENROUTER_COPY, toSignalsView } from "@/app/review/signals-view";
 import type { LiteLLMSignalPage } from "@/server/db/repositories/litellm-signals";
 
 const DETECTED = new Date("2026-11-13T16:30:00.000Z");
@@ -19,6 +19,7 @@ function page(overrides: Partial<LiteLLMSignalPage> = {}): LiteLLMSignalPage {
 describe("toSignalsView", () => {
   it("says the witness has not been read", () => {
     const view = toSignalsView(page());
+    expect(view.title).toBe("LiteLLM");
     expect(view.unread).toBe("LiteLLM has not been read yet.");
     expect(view.latest).toBeNull();
     expect(view.file).toBeNull();
@@ -139,5 +140,29 @@ describe("toSignalsView", () => {
     expect(view.emptyCandidates).toBe("Findings are unavailable until a read succeeds.");
     expect(view.emptyMissing).toBe("Findings are unavailable until a read succeeds.");
     expect(view.emptyNotLinked).toBe("Findings are unavailable until a read succeeds.");
+  });
+
+  it("names OpenRouter on its own section and keeps a display name", () => {
+    const view = toSignalsView(
+      page({
+        candidates: [
+          {
+            id: 4,
+            labName: "Anthropic",
+            rawSlug: "claude-new",
+            rawName: "Anthropic: Claude New",
+            firstSeenAt: GOOD,
+          },
+        ],
+      }),
+      OPENROUTER_COPY,
+    );
+
+    expect(view.title).toBe("OpenRouter");
+    expect(view.unread).toBe("OpenRouter has not been read yet.");
+    expect(view.description).toMatch(/cannot publish a price/);
+    expect(view.candidates).toEqual([
+      { id: 4, label: "Anthropic: Claude New (claude-new)", time: "Nov 13 · 10:30 UTC" },
+    ]);
   });
 });

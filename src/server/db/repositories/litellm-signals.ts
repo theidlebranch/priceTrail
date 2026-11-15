@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { SignalDb } from "@/server/pipeline/read-litellm-signal";
 import { LITELLM_COST_MAP_URL } from "@/server/sources/litellm-signal";
+import { OPENROUTER_MODELS_URL } from "@/server/sources/openrouter-signal";
 import {
   candidateModels,
   labs,
@@ -14,9 +15,10 @@ import {
 } from "@/server/db/schema";
 
 /**
- * The latest LiteLLM read and the rows the Signals page lists.
+ * The latest witness read and the rows one Signals section lists.
  *
- * This file only selects. It does not call publishPriceVersion().
+ * LiteLLM and OpenRouter are separate source URLs. This file only
+ * selects. It does not call publishPriceVersion().
  */
 
 export type LiteLLMSignalPage = {
@@ -40,7 +42,7 @@ export type LiteLLMSignalPage = {
     aggregatorValue: string;
     detectedAt: Date;
   }[];
-  candidates: { id: number; labName: string; rawSlug: string; firstSeenAt: Date }[];
+  candidates: { id: number; labName: string; rawSlug: string; rawName: string; firstSeenAt: Date }[];
   signals: {
     modelName: string;
     labName: string;
@@ -50,11 +52,23 @@ export type LiteLLMSignalPage = {
   }[];
 };
 
-export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignalPage> {
+export function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignalPage> {
+  return findWitnessSignalPage(db, LITELLM_COST_MAP_URL);
+}
+
+export function findOpenRouterSignalPage(db: SignalDb): Promise<LiteLLMSignalPage> {
+  return findWitnessSignalPage(db, OPENROUTER_MODELS_URL);
+}
+
+/**
+ * The latest read for one witness URL. LiteLLM and OpenRouter each pass
+ * their own URL, so one source's flags never appear on the other list.
+ */
+async function findWitnessSignalPage(db: SignalDb, sourceUrl: string): Promise<LiteLLMSignalPage> {
   const sourceRows = await db
     .select({ id: sources.id })
     .from(sources)
-    .where(eq(sources.url, LITELLM_COST_MAP_URL))
+    .where(eq(sources.url, sourceUrl))
     .limit(1);
   const sourceId = sourceRows[0]?.id;
   if (sourceId === undefined) {
@@ -124,6 +138,7 @@ export async function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignal
       id: candidateModels.id,
       labName: labs.name,
       rawSlug: candidateModels.rawSlug,
+      rawName: candidateModels.rawName,
       firstSeenAt: candidateModels.firstSeenAt,
     })
     .from(candidateModels)
