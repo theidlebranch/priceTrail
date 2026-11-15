@@ -84,6 +84,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 ## In progress
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
+- The next build-plan step is 38, approve a witness name. Steps 40–46 are now part of the MVP: new releases from the three labs, deprecation, Slack and Discord webhooks, follows, source requests, wrong-price reports, and Wayback backfill. Email stays out unless it is under two hours.
 
 ## Blocked
 
