@@ -80,11 +80,19 @@ describe("SourcesBoard", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Sources" })).toBeTruthy();
     expect(screen.getByText(/A warning here never publishes a price/)).toBeTruthy();
-    expect(screen.getByText("All times UTC")).toBeTruthy();
+    expect(screen.queryByText("All times UTC")).toBeNull();
     expect(screen.getByRole("link", { name: "Review queue" }).getAttribute("href")).toBe("/review");
     expect(screen.getByRole("heading", { name: "Latest run" })).toBeTruthy();
-    expect(screen.getByText("Nov 7 · next ≈ 18:00")).toBeTruthy();
-    expect(screen.getByText("1 of 3 checks")).toBeTruthy();
+    expect(screen.getByText("Nov 7 · next ≈ 18:00 UTC")).toBeTruthy();
+    expect(screen.getByText("12:00 UTC")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Visits that held" }).getAttribute("title")).toBe(
+      "Newest 24 on each pricing page. A matching snapshot counts.",
+    );
+    expect(screen.getByText("1 of 3 visits")).toBeTruthy();
+    expect(screen.getByText("1 matched the last snapshot")).toBeTruthy();
+    expect(
+      screen.queryByText("Newest 24 on each pricing page. A matching snapshot counts."),
+    ).toBeNull();
 
     expect(rowText(healthy)).toContain("Prices unchanged");
     expect(rowText(parser)).toContain("Parser failed");
@@ -96,6 +104,7 @@ describe("SourcesBoard", () => {
     expect(detailLink(download).getAttribute("href")).toBe("/review/sources/3");
     expect(detailLink(fresh).getAttribute("href")).toBe("/review/sources/4");
     expect(detailLink(paused).getAttribute("href")).toBe("/review/sources/5");
+    expect(screen.getAllByText("Last snapshot").every((node) => node.getAttribute("title")?.startsWith("Wayback:"))).toBe(true);
     expect(screen.getAllByRole("img").length).toBe(5);
     expect(screen.getByRole("link", { name: "Needs attention 2" }).getAttribute("href")).toBe(
       "/review/sources?status=attention",
@@ -121,11 +130,6 @@ describe("SourcesBoard", () => {
     );
     expect(screen.getByText("No sources match this filter.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Healthy 0" }).getAttribute("aria-current")).toBe("page");
-    expect(
-      screen.getByText(
-        "Wayback: archived, pending, or failed. A snapshot is stored when the parsed page changes, even when today's price already matches the site.",
-      ),
-    ).toBeTruthy();
     expect(screen.getByText("Changed").closest("li")?.getAttribute("title")).toBe(
       "The parsed page changed, so that check stored a snapshot. The price on the site may be the same.",
     );
@@ -223,6 +227,11 @@ describe("SourceDetail", () => {
     );
 
     expect(screen.getByRole("heading", { name: "healthy.example" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Visits that held" }).getAttribute("title")).toBe(
+      "Every visit since the first check. A matching snapshot counts.",
+    );
+    expect(screen.getByText("4 of 5 visits")).toBeTruthy();
+    expect(screen.queryByText("All times UTC")).toBeNull();
     expect(screen.getByRole("link", { name: "Open page" }).getAttribute("rel")).toContain("noreferrer");
     expect(screen.getByRole("heading", { name: "Parser failed" })).toBeTruthy();
     expect(screen.getByText(/The site answered with HTTP 200/)).toBeTruthy();

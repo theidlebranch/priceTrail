@@ -91,14 +91,100 @@ describe("toSourceBoardView", () => {
     expect(view.summary.successText).toBe("100%");
     expect(view.summary.okCount).toBe(1);
     expect(view.summary.checkCount).toBe(1);
+    expect(view.summary.visitMix).toBe("1 matched the last snapshot");
     expect(view.summary.newestCheck).toMatchObject({
       relative: "5h ago",
       short: "Nov 7 · 12:00",
       clock: "12:00",
       date: "Nov 7",
     });
-    expect(view.summary.nextText).toBe("Nov 7 · next ≈ 18:00");
+    expect(view.summary.nextText).toBe("Nov 7 · next ≈ 18:00 UTC");
     expect(view.counts).toEqual({ all: 1, attention: 0, healthy: 1 });
+  });
+
+  it("splits held visits into a matching snapshot and a new snapshot", () => {
+    const view = toSourceBoardView(
+      [
+        row({
+          checks: [
+            check({ id: 2, outcome: "changed", observationId: 8, archiveStatus: "archived" }),
+            check({ id: 1 }),
+          ],
+        }),
+      ],
+      [ANTHROPIC],
+      "all",
+      NOW,
+    );
+
+    expect(view.summary.okCount).toBe(2);
+    expect(view.summary.visitMix).toBe(
+      "1 matched the last snapshot · 1 stored a new one",
+    );
+  });
+
+  it("shows a witness read as Read held and leaves it out of the pricing-page percent", () => {
+    const witness = "https://example.test/litellm.json";
+    const view = toSourceBoardView(
+      [
+        row(),
+        row({
+          id: 8,
+          url: witness,
+          type: "aggregator",
+          checks: [check({ id: 8, outcome: "witness_ok", httpStatus: null, note: null })],
+        }),
+      ],
+      [ANTHROPIC],
+      "all",
+      NOW,
+    );
+
+    expect(view.summary.okCount).toBe(1);
+    expect(view.summary.checkCount).toBe(1);
+    expect(view.entries.find((entry) => entry.url === witness)).toMatchObject({
+      status: "healthy",
+      reason: "Read held",
+      scheduleNote: null,
+      lastChange: null,
+      snapshot: { kind: "none" },
+    });
+    expect(view.entries.find((entry) => entry.url === witness)?.strip.some((slot) => slot.title.startsWith("Read held ·"))).toBe(true);
+  });
+
+  it("shows a witness parser failure that has no HTTP status, and still draws the official row", () => {
+    const witness = "https://example.test/litellm.json";
+    const view = toSourceBoardView(
+      [
+        row(),
+        row({
+          id: 8,
+          url: witness,
+          type: "aggregator",
+          checks: [
+            check({
+              id: 8,
+              outcome: "parser_suspect",
+              httpStatus: null,
+              note: "LiteLLM parse failed",
+            }),
+          ],
+        }),
+      ],
+      [ANTHROPIC],
+      "all",
+      NOW,
+    );
+
+    expect(view.entries.find((entry) => entry.url === ANTHROPIC)?.status).toBe("healthy");
+    expect(view.summary.okCount).toBe(1);
+    expect(view.summary.checkCount).toBe(1);
+    const witnessEntry = view.entries.find((entry) => entry.url === witness);
+    expect(witnessEntry).toMatchObject({
+      status: "attention",
+      reason: "Parser failed",
+    });
+    expect(witnessEntry?.strip.find((slot) => slot.outcome === "parser_suspect")?.title).toContain("—");
   });
 
   it("sorts attention, unchecked, healthy, then paused, and filters without changing the counts", () => {
@@ -188,7 +274,7 @@ describe("toSourceBoardView", () => {
     ]);
     expect(view.entries.find((entry) => entry.url === extra)).toMatchObject({
       status: "healthy",
-      scheduleNote: "The next visit will stop before download.",
+      scheduleNote: null,
     });
     expect(view.entries.find((entry) => entry.url === quiet)).toMatchObject({
       status: "healthy",
@@ -219,6 +305,7 @@ describe("toSourceBoardView", () => {
     );
 
     expect(view.summary.successText).toBe("—");
+    expect(view.summary.visitMix).toBeNull();
     expect(view.entries).toHaveLength(0);
     expect(view.counts).toEqual({ all: 2, attention: 0, healthy: 0 });
   });
@@ -323,6 +410,14 @@ describe("toSourceBoardView", () => {
     expect(() =>
       toSourceBoardView(
         [row({ checks: [check({ outcome: "changed", httpStatus: 500, observationId: 3, archiveStatus: "archived" })] })],
+        [],
+        "all",
+        NOW,
+      ),
+    ).toThrow(/200-299/);
+    expect(() =>
+      toSourceBoardView(
+        [row({ checks: [check({ outcome: "parser_suspect", httpStatus: 500, note: "0 tables" })] })],
         [],
         "all",
         NOW,

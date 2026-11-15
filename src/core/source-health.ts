@@ -20,7 +20,12 @@ const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * HOUR_MS;
 
-export type FetchOutcome = "unchanged" | "changed" | "parser_suspect" | "fetch_error";
+export type FetchOutcome =
+  | "unchanged"
+  | "changed"
+  | "parser_suspect"
+  | "fetch_error"
+  | "witness_ok";
 
 export type ArchiveState = "pending" | "archived" | "failed";
 
@@ -255,6 +260,18 @@ export function assessSourceHealth(input: {
     }
   }
 
+  if (newest.outcome === "witness_ok") {
+    return {
+      ...base,
+      status: "healthy",
+      reason: "Read held",
+      tone: "unchanged",
+      attention: null,
+      streak: 0,
+      since: null,
+    };
+  }
+
   const reason =
     input.latestChangeAt === null
       ? "Prices unchanged"
@@ -415,7 +432,7 @@ function parserLead(status: number | null): string {
 }
 
 function lastGoodSentence(checks: readonly HealthCheck[], now: Date): string {
-  const good = checks.find((check) => check.outcome === "unchanged" || check.outcome === "changed");
+  const good = checks.find((check) => heldOutcome(check.outcome));
   if (good === undefined) {
     return "There is no good read in the last 24 checks.";
   }
@@ -423,10 +440,12 @@ function lastGoodSentence(checks: readonly HealthCheck[], now: Date): string {
 }
 
 function successRate(checks: readonly HealthCheck[]): { ok: number; total: number } {
-  const ok = checks.filter(
-    (check) => check.outcome === "unchanged" || check.outcome === "changed",
-  ).length;
+  const ok = checks.filter((check) => heldOutcome(check.outcome)).length;
   return { ok, total: checks.length };
+}
+
+function heldOutcome(outcome: FetchOutcome): boolean {
+  return outcome === "unchanged" || outcome === "changed" || outcome === "witness_ok";
 }
 
 function buildStrip(checks: readonly HealthCheck[]): StripSlot[] {
@@ -442,6 +461,9 @@ function buildStrip(checks: readonly HealthCheck[]): StripSlot[] {
 }
 
 function stripTitle(check: HealthCheck): string {
+  if (check.outcome === "witness_ok") {
+    return `Read held · ${formatUtcTimestamp(check.fetchedAt)}`;
+  }
   const http = check.httpStatus === null ? "—" : `HTTP ${check.httpStatus}`;
   return `${formatUtcTimestamp(check.fetchedAt)} · ${check.outcome} · ${http}`;
 }
@@ -452,6 +474,7 @@ function describeStrip(slots: readonly StripSlot[]): string {
     changed: 0,
     parser_suspect: 0,
     fetch_error: 0,
+    witness_ok: 0,
     empty: 0,
   };
   for (const slot of slots) {
@@ -461,7 +484,7 @@ function describeStrip(slots: readonly StripSlot[]): string {
       counts[slot.outcome] += 1;
     }
   }
-  return `${counts.unchanged} unchanged, ${counts.changed} changed, ${counts.parser_suspect} parser failed, ${counts.fetch_error} download failed, ${counts.empty} empty`;
+  return `${counts.unchanged} unchanged, ${counts.changed} changed, ${counts.witness_ok} read held, ${counts.parser_suspect} parser failed, ${counts.fetch_error} download failed, ${counts.empty} empty`;
 }
 
 function sameRun(anchor: HealthCheck, next: HealthCheck | undefined): boolean {

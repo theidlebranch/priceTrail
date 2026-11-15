@@ -29,17 +29,22 @@ export function SummaryCards({ summary }: { summary: SourceBoardView["summary"] 
           </p>
         </article>
         <article className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-muted-foreground">Parse success</h2>
+          <h2
+            className="text-muted-foreground"
+            title="Newest 24 on each pricing page. A matching snapshot counts."
+          >
+            Visits that held
+          </h2>
           <p className="mt-2 text-3xl leading-none font-semibold tracking-tight tabular-nums">
             {summary.successText}
           </p>
           <p className="mt-2 text-muted-foreground" title="Paused sources are left out.">
             {summary.checkCount === 0
-              ? "Last 24 checks"
-              : `${summary.okCount} of ${summary.checkCount} checks`}
+              ? "No visits yet"
+              : `${summary.okCount} of ${summary.checkCount} visits`}
           </p>
-          {summary.checkCount === 0 ? null : (
-            <p className="text-muted-foreground">Last 24 checks</p>
+          {summary.visitMix === null ? null : (
+            <p className="text-muted-foreground">{summary.visitMix}</p>
           )}
         </article>
       </div>

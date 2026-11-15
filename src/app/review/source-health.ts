@@ -76,6 +76,7 @@ const OUTCOME_LABEL: Record<FetchOutcome, string> = {
   changed: "Changed",
   parser_suspect: "Parser failed",
   fetch_error: "Download failed",
+  witness_ok: "Read held",
 };
 
 export type BoardFilter = "all" | "attention" | "healthy";
@@ -136,8 +137,13 @@ export type SourceBoardView = {
     successText: string;
     okCount: number;
     checkCount: number;
+    /**
+     * How the held visits split, inside the same newest-24 window.
+     * Null when that window has no held visit.
+     */
+    visitMix: string | null;
     newestCheck: TimedLabel | null;
-    /** "Nov 12 · next ≈ 18:00", or "No check yet" when nothing has run. */
+    /** "Nov 12 · next ≈ 18:00 UTC", or "No check yet" when nothing has run. */
     nextText: string;
   };
   entries: BoardEntry[];
@@ -281,6 +287,8 @@ export function toSourceBoardView(
   const attention = built.filter((entry) => entry.status === "attention");
   const entries = filter === "all" ? built : built.filter((entry) => entry.status === filter);
   let ok = 0;
+  let matched = 0;
+  let changed = 0;
   let total = 0;
   let newest: Date | null = null;
   for (const row of rows) {
@@ -289,11 +297,16 @@ export function toSourceBoardView(
     if (latest !== undefined && (newest === null || latest.fetchedAt.getTime() > newest.getTime())) {
       newest = latest.fetchedAt;
     }
-    // Paused sources stay on the board, but they are not part of the percent.
-    if (row.active !== true) {
+    // Paused sources stay on the board, and so do witness rows. Neither is
+    // part of the pricing-page percent. A witness strip is its own read.
+    if (row.active !== true || row.type === "aggregator") {
       continue;
     }
-    ok += checks.filter((check) => check.outcome === "unchanged" || check.outcome === "changed").length;
+    const matchedHere = checks.filter((check) => check.outcome === "unchanged").length;
+    const changedHere = checks.filter((check) => check.outcome === "changed").length;
+    matched += matchedHere;
+    changed += changedHere;
+    ok += matchedHere + changedHere;
     total += checks.length;
   }
 
@@ -316,6 +329,7 @@ export function toSourceBoardView(
       successText: total === 0 ? "—" : `${Math.round((ok / total) * 100)}%`,
       okCount: ok,
       checkCount: total,
+      visitMix: visitMix(matched, changed),
       newestCheck: newest === null ? null : timed(newest, clock, "checked at"),
       nextText: newest === null ? "No check yet" : nextRunText(newest),
     },
@@ -614,6 +628,7 @@ function historyCheck(check: HealthCheck, now: Date): HistoryCheckView {
 function outcomeTone(outcome: FetchOutcome): HealthTone {
   switch (outcome) {
     case "unchanged":
+    case "witness_ok":
       return "unchanged";
     case "changed":
       return "changed";
@@ -674,7 +689,8 @@ function readOutcome(value: string): FetchOutcome {
     value === "unchanged" ||
     value === "changed" ||
     value === "parser_suspect" ||
-    value === "fetch_error"
+    value === "fetch_error" ||
+    value === "witness_ok"
   ) {
     return value;
   }
@@ -689,6 +705,9 @@ function readArchive(value: string): ArchiveState {
 }
 
 function readHttpStatus(outcome: FetchOutcome, status: number | null): number | null {
+  if (outcome === "witness_ok") {
+    return null;
+  }
   if (outcome === "fetch_error") {
     if (status === null) {
       return null;
@@ -697,6 +716,12 @@ function readHttpStatus(outcome: FetchOutcome, status: number | null): number | 
       throw new Error(`HTTP status must be a whole number, got ${String(status)}`);
     }
     return status;
+  }
+  // A witness file stores no HTTP status, so a parse failure arrives
+  // here with none. An official parser failure still has a status, and
+  // that status still has to be 200-299.
+  if (outcome === "parser_suspect" && status === null) {
+    return null;
   }
   if (status === null) {
     throw new Error("a successful check needs an HTTP status");
@@ -712,6 +737,9 @@ function readNote(outcome: FetchOutcome, note: string | null): string | null {
     throw new Error("note is not text");
   }
   const trimmed = note?.trim() ?? "";
+  if (outcome === "witness_ok") {
+    return trimmed === "" ? null : trimmed;
+  }
   if (outcome === "parser_suspect" || outcome === "fetch_error") {
     if (trimmed === "") {
       throw new Error("a filed check was stored without a note");
@@ -732,6 +760,9 @@ function scheduleNote(
   row: { active: boolean; type: string },
   wired: ReadonlySet<string>,
 ): string | null {
+  if (row.type === "aggregator") {
+    return null;
+  }
   if (!wired.has(url)) {
     return NO_CHECKER;
   }
@@ -739,6 +770,20 @@ function scheduleNote(
     return WILL_NOT_DOWNLOAD;
   }
   return null;
+}
+
+/**
+ * The held visits inside the newest-24 window, split by what they stored.
+ * A matching snapshot is `unchanged`. A new snapshot is `changed`.
+ * Zero of both is null, because the card already says there is no visit.
+ */
+function visitMix(matched: number, changed: number): string | null {
+  const matchedText = matched === 0 ? null : `${matched} matched the last snapshot`;
+  const changedText = changed === 0 ? null : `${changed} stored a new one`;
+  if (matchedText !== null && changedText !== null) {
+    return `${matchedText} · ${changedText}`;
+  }
+  return matchedText ?? changedText;
 }
 
 function readWiredUrls(wiredUrls: readonly string[]): Set<string> {
@@ -797,7 +842,7 @@ function readArchiveUrl(value: string | null): string | null {
 
 function nextRunText(newest: Date): string {
   const next = new Date(newest.getTime() + HEALTH_CONFIG.CRON_INTERVAL_HOURS * 3_600_000);
-  return `${formatUtcCompact(newest).date} · next ≈ ${formatUtcCompact(next).clock}`;
+  return `${formatUtcCompact(newest).date} · next ≈ ${formatUtcCompact(next).clock} UTC`;
 }
 
 function timed(value: Date, now: Date, label: string): TimedLabel {

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import type { SourceBoardView } from "@/app/review/source-health";
-import { SOURCE_ROW_COLUMNS, SourceRow } from "@/components/source-health/source-row";
+import {
+  LAST_SNAPSHOT_HINT,
+  SOURCE_ROW_COLUMNS,
+  SourceRow,
+} from "@/components/source-health/source-row";
 import { StripLegend } from "@/components/source-health/strip-legend";
 import { SummaryCards } from "@/components/source-health/summary-cards";
 
@@ -23,16 +27,13 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
           Pages we fetch every 6 hours, parse and archive on Wayback. A warning here never
           publishes a price.
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4">
           <Link
             href="/review"
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             Review queue
           </Link>
-          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-            All times UTC
-          </span>
         </div>
       </header>
       <SummaryCards summary={view.summary} />
@@ -86,7 +87,7 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
             <span>Last 24 checks</span>
             <span>Last check</span>
             <span>Last change</span>
-            <span>Last snapshot</span>
+            <span title={LAST_SNAPSHOT_HINT}>Last snapshot</span>
             <span className="sr-only">Open</span>
           </div>
           {view.entries.map((entry) => (
@@ -94,10 +95,6 @@ export function SourcesBoard({ view }: { view: SourceBoardView }) {
           ))}
         </div>
       )}
-      <p className="mt-4 text-sm text-muted-foreground">
-        Wayback: archived, pending, or failed. A snapshot is stored when the parsed page
-        changes, even when today&apos;s price already matches the site.
-      </p>
     </div>
   );
 }
