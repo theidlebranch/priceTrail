@@ -180,13 +180,13 @@ describe("ModelDetail", () => {
           headlines: [{ label: "Input", amountText: "$2", change: null }],
           tiers: [
             {
-              label: "Up to 272,000 tokens",
+              label: "≤ 272,000 tokens",
               headlines: [{ label: "Input", amountText: "$2", change: null }],
               rows: [row("Input", "$2"), row("Output", "$12", "", "6×")],
               series: [shortSeries],
             },
             {
-              label: "Over 272,000 tokens",
+              label: "> 272,000 tokens",
               headlines: [{ label: "Input", amountText: "$4", change: null }],
               rows: [row("Input", "$4"), row("Output", "$18", "", "4.5×")],
               series: [longSeries],
@@ -220,18 +220,18 @@ describe("ModelDetail", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Up to 272,000 tokens", selected: true })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Over 272,000 tokens", selected: false })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "≤ 272,000 tokens", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "> 272,000 tokens", selected: false })).toBeTruthy();
     expect(screen.getAllByText("$2").length).toBeGreaterThan(0);
     expect(screen.getByText("$12")).toBeTruthy();
     expect(screen.queryByText("$4")).toBeNull();
     expect(screen.queryByText("$18")).toBeNull();
     expect(screen.getByRole("table", { name: "Input price history" }).textContent).toContain("$2");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Over 272,000 tokens" }));
+    fireEvent.click(screen.getByRole("tab", { name: "> 272,000 tokens" }));
 
-    expect(screen.getByRole("tab", { name: "Over 272,000 tokens", selected: true })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Up to 272,000 tokens", selected: false })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "> 272,000 tokens", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "≤ 272,000 tokens", selected: false })).toBeTruthy();
     expect(screen.getAllByText("$4").length).toBeGreaterThan(0);
     expect(screen.getByText("$18")).toBeTruthy();
     expect(screen.queryByText("$2")).toBeNull();
@@ -256,8 +256,8 @@ describe("ModelDetail", () => {
             sourceLabel: "Official pricing page",
             proof: MISSING_PROOF,
             components: [
-              row("Cache write (5 minutes)", "$1.25", "prompts over 200,000 tokens"),
-              row("Cache write (5 minutes)", "$1.00", "prompts up to 200,000 tokens"),
+              row("Cache write (5 minutes)", "$1.25", "> 200,000 tokens"),
+              row("Cache write (5 minutes)", "$1.00", "≤ 200,000 tokens"),
               row("Cache write (1 hour)", "$2"),
             ],
           },
@@ -267,7 +267,7 @@ describe("ModelDetail", () => {
 
     const section = screen.getByRole("heading", { name: "Price components" }).closest("section");
     expect(section?.textContent).toMatch(
-      /Cache write \(5 minutes\)[\s\S]*prompts over 200,000 tokens[\s\S]*\$1\.25[\s\S]*Cache write \(5 minutes\)[\s\S]*prompts up to 200,000 tokens[\s\S]*\$1\.00[\s\S]*Cache write \(1 hour\)[\s\S]*\$2/,
+      /Cache write \(5 minutes\)[\s\S]*> 200,000 tokens[\s\S]*\$1\.25[\s\S]*Cache write \(5 minutes\)[\s\S]*≤ 200,000 tokens[\s\S]*\$1\.00[\s\S]*Cache write \(1 hour\)[\s\S]*\$2/,
     );
   });
 
@@ -433,13 +433,13 @@ describe("ModelDetail", () => {
             sourceUrl: SOURCE,
             sourceLabel: "Official pricing page",
             proof: MISSING_PROOF,
-            components: [row("Input", "$0.50", "prompts up to 100,000 tokens", "0.5×")],
+            components: [row("Input", "$0.50", "≤ 100,000 tokens", "0.5×")],
           },
         })}
       />,
     );
 
-    expect(screen.getByText("prompts up to 100,000 tokens")).toBeTruthy();
+    expect(screen.getByText("≤ 100,000 tokens")).toBeTruthy();
     expect(screen.getByText("$0.50")).toBeTruthy();
     expect(screen.getByText("0.5×")).toBeTruthy();
   });
@@ -477,7 +477,7 @@ describe("ModelDetail", () => {
           history: {
             ...HISTORY,
             notes: [
-              "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+              "Input also has a price for ≤ 100,000 tokens, $0.50. It is not on this chart.",
             ],
           },
         })}
@@ -486,7 +486,7 @@ describe("ModelDetail", () => {
 
     expect(
       screen.getByText(
-        "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+        "Input also has a price for ≤ 100,000 tokens, $0.50. It is not on this chart.",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Input" })).toBeTruthy();

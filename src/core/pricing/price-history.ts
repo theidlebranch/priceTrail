@@ -734,16 +734,15 @@ export function rewriteUnstatedLongContext<T extends { dimension: string; condit
 
 export function contextHeading(key: ContextBoundKey, tokens: number): string {
   const count = formatTokens(tokens);
-  if (key === "promptTokensAtMost") {
-    return `Up to ${count} tokens`;
-  }
-  if (key === "promptTokensUnder") {
-    return `Under ${count} tokens`;
-  }
-  if (key === "promptTokensOver") {
-    return `Over ${count} tokens`;
-  }
-  return `At least ${count} tokens`;
+  const mark =
+    key === "promptTokensAtMost"
+      ? "≤"
+      : key === "promptTokensUnder"
+        ? "<"
+        : key === "promptTokensOver"
+          ? ">"
+          : "≥";
+  return `${mark} ${count} tokens`;
 }
 
 export function shortConditionLabel(condition: unknown): string {

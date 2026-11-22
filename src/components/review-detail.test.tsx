@@ -119,7 +119,7 @@ describe("ReviewDetail", () => {
             warningCount: 2,
             warningText: "This snapshot has 2 warnings.",
             rows: [
-              price({ conditionText: "prompts up to 100,000 tokens" }),
+              price({ conditionText: "≤ 100,000 tokens" }),
               price({
                 dimensionLabel: "Output",
                 amountText: "50",
@@ -139,7 +139,7 @@ describe("ReviewDetail", () => {
       "Note",
       "Row source",
     ]);
-    expect(screen.getByText("prompts up to 100,000 tokens")).toBeTruthy();
+    expect(screen.getByText("≤ 100,000 tokens")).toBeTruthy();
     expect(screen.getByText("Standard table")).toBeTruthy();
     expect(screen.getByText("This snapshot has 2 warnings.")).toBeTruthy();
   });

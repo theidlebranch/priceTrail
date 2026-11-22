@@ -1,7 +1,7 @@
 import { formatReviewTimestamp, parseOfficialCandidateId } from "@/app/review/review-list";
 
 export { parseOfficialCandidateId };
-import { PRICE_DIMENSION_LABELS } from "@/core/pricing/price-history";
+import { PRICE_DIMENSION_LABELS, contextHeading } from "@/core/pricing/price-history";
 import type { Condition } from "@/core/pricing/shape";
 import { componentsForConfirm, ReviewRefusal, type ConfirmPriceComponent } from "@/core/review/confirm-price";
 
@@ -185,16 +185,16 @@ function conditionText(condition: Condition | undefined): string | null {
   }
   const parts: string[] = [];
   if (condition.promptTokensAtMost !== undefined) {
-    parts.push(`prompts up to ${condition.promptTokensAtMost} tokens`);
+    parts.push(contextHeading("promptTokensAtMost", condition.promptTokensAtMost));
   }
   if (condition.promptTokensOver !== undefined) {
-    parts.push(`prompts over ${condition.promptTokensOver} tokens`);
+    parts.push(contextHeading("promptTokensOver", condition.promptTokensOver));
   }
   if (condition.promptTokensUnder !== undefined) {
-    parts.push(`prompts under ${condition.promptTokensUnder} tokens`);
+    parts.push(contextHeading("promptTokensUnder", condition.promptTokensUnder));
   }
   if (condition.promptTokensAtLeast !== undefined) {
-    parts.push(`prompts at least ${condition.promptTokensAtLeast} tokens`);
+    parts.push(contextHeading("promptTokensAtLeast", condition.promptTokensAtLeast));
   }
   if (condition.longContext === true) {
     parts.push("long context, cutoff not stated");

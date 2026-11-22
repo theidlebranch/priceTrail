@@ -62,7 +62,7 @@ describe("toReviewDetailView", () => {
         {
           dimensionLabel: "Input",
           amountText: "10.50",
-          conditionText: "prompts up to 100,000 tokens",
+          conditionText: "≤ 100,000 tokens",
           scheduleText: null,
           note: null,
           sourceText: "official",

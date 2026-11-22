@@ -91,7 +91,7 @@ export type ModelDetailHeadline = {
  *
  * label is null when the model has a single price. The page then draws
  * no tier tabs. A short and a long price each get the stored cutoff,
- * such as "Up to 272,000 tokens".
+ * such as "≤ 272,000 tokens".
  */
 export type ModelDetailTier = {
   label: string | null;
@@ -788,11 +788,10 @@ function conditionLabel(condition: unknown): string {
     throw new Error("condition is not a known tier");
   }
 
-  const tokens = new Intl.NumberFormat("en-US").format(count);
   if (key === "promptTokensAtMost") {
-    return `prompts up to ${tokens} tokens`;
+    return contextHeading(key, count);
   }
-  return `prompts over ${tokens} tokens`;
+  return contextHeading("promptTokensOver", count);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

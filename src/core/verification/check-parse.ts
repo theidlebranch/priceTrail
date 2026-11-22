@@ -1,3 +1,4 @@
+import { contextHeading } from "@/core/pricing/price-history";
 import type { Condition, NormalizedPrice } from "@/core/pricing/shape";
 
 /**
@@ -130,16 +131,16 @@ function groupLabel(row: NormalizedPrice): string {
   const parts: string[] = [];
   const condition = row.condition;
   if (condition?.promptTokensAtMost !== undefined) {
-    parts.push(`at most ${condition.promptTokensAtMost} prompt tokens`);
+    parts.push(contextHeading("promptTokensAtMost", condition.promptTokensAtMost));
   }
   if (condition?.promptTokensOver !== undefined) {
-    parts.push(`over ${condition.promptTokensOver} prompt tokens`);
+    parts.push(contextHeading("promptTokensOver", condition.promptTokensOver));
   }
   if (condition?.promptTokensUnder !== undefined) {
-    parts.push(`under ${condition.promptTokensUnder} prompt tokens`);
+    parts.push(contextHeading("promptTokensUnder", condition.promptTokensUnder));
   }
   if (condition?.promptTokensAtLeast !== undefined) {
-    parts.push(`at least ${condition.promptTokensAtLeast} prompt tokens`);
+    parts.push(contextHeading("promptTokensAtLeast", condition.promptTokensAtLeast));
   }
   if (row.validFrom) {
     parts.push(`from ${row.validFrom}`);

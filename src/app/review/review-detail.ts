@@ -1,5 +1,5 @@
 import { formatReviewTimestamp, parseReviewItemId } from "@/app/review/review-list";
-import { PRICE_DIMENSION_LABELS } from "@/core/pricing/price-history";
+import { PRICE_DIMENSION_LABELS, contextHeading } from "@/core/pricing/price-history";
 import { normalizedPriceSchema, type Condition, type NormalizedPrice } from "@/core/pricing/shape";
 
 /**
@@ -223,16 +223,16 @@ function conditionText(condition: Condition | undefined): string | null {
   }
   const parts: string[] = [];
   if (condition.promptTokensAtMost !== undefined) {
-    parts.push(`prompts up to ${formatCount(condition.promptTokensAtMost)} tokens`);
+    parts.push(contextHeading("promptTokensAtMost", condition.promptTokensAtMost));
   }
   if (condition.promptTokensOver !== undefined) {
-    parts.push(`prompts over ${formatCount(condition.promptTokensOver)} tokens`);
+    parts.push(contextHeading("promptTokensOver", condition.promptTokensOver));
   }
   if (condition.promptTokensUnder !== undefined) {
-    parts.push(`prompts under ${formatCount(condition.promptTokensUnder)} tokens`);
+    parts.push(contextHeading("promptTokensUnder", condition.promptTokensUnder));
   }
   if (condition.promptTokensAtLeast !== undefined) {
-    parts.push(`prompts at least ${formatCount(condition.promptTokensAtLeast)} tokens`);
+    parts.push(contextHeading("promptTokensAtLeast", condition.promptTokensAtLeast));
   }
   if (condition.longContext === true) {
     parts.push("long context, cutoff not stated");
@@ -260,10 +260,6 @@ function scheduleText(row: NormalizedPrice): string | null {
     return `through ${row.validUntil}`;
   }
   return null;
-}
-
-function formatCount(count: number): string {
-  return new Intl.NumberFormat("en-US").format(count);
 }
 
 function assertCalendarDate(value: string): void {

@@ -219,17 +219,17 @@ describe("toModelDetailView", () => {
     expect(view.price?.groups).toEqual([
       { heading: null, rows: [priceRow("Cache write (1 hour)", "$2")] },
       {
-        heading: "Up to 200,000 tokens",
+        heading: "≤ 200,000 tokens",
         rows: [priceRow("Cache write (5 minutes)", "$1")],
       },
       {
-        heading: "Over 200,000 tokens",
+        heading: "> 200,000 tokens",
         rows: [priceRow("Cache write (5 minutes)", "$1.25")],
       },
     ]);
     expect(view.tiers.map((tier) => tier.label)).toEqual([
-      "Up to 200,000 tokens",
-      "Over 200,000 tokens",
+      "≤ 200,000 tokens",
+      "> 200,000 tokens",
     ]);
     expect(view.tiers[0]?.rows.map((row) => row.dimensionLabel)).toEqual([
       "Cache write (1 hour)",
@@ -353,8 +353,8 @@ describe("toModelDetailView", () => {
 
     expect(view.price?.components).toEqual([
       priceRow("Input", "$1"),
-      priceRow("Input", "$0.50", "prompts up to 100,000 tokens", "0.5×"),
-      priceRow("Output", "$2", "prompts over 200,000 tokens", "2×"),
+      priceRow("Input", "$0.50", "≤ 100,000 tokens", "0.5×"),
+      priceRow("Output", "$2", "> 200,000 tokens", "2×"),
     ]);
     expect(view.headlines).toEqual([{ label: "Input", amountText: "$1", change: null }]);
   });
@@ -380,12 +380,12 @@ describe("toModelDetailView", () => {
 
     expect(view.headlines).toEqual([{ label: "Input", amountText: "$2", change: null }]);
     expect(view.price?.groups).toEqual([
-      { heading: "Up to 272,000 tokens", rows: [priceRow("Input", "$2")] },
-      { heading: "Over 272,000 tokens", rows: [priceRow("Input", "$4")] },
+      { heading: "≤ 272,000 tokens", rows: [priceRow("Input", "$2")] },
+      { heading: "> 272,000 tokens", rows: [priceRow("Input", "$4")] },
     ]);
     expect(view.tiers.map((tier) => tier.label)).toEqual([
-      "Up to 272,000 tokens",
-      "Over 272,000 tokens",
+      "≤ 272,000 tokens",
+      "> 272,000 tokens",
     ]);
     expect(view.tiers[0]?.headlines).toEqual([{ label: "Input", amountText: "$2", change: null }]);
     expect(view.tiers[1]?.headlines).toEqual([{ label: "Input", amountText: "$4", change: null }]);
@@ -440,8 +440,8 @@ describe("toModelDetailView", () => {
       { label: "Output", amountText: "$10", change: null },
     ]);
     expect(view.tiers.map((tier) => tier.label)).toEqual([
-      "Up to 200,000 tokens",
-      "Over 200,000 tokens",
+      "≤ 200,000 tokens",
+      "> 200,000 tokens",
     ]);
     expect(view.tiers[0]?.headlines).toEqual([
       { label: "Input", amountText: "$1.25", change: null },
@@ -460,8 +460,8 @@ describe("toModelDetailView", () => {
       { id: "output:longContext", label: "Output" },
     ]);
     expect(view.price?.groups?.map((group) => group.heading)).toEqual([
-      "Up to 200,000 tokens",
-      "Over 200,000 tokens",
+      "≤ 200,000 tokens",
+      "> 200,000 tokens",
     ]);
     expect(view.price?.groups?.[0]?.rows.map((row) => row.dimensionLabel)).toEqual([
       "Input",
@@ -699,7 +699,7 @@ describe("toModelDetailView", () => {
     expect(view.history.series).toEqual([openSeries("input", "Input", "1", 1)]);
     expect(view.history.skipped).toEqual([]);
     expect(view.history.notes).toEqual([
-      "Input also has a price for prompts up to 100,000 tokens, $0.50. It is not on this chart.",
+      "Input also has a price for ≤ 100,000 tokens, $0.50. It is not on this chart.",
     ]);
     expect(view.price?.components[0]?.dimensionLabel).toBe("Input");
   });
