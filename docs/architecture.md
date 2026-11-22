@@ -316,6 +316,7 @@ Reuse what's already known from day-job work, with no new tools to learn mid-pro
 1. **Change feed** (RSS + JSON): "Model X input price dropped on this date, here's the proof." The data model already supports it, and it is probably the early hook for users more than browsing.
 2. **Wayback backfill** script plus changelog/announcement sources to seed history before launch (history is the differentiator, and day-one history is otherwise empty; backfilled data is coarse and must be labeled `observed`/approximate).
 3. Cloud platform APIs (Azure/AWS/Google) as the most trustworthy sources.
+4. **Personal notifications.** A person should hear about a change without signing in to look. Email, a Slack message, a Discord message, and a notification bubble on the site. This one is required, even if it takes longer than the small site-wide webhook. The decision is [docs/adr/0002-personal-notifications.md](adr/0002-personal-notifications.md). The step is 51 in [docs/build-plan.md](build-plan.md).
 
 Rule of thumb while building: if a decision only matters once you have 6+ providers or regional pricing, don't make it yet. The exception is the shape of the core fact (components, effective-date honesty, model identity), which is why those are in the schema now.
 
