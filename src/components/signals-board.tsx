@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { SignalBoardView, SignalsView } from "@/app/review/signals-view";
 import {
-  SignalRejectForm,
-  type RejectCandidateState,
-} from "@/components/signal-reject-form";
+  SignalCandidateForm,
+  type DecideCandidateState,
+} from "@/components/signal-candidate-form";
 
 /**
  * The two witness jobs. Findings stay on the detail page.
@@ -84,20 +84,20 @@ function JobBody({
 }
 
 /**
- * One witness's findings. Reject is the only decision.
- * Approving a name is a later step. The page passes the action,
- * so this file does not open a database.
+ * One witness's findings. Approve adds the model with no price.
+ * Reject leaves it out. The page passes the action, so this file
+ * does not open a database.
  */
 export function SignalsBoard({
   view,
-  rejectAction,
+  action,
   heading = "section",
 }: {
   view: SignalsView;
-  rejectAction: (
-    previous: RejectCandidateState,
+  action: (
+    previous: DecideCandidateState,
     formData: FormData,
-  ) => Promise<RejectCandidateState>;
+  ) => Promise<DecideCandidateState>;
   heading?: "page" | "section";
 }) {
   const titleClass =
@@ -133,7 +133,7 @@ export function SignalsBoard({
               <li key={row.id} className="border-b border-border px-4 py-4 last:border-b-0">
                 <p className="font-mono text-sm">{row.label}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
-                <SignalRejectForm candidateId={row.id} action={rejectAction} />
+                <SignalCandidateForm candidateId={row.id} action={action} />
               </li>
             ))}
           </FindingList>

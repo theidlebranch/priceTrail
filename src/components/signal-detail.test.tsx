@@ -12,7 +12,7 @@ afterEach(() => {
 const READ = new Date("2026-11-13T16:30:00.000Z");
 
 describe("SignalDetail", () => {
-  it("keeps Reject on the findings and a failed run in the history", () => {
+  it("keeps Approve and Reject on a new name, and a failed run in the history", () => {
     const findings = toSignalsView(page(), OPENROUTER_COPY);
     const history = toSignalHistory(
       [
@@ -27,11 +27,17 @@ describe("SignalDetail", () => {
       8,
       null,
     );
-    render(<SignalDetail findings={findings} history={history} rejectAction={rejectAction} />);
+    render(<SignalDetail findings={findings} history={history} action={rejectAction} />);
 
     expect(screen.getByRole("link", { name: "Signals" }).getAttribute("href")).toBe("/review/signals");
     expect(screen.getByRole("heading", { level: 1, name: "OpenRouter" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve" }).getAttribute("value")).toBe("approve");
+    expect(screen.getByRole("button", { name: "Reject" }).getAttribute("value")).toBe("reject");
+    expect(
+      screen.getByText(
+        "If this name is not on the official pricing page, the next visit for that lab is treated as a broken page until the name appears.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Run history" })).toBeTruthy();
     expect(screen.getByText("Could not download")).toBeTruthy();
     expect(screen.getByText("download failed")).toBeTruthy();

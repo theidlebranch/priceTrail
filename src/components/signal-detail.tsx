@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { SignalHistoryView, SignalsView } from "@/app/review/signals-view";
 import { SignalsBoard } from "@/components/signals-board";
-import type { RejectCandidateState } from "@/components/signal-reject-form";
+import type { DecideCandidateState } from "@/components/signal-candidate-form";
 
 /**
  * One witness. The findings are the last good read. The history keeps
@@ -11,14 +11,14 @@ import type { RejectCandidateState } from "@/components/signal-reject-form";
 export function SignalDetail({
   findings,
   history,
-  rejectAction,
+  action,
 }: {
   findings: SignalsView;
   history: SignalHistoryView;
-  rejectAction: (
-    previous: RejectCandidateState,
+  action: (
+    previous: DecideCandidateState,
     formData: FormData,
-  ) => Promise<RejectCandidateState>;
+  ) => Promise<DecideCandidateState>;
 }) {
   return (
     <div>
@@ -28,7 +28,7 @@ export function SignalDetail({
         </Link>
       </nav>
       <div className="mt-4">
-        <SignalsBoard view={findings} rejectAction={rejectAction} heading="page" />
+        <SignalsBoard view={findings} action={action} heading="page" />
       </div>
       <section className="mt-12">
         <h2 className="text-base font-medium">Run history</h2>

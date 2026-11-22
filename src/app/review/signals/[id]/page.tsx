@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { parseHistoryCursor, parseSourceId } from "@/app/review/source-health";
 import { toSignalHistory, toSignalsView, witnessCopyForUrl } from "@/app/review/signals-view";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
-import { rejectCandidateAction } from "@/app/review/reject-candidate-action";
+import { decideCandidateAction } from "@/app/review/decide-candidate-action";
 import { SignalDetail } from "@/components/signal-detail";
 import { createDb } from "@/server/db/client";
 import {
@@ -81,7 +81,7 @@ async function SignalHistoryLoader({
       <SignalDetail
         findings={toSignalsView(findings, witnessCopyForUrl(source.url))}
         history={toSignalHistory(history, source.id, cursor)}
-        rejectAction={rejectCandidateAction}
+        action={decideCandidateAction}
       />
     );
   } finally {

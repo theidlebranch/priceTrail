@@ -406,7 +406,7 @@ export const verificationFlags = pgTable("verification_flags", {
  * A model name a witness saw that we do not track yet.
  * One row per source and slug. Rejected stays rejected so the name
  * does not come back. An official card can be added and published.
- * A witness card still has Reject only.
+ * Approve on a witness card adds the model and does not publish a price.
  */
 export const candidateStatus = pgEnum("candidate_status", [
   "pending_review",
