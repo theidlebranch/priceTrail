@@ -32,11 +32,23 @@ erDiagram
   sources ||--o{ model_signals : "source_id"
   models ||--o{ model_signals : "model_id"
   sources ||--o{ fetch_triggers : "source_id"
+  requests {
+    bigint id PK
+    text kind
+    text lab_name
+    text lab_name_key
+    text suggested_by
+    timestamptz suggested_at
+    text status
+    text reviewed_by
+    timestamptz reviewed_at
+    text review_note
+  }
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. Those rows do not publish a price.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -320,3 +332,16 @@ The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The chi
 | 1 | 1 | aggregator_disagreement | 2026-11-13T16:30:00Z |  |
 
 `source_id` 1 is the Anthropic pricing page from the first story, not the LiteLLM row. `reason` `aggregator_disagreement` means a witness amount differed from the open price. `created_at` is the witness read that stored the flag. `processed_at` is blank until that official visit is filed. A second pending row for source 1 is rejected.
+
+## A lab suggestion is not a lab
+
+A signed-in visitor can ask us to track a lab we do not have yet. That is one `requests` row. Accepting it records the reviewer. It does not insert a `labs` row, a source, or a schedule. The rows below are a reading aid. They are not inserted.
+
+### requests
+
+| id | kind | lab_name | lab_name_key | suggested_by | suggested_at | status | reviewed_by | reviewed_at | review_note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | lab | Mistral | mistral | google:123 | 2026-11-22T15:00:00Z | pending |  |  |  |
+| 2 | lab | Cohere | cohere | github:42 | 2026-11-22T15:10:00Z | accepted | google:9 | 2026-11-22T16:00:00Z | Worth a parser later. |
+
+`kind` `lab` is a lab name. `lab_name` is what the visitor typed. `lab_name_key` is that name trimmed and lowercased, so a second pending " mistral " is the same suggestion. `suggested_by` is `google:<account id>` or `github:<numeric id>`. `status` `pending` has no reviewer stamp. `accepted` and `declined` store `reviewed_by`, `reviewed_at`, and `review_note`. Row 2 is accepted and still has no `labs` row.

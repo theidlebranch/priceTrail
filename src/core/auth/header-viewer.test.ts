@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headerViewer, homeHref, visitorHomePath, type HeaderAuthSession } from "./header-viewer";
+import { headerViewer, homeHref, signedInAccountId, visitorHomePath, type HeaderAuthSession } from "./header-viewer";
 
 const google = { reviewer: { provider: "google", accountId: "123" } };
 const allow = new Set(["google:123"]);
@@ -109,5 +109,19 @@ describe("headerViewer", () => {
   it("throws when a reviewer waiting count is not a whole number", () => {
     expect(() => view({ allowlist: allow, waiting: -1 })).toThrow(/whole number/);
     expect(() => view({ allowlist: allow, waiting: 1.5 })).toThrow(/whole number/);
+  });
+});
+
+describe("signedInAccountId", () => {
+  it("returns the provider account id for a signed-in visitor", () => {
+    expect(signedInAccountId(google)).toBe("google:123");
+    expect(
+      signedInAccountId({ reviewer: { provider: "github", accountId: "42" } }),
+    ).toBe("github:42");
+  });
+
+  it("returns null for a guest cookie", () => {
+    expect(signedInAccountId(null)).toBeNull();
+    expect(signedInAccountId({ user: { name: "Ada" } })).toBeNull();
   });
 });

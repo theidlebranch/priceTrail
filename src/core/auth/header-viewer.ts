@@ -88,6 +88,23 @@ export function headerViewer(input: {
   return { role: "reviewer", label, waiting: input.waiting };
 }
 
+/**
+ * The account id for a signed-in visitor, or null when they are a guest.
+ * A cookie with a name and no stable account id is a guest. Suggesting a
+ * lab stores this id. It does not check the reviewer allowlist.
+ */
+export function signedInAccountId(session: HeaderAuthSession): string | null {
+  try {
+    const account = reviewSessionFromAuthResult(session);
+    if (account == null) {
+      return null;
+    }
+    return reviewerId(account.provider, account.accountId);
+  } catch {
+    return null;
+  }
+}
+
 function accountLabel(session: HeaderAuthSession): string {
   const email = session?.user?.email?.trim() ?? "";
   if (email.length > 0) {

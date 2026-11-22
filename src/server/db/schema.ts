@@ -492,3 +492,47 @@ export const fetchTriggers = pgTable(
       .where(sql`${table.processedAt} IS NULL`),
   ],
 );
+
+/**
+ * A suggestion from a signed-in visitor.
+ *
+ * kind is lab for this step. A later step can add a page URL as another
+ * kind on this same table. lab_name is the name they typed. lab_name_key
+ * is that name trimmed and lowercased, so "OpenAI" and " openai " are
+ * one pending suggestion. Accepting a row does not insert a lab, a
+ * source, or a schedule. status pending has no reviewer stamp. accepted
+ * and declined store the reviewer, the time, and a note. This table
+ * does not publish a price.
+ */
+export const requestKind = pgEnum("request_kind", ["lab"]);
+
+export const requestStatus = pgEnum("request_status", ["pending", "accepted", "declined"]);
+
+export const requests = pgTable(
+  "requests",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    kind: requestKind("kind").notNull(),
+    labName: text("lab_name").notNull(),
+    labNameKey: text("lab_name_key").notNull(),
+    suggestedBy: text("suggested_by").notNull(),
+    suggestedAt: timestamp("suggested_at", { withTimezone: true }).notNull(),
+    status: requestStatus("status").notNull().default("pending"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+  },
+  (table) => [
+    uniqueIndex("requests_one_pending_lab")
+      .on(table.kind, table.labNameKey)
+      .where(sql`${table.status} = 'pending'`),
+    check(
+      "requests_lab_name_key_matches_name",
+      sql`${table.kind} = 'lab' AND length(btrim(${table.labName})) > 0 AND ${table.labNameKey} = lower(btrim(${table.labName})) AND length(btrim(${table.suggestedBy})) > 0`,
+    ),
+    check(
+      "requests_decision_matches_status",
+      sql`(${table.status} = 'pending' AND ${table.reviewedBy} IS NULL AND ${table.reviewedAt} IS NULL AND ${table.reviewNote} IS NULL) OR (${table.status} <> 'pending' AND ${table.reviewedBy} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.reviewNote} IS NOT NULL AND length(btrim(${table.reviewNote})) > 0)`,
+    ),
+  ],
+);
