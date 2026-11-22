@@ -21,6 +21,17 @@ export type HeaderViewer =
   | { role: "member"; label: string }
   | { role: "reviewer"; label: string; waiting: number | null };
 
+/**
+ * Where the logo and the home URL send this person.
+ *
+ * A guest still gets the marketing page. A member or a reviewer already
+ * has an account, so `/` would only repeat that page. Following is the
+ * signed-in home, even while that page is still a placeholder.
+ */
+export function homeHref(role: HeaderViewer["role"]): "/" | "/following" {
+  return role === "guest" ? "/" : "/following";
+}
+
 export function headerViewer(input: {
   secretConfigured: boolean;
   session: HeaderAuthSession;

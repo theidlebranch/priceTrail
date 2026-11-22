@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HeaderViewer } from "@/core/auth/header-viewer";
 import { FinalCtaSection } from "@/components/landing-page/final-cta-section";
@@ -9,6 +9,21 @@ import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
 const pathname = vi.hoisted(() => ({ current: "/" }));
 const guest: HeaderViewer = { role: "guest" };
 const member: HeaderViewer = { role: "member", label: "ada@example.com" };
+
+function matchMediaStub(matches: boolean): typeof window.matchMedia {
+  return ((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent() {
+      return false;
+    },
+  })) as typeof window.matchMedia;
+}
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname.current,
@@ -125,25 +140,37 @@ describe("SiteHeader", () => {
   });
 
   it("shows the signed-in links, search, and account menu", () => {
+    pathname.current = "/following";
     render(<SiteHeader viewer={member} />);
 
-    expect(screen.getByRole("link", { name: "PriceTrail home" }).getAttribute("href")).toBe(
-      "/following",
-    );
-    expect(screen.getByRole("link", { name: "Following" }).getAttribute("href")).toBe("/following");
-    const alertLinks = screen.getAllByRole("link", { name: "Alerts" });
-    expect(alertLinks.length).toBeGreaterThan(0);
-    for (const link of alertLinks) {
-      expect(link.getAttribute("href")).toBe("/alerts");
+    const home = screen.getAllByRole("link", { name: "PriceTrail home" });
+    expect(home.length).toBeGreaterThan(0);
+    for (const link of home) {
+      expect(link.getAttribute("href")).toBe("/following");
     }
-    expect(screen.getByRole("searchbox", { name: "Search models" }).getAttribute("name")).toBe("q");
+    expect(document.querySelector(".signed-rail")).toBeTruthy();
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "AI model pricing, with receipts." })).toBeNull();
+    const following = screen.getByRole("link", { name: "Following" });
+    expect(following.getAttribute("href")).toBe("/following");
+    expect(following.getAttribute("aria-current")).toBe("page");
+    expect(following.className).toContain("bg-primary/10");
+    expect(screen.getByRole("link", { name: "Models" }).className).not.toContain("bg-primary/10");
+    const alerts = screen.getByRole("link", { name: "Alerts" });
+    expect(alerts.getAttribute("href")).toBe("/alerts");
+    expect(screen.getByRole("button", { name: "Search pages" })).toBeTruthy();
+    expect(screen.getByText("Member").className).toContain("bg-primary");
     expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
     expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
+    expect(screen.getByText("ada@example.com")).toBeTruthy();
+    expect(screen.getByText("Member")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Theme:/ })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Account" }));
 
     expect(screen.getByText("ada@example.com")).toBeTruthy();
     expect(screen.getByText("Member")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Theme:/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Alerts and channels" }).getAttribute("href")).toBe(
       "/alerts",
     );
@@ -156,7 +183,67 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
-  it("adds Review and the second row for a reviewer, and hides an empty count", () => {
+  it("finds a page from the rail and hides the rail from the keyboard", () => {
+    pathname.current = "/following";
+    const { rerender } = render(<SiteHeader viewer={member} />);
+    const previousMatchMedia = window.matchMedia;
+
+    fireEvent.click(screen.getByRole("button", { name: "Search pages" }));
+    const dialog = screen.getByRole("dialog", { name: "Search pages" });
+    expect(within(dialog).queryByRole("link", { name: "Queue" })).toBeNull();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search pages" }), {
+      target: { value: "receipt" },
+    });
+    expect(within(dialog).getByRole("link", { name: "Receipts" }).getAttribute("href")).toBe(
+      "/receipts",
+    );
+    expect(within(dialog).queryByRole("link", { name: "Following" })).toBeNull();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Search pages" })).toBeNull();
+
+    window.matchMedia = matchMediaStub(false);
+    try {
+      fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+      expect(screen.getByRole("navigation", { name: "Mobile" })).toBeTruthy();
+      fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+      expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
+
+      window.matchMedia = matchMediaStub(true);
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      expect(screen.getByRole("dialog", { name: "Search pages" })).toBeTruthy();
+      fireEvent.keyDown(window, { key: "b", metaKey: true });
+      expect(document.querySelector(".signed-rail")?.className).toContain("rail-closed");
+
+      pathname.current = "/models";
+      rerender(<SiteHeader viewer={member} />);
+      expect(document.querySelector(".signed-rail")?.className).toContain("rail-closed");
+      expect(screen.queryByRole("dialog", { name: "Search pages" })).toBeNull();
+      expect(screen.getByRole("link", { name: "Following" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Models" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Search pages" })).toBeTruthy();
+
+      fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+      expect(document.querySelector(".signed-rail")?.className).not.toContain("rail-closed");
+    } finally {
+      window.matchMedia = previousMatchMedia;
+    }
+  });
+
+  it("opens the signed-in menu without the marketing links", () => {
+    render(<SiteHeader viewer={member} />);
+
+    expect(screen.queryByRole("navigation", { name: "Mobile" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const mobile = screen.getByRole("navigation", { name: "Mobile" });
+    expect(mobile.textContent).toContain("Following");
+    expect(mobile.textContent).toContain("Models");
+    expect(mobile.textContent).not.toContain("Create account");
+    expect(mobile.textContent).not.toContain("How it works");
+    expect(mobile.textContent).not.toContain("AI model pricing, with receipts.");
+  });
+
+  it("adds Review and the review links for a reviewer, and hides an empty count", () => {
     pathname.current = "/review/sources";
     const { rerender } = render(
       <SiteHeader viewer={{ role: "reviewer", label: "you@example.com", waiting: 0 }} />,
@@ -166,11 +253,21 @@ describe("SiteHeader", () => {
     expect(review.getAttribute("href")).toBe("/review");
     expect(review.getAttribute("aria-current")).toBe("page");
     expect(review.textContent).toBe("Review");
-    fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    expect(screen.getByText("Reviewer")).toBeTruthy();
+    expect(review.className).toContain("bg-primary/10");
+    expect(screen.getByText("you@example.com")).toBeTruthy();
+    expect(screen.getByText("Reviewer").className).toContain("bg-primary");
     expect(screen.queryByText("Member")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Search pages" }));
+    const pages = screen.getByRole("dialog", { name: "Search pages" });
+    expect(within(pages).getByRole("link", { name: "Queue" }).getAttribute("href")).toBe("/review");
+    expect(within(pages).getByRole("link", { name: "Price reports" }).getAttribute("href")).toBe(
+      "/review/reports",
+    );
+    fireEvent.keyDown(pages, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Search pages" })).toBeNull();
 
     const tabs = screen.getByRole("navigation", { name: "Review" });
+    expect(tabs.className).toContain("border-l");
     expect(tabs.textContent).toContain("Queue");
     expect(tabs.textContent).toContain("Sources");
     expect(tabs.textContent).toContain("Signals");
@@ -182,9 +279,12 @@ describe("SiteHeader", () => {
     pathname.current = "/models";
     rerender(<SiteHeader viewer={{ role: "reviewer", label: "you@example.com", waiting: 3 }} />);
 
-    expect(screen.queryByRole("navigation", { name: "Review" })).toBeNull();
     const counted = screen.getByRole("link", { name: /^Review/ });
+    expect(counted.getAttribute("aria-current")).toBeNull();
     expect(counted.textContent?.replace(/\s+/g, "")).toBe("Review3");
+    expect(screen.getByRole("navigation", { name: "Review" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sources" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "AI model pricing, with receipts." })).toBeNull();
   });
 });
 

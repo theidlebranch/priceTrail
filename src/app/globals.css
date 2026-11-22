@@ -136,8 +136,29 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+/* The page search focuses its field as soon as it opens. A selected
+   row already changes background, so the extra ring stays off in
+   this dialog only. */
+[data-page-search] :is(a, input):focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* 15rem matches the open rail (w-60). 4rem matches the closed rail (w-16),
+   which keeps the icons on screen. The rail is position:fixed, so this
+   padding is what keeps the page beside it. Phones open the rail as a
+   menu, and the page stays full width. */
+@media (min-width: 64rem) {
+  .shell:has(.signed-rail:not(.rail-closed)) .page-column {
+    padding-left: 15rem;
+  }
+
+  .shell:has(.signed-rail.rail-closed) .page-column {
+    padding-left: 4rem;
   }
 }

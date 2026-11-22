@@ -1,10 +1,35 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Menu, UserRound, X } from "lucide-react";
-import type { HeaderViewer } from "@/core/auth/header-viewer";
+import {
+  Bell,
+  Bookmark,
+  Boxes,
+  ClipboardList,
+  Database,
+  Flag,
+  Inbox,
+  ListTodo,
+  Menu,
+  PenLine,
+  Radio,
+  Receipt,
+  Search,
+  Settings,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { homeHref, type HeaderViewer } from "@/core/auth/header-viewer";
 import { isProtectedReviewPath } from "@/core/auth/review-access";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
@@ -17,19 +42,19 @@ const guestPageLinks = [
 
 const landingHowItWorks = { label: "How it works", href: "#how-it-works" };
 
-const memberLinks = [
-  { label: "Following", href: "/following" },
-  { label: "Models", href: "/models" },
-  { label: "Receipts", href: "/receipts" },
-  { label: "Alerts", href: "/alerts" },
+const memberLinks: RailLink[] = [
+  { label: "Following", href: "/following", icon: Bookmark },
+  { label: "Models", href: "/models", icon: Boxes },
+  { label: "Receipts", href: "/receipts", icon: Receipt },
+  { label: "Alerts", href: "/alerts", icon: Bell },
 ];
 
-const reviewTabs = [
-  { label: "Queue", href: "/review" },
-  { label: "Sources", href: "/review/sources" },
-  { label: "Signals", href: "/review/signals" },
-  { label: "Requests", href: "/review/requests" },
-  { label: "Price reports", href: "/review/reports" },
+const reviewTabs: RailLink[] = [
+  { label: "Queue", href: "/review", icon: ListTodo },
+  { label: "Sources", href: "/review/sources", icon: Database },
+  { label: "Signals", href: "/review/signals", icon: Radio },
+  { label: "Requests", href: "/review/requests", icon: Inbox },
+  { label: "Price reports", href: "/review/reports", icon: Flag },
 ];
 
 const accountLinks = [
@@ -39,86 +64,65 @@ const accountLinks = [
   { label: "Account settings", href: "/account" },
 ];
 
+const accountPageLinks: RailLink[] = [
+  { label: "Contributions", href: "/contributions", icon: PenLine },
+  { label: "Account settings", href: "/account", icon: Settings },
+];
+
 type HeaderLink = { label: string; href: string };
+type RailLink = HeaderLink & { icon: LucideIcon };
+type SignedInViewer = Exclude<HeaderViewer, { role: "guest" }>;
+
+function pagesFor(viewer: SignedInViewer): RailLink[] {
+  const review = viewer.role === "reviewer" ? reviewTabs : [];
+  return [...memberLinks, ...review, ...accountPageLinks];
+}
+
+function isWideScreen(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(min-width: 64rem)").matches;
+}
 
 /**
  * The bar visitors see. The server passes who they are. This file only
- * draws that. The fallback passes a guest and an empty path, so no link
- * is current and the menu button does nothing until the real bar replaces it.
+ * draws that. A guest keeps the top bar. A member or a reviewer gets a
+ * left rail instead, and the same links open in a menu on a phone.
+ * The fallback passes a guest and an empty path, so no link is current
+ * and the menu button does nothing until the real bar replaces it.
  */
-function SiteHeaderBar({
-  viewer,
+function GuestHeaderBar({
   pathname,
   menuOpen,
-  accountOpen,
-  signOut,
   onToggleMenu,
-  onToggleAccount,
   onNavigate,
 }: {
-  viewer: HeaderViewer;
   pathname: string;
   menuOpen: boolean;
-  accountOpen: boolean;
-  signOut?: () => Promise<void>;
   onToggleMenu?: () => void;
-  onToggleAccount?: () => void;
   onNavigate?: () => void;
 }) {
-  const signedIn = viewer.role !== "guest";
-  const links = linksFor(viewer, pathname);
-  const reviewOpen = viewer.role === "reviewer" && isProtectedReviewPath(pathname);
-  const home = signedIn ? "/following" : "/";
-  const accountMenuId = useId();
+  const links = guestLinks(pathname);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-10">
-        <Logo href={home} />
+        <Logo href={homeHref("guest")} />
         <nav aria-label="Primary" className="hidden items-center gap-5 lg:flex">
           {links.map((link) => (
             <NavLink key={link.href} link={link} pathname={pathname} />
           ))}
-          {viewer.role === "reviewer" ? (
-            <ReviewLink pathname={pathname} waiting={viewer.waiting} />
-          ) : null}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {signedIn ? <ModelSearch className="hidden lg:block" inputId="header-search" /> : null}
           <ThemeToggle />
-          {signedIn ? (
-            <>
-              <Link
-                href="/alerts"
-                aria-label="Alerts"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
-              >
-                <Bell />
-              </Link>
-              <AccountMenu
-                label={viewer.label}
-                roleLine={viewer.role === "reviewer" ? "Reviewer" : "Member"}
-                open={accountOpen}
-                menuId={accountMenuId}
-                signOut={signOut}
-                onToggle={onToggleAccount}
-                onNavigate={onNavigate}
-              />
-            </>
-          ) : (
-            <>
-              <Link
-                href="/sign-in"
-                className={cn(buttonVariants({ variant: "ghost" }), "hidden lg:inline-flex")}
-              >
-                Sign in
-              </Link>
-              <Link href="/sign-in" className={buttonVariants()}>
-                Create account
-              </Link>
-            </>
-          )}
+          <Link
+            href="/sign-in"
+            className={cn(buttonVariants({ variant: "ghost" }), "hidden lg:inline-flex")}
+          >
+            Sign in
+          </Link>
+          <Link href="/sign-in" className={buttonVariants()}>
+            Create account
+          </Link>
           <button
             type="button"
             className={cn(buttonVariants({ variant: "outline", size: "icon" }), "lg:hidden")}
@@ -132,8 +136,6 @@ function SiteHeaderBar({
         </div>
       </div>
 
-      {reviewOpen ? <ReviewTabs pathname={pathname} /> : null}
-
       {menuOpen ? (
         <nav
           id="mobile-nav"
@@ -143,23 +145,182 @@ function SiteHeaderBar({
           {links.map((link) => (
             <NavLink key={link.href} link={link} pathname={pathname} mobile onClick={onNavigate} />
           ))}
-          {viewer.role === "reviewer" ? (
-            <ReviewLink pathname={pathname} waiting={viewer.waiting} mobile onClick={onNavigate} />
-          ) : null}
-          {signedIn ? (
-            <ModelSearch className="mt-2" inputId="header-search-mobile" />
-          ) : (
-            <Link
-              href="/sign-in"
-              onClick={onNavigate}
-              className="rounded-md px-2 py-2 text-sm text-foreground hover:bg-muted"
-            >
-              Sign in
-            </Link>
-          )}
+          <Link
+            href="/sign-in"
+            onClick={onNavigate}
+            className="rounded-md px-2 py-2 text-sm text-foreground hover:bg-muted"
+          >
+            Sign in
+          </Link>
         </nav>
       ) : null}
     </header>
+  );
+}
+
+function SignedInRail({
+  viewer,
+  pathname,
+  menuOpen,
+  accountOpen,
+  railOpen,
+  signOut,
+  onToggleMenu,
+  onToggleAccount,
+  onOpenPalette,
+  onNavigate,
+}: {
+  viewer: SignedInViewer;
+  pathname: string;
+  menuOpen: boolean;
+  accountOpen: boolean;
+  railOpen: boolean;
+  signOut?: () => Promise<void>;
+  onToggleMenu?: () => void;
+  onToggleAccount?: () => void;
+  onOpenPalette?: () => void;
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className={cn("signed-rail", railOpen ? "" : "rail-closed")}>
+      <div className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-card px-4 lg:hidden">
+        <Logo href={homeHref(viewer.role)} />
+        <button
+          type="button"
+          className={cn(buttonVariants({ variant: "outline", size: "icon" }), "ml-auto")}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-nav"
+          onClick={onToggleMenu}
+        >
+          {menuOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+
+      <nav
+        aria-label="Primary"
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden h-dvh border-r border-border bg-card lg:block",
+          railOpen ? "w-60" : "w-16",
+        )}
+      >
+        <RailLinks
+          viewer={viewer}
+          pathname={pathname}
+          accountOpen={accountOpen}
+          signOut={signOut}
+          showLogo
+          iconsOnly={!railOpen}
+          onOpenPalette={onOpenPalette}
+          onToggleAccount={onToggleAccount}
+          onNavigate={onNavigate}
+        />
+      </nav>
+
+      {menuOpen ? (
+        <nav
+          id="mobile-nav"
+          aria-label="Mobile"
+          className="flex flex-col border-b border-border bg-card px-3 py-3 lg:hidden"
+        >
+          <RailLinks
+            viewer={viewer}
+            pathname={pathname}
+            accountOpen={accountOpen}
+            signOut={signOut}
+            onOpenPalette={onOpenPalette}
+            onToggleAccount={onToggleAccount}
+            onNavigate={onNavigate}
+          />
+        </nav>
+      ) : null}
+    </div>
+  );
+}
+
+function RailLinks({
+  viewer,
+  pathname,
+  accountOpen,
+  signOut,
+  showLogo = false,
+  iconsOnly = false,
+  onOpenPalette,
+  onToggleAccount,
+  onNavigate,
+}: {
+  viewer: SignedInViewer;
+  pathname: string;
+  accountOpen: boolean;
+  signOut?: () => Promise<void>;
+  showLogo?: boolean;
+  iconsOnly?: boolean;
+  onOpenPalette?: () => void;
+  onToggleAccount?: () => void;
+  onNavigate?: () => void;
+}) {
+  const accountMenuId = useId();
+  const roleLabel = viewer.role === "reviewer" ? "Reviewer" : "Member";
+
+  return (
+    <div className="flex min-h-0 flex-col lg:h-full">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {showLogo ? (
+          <div className={cn("flex items-center pt-4 pb-3", iconsOnly ? "justify-center px-2" : "px-4")}>
+            <Logo href={homeHref(viewer.role)} compact={iconsOnly} />
+          </div>
+        ) : null}
+        <div className={cn(iconsOnly ? "px-2" : "px-3", showLogo ? "" : "pt-1 pb-1")}>
+          <PageSearchButton onOpen={onOpenPalette} iconsOnly={iconsOnly} />
+        </div>
+        <div className={cn("mt-3 flex flex-col gap-0.5 pb-3", iconsOnly ? "px-1" : "px-2")}>
+          {memberLinks.map((link) => (
+            <NavLink
+              key={link.href}
+              link={link}
+              pathname={pathname}
+              mobile
+              iconsOnly={iconsOnly}
+              onClick={onNavigate}
+            />
+          ))}
+          {viewer.role === "reviewer" ? (
+            <>
+              <ReviewLink
+                pathname={pathname}
+                waiting={viewer.waiting}
+                mobile
+                iconsOnly={iconsOnly}
+                onClick={onNavigate}
+              />
+              <ReviewTabs pathname={pathname} iconsOnly={iconsOnly} onNavigate={onNavigate} />
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-t border-border py-3",
+          iconsOnly ? "justify-center px-2" : "px-3",
+        )}
+      >
+        {iconsOnly ? null : (
+          <>
+            <p className="min-w-0 flex-1 truncate text-sm text-foreground">{viewer.label}</p>
+            <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
+              {roleLabel}
+            </span>
+          </>
+        )}
+        <AccountMenu
+          open={accountOpen}
+          menuId={accountMenuId}
+          signOut={signOut}
+          onToggle={onToggleAccount}
+          onNavigate={onNavigate}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -171,90 +332,126 @@ export function SiteHeader({
   signOut?: () => Promise<void>;
 }) {
   const pathname = usePathname() ?? "";
+  const [railOpen, setRailOpen] = useState(true);
+  const toggleRail = useCallback(() => {
+    setRailOpen((open) => !open);
+  }, []);
+  if (viewer.role === "guest") {
+    return <GuestHeaderControls key={pathname} pathname={pathname} />;
+  }
+  // The controls below remount on every path. The open or closed rail
+  // stays here so one click does not pop it back open on the next page.
   return (
-    <SiteHeaderControls key={pathname} viewer={viewer} signOut={signOut} pathname={pathname} />
+    <SignedInControls
+      key={pathname}
+      viewer={viewer}
+      signOut={signOut}
+      pathname={pathname}
+      railOpen={railOpen}
+      onToggleRail={toggleRail}
+    />
   );
 }
 
-function SiteHeaderControls({
+function GuestHeaderControls({ pathname }: { pathname: string }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <GuestHeaderBar
+      pathname={pathname}
+      menuOpen={menuOpen}
+      onToggleMenu={() => setMenuOpen((open) => !open)}
+      onNavigate={() => setMenuOpen(false)}
+    />
+  );
+}
+
+function SignedInControls({
   viewer,
   signOut,
   pathname,
+  railOpen,
+  onToggleRail,
 }: {
-  viewer: HeaderViewer;
+  viewer: SignedInViewer;
   signOut?: () => Promise<void>;
   pathname: string;
+  railOpen: boolean;
+  onToggleRail: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
-    if (viewer.role === "guest") {
-      return;
-    }
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "k" && event.key !== "K") {
+      if (event.altKey || event.shiftKey || event.repeat) {
         return;
       }
-      if (event.metaKey || event.ctrlKey || event.altKey) {
+      if (!event.metaKey && !event.ctrlKey) {
         return;
       }
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      ) {
-        return;
-      }
-      const desktop = document.getElementById("header-search");
-      if (desktop instanceof HTMLInputElement && desktop.offsetParent !== null) {
+      const key = event.key.toLowerCase();
+      // Chrome uses Ctrl+K for the address bar and Ctrl+B for bookmarks.
+      if (key === "k") {
         event.preventDefault();
-        desktop.focus();
+        setAccountOpen(false);
+        setPaletteOpen((open) => !open);
         return;
       }
-      event.preventDefault();
-      setMenuOpen(true);
-      window.requestAnimationFrame(() => {
-        const mobile = document.getElementById("header-search-mobile");
-        if (mobile instanceof HTMLInputElement) {
-          mobile.focus();
+      if (key === "b") {
+        event.preventDefault();
+        if (isWideScreen()) {
+          onToggleRail();
+          return;
         }
-      });
+        setMenuOpen((open) => !open);
+      }
     }
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [viewer.role]);
+  }, [onToggleRail]);
+
+  function closeTransient() {
+    setMenuOpen(false);
+    setAccountOpen(false);
+    setPaletteOpen(false);
+  }
 
   return (
-    <SiteHeaderBar
-      viewer={viewer}
-      pathname={pathname}
-      menuOpen={menuOpen}
-      accountOpen={accountOpen}
-      signOut={signOut}
-      onToggleMenu={() => setMenuOpen((open) => !open)}
-      onToggleAccount={() => setAccountOpen((open) => !open)}
-      onNavigate={() => {
-        setMenuOpen(false);
-        setAccountOpen(false);
-      }}
-    />
+    <>
+      <SignedInRail
+        viewer={viewer}
+        pathname={pathname}
+        menuOpen={menuOpen}
+        accountOpen={accountOpen}
+        railOpen={railOpen}
+        signOut={signOut}
+        onToggleMenu={() => setMenuOpen((open) => !open)}
+        onToggleAccount={() => setAccountOpen((open) => !open)}
+        onOpenPalette={() => {
+          setAccountOpen(false);
+          setPaletteOpen(true);
+        }}
+        onNavigate={closeTransient}
+      />
+      {paletteOpen ? (
+        <PageSearchDialog
+          pages={pagesFor(viewer)}
+          onClose={() => setPaletteOpen(false)}
+          onNavigate={closeTransient}
+        />
+      ) : null}
+    </>
   );
 }
 
 export function SiteHeaderFallback() {
-  return (
-    <SiteHeaderBar
-      viewer={{ role: "guest" }}
-      pathname=""
-      menuOpen={false}
-      accountOpen={false}
-    />
-  );
+  return <GuestHeaderBar pathname="" menuOpen={false} />;
 }
 
-function Logo({ href }: { href: string }) {
+function Logo({ href, compact = false }: { href: string; compact?: boolean }) {
   return (
     <Link href={href} aria-label="PriceTrail home" className="flex shrink-0 items-center gap-2">
       <svg
@@ -271,7 +468,7 @@ function Logo({ href }: { href: string }) {
         <path d="M12 13V23" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" />
         <circle cx="12" cy="25.5" r="2.25" fill="#9CF2E8" />
       </svg>
-      <span className="text-sm font-semibold tracking-tight">PriceTrail</span>
+      {compact ? null : <span className="text-sm font-semibold tracking-tight">PriceTrail</span>}
     </Link>
   );
 }
@@ -280,22 +477,26 @@ function NavLink({
   link,
   pathname,
   mobile = false,
+  iconsOnly = false,
   onClick,
 }: {
-  link: HeaderLink;
+  link: HeaderLink & { icon?: LucideIcon };
   pathname: string;
   mobile?: boolean;
+  iconsOnly?: boolean;
   onClick?: () => void;
 }) {
   const active = linkIsCurrent(link.href, pathname);
+  const Icon = link.icon;
   return (
     <Link
       href={link.href}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={navClass(active, mobile)}
+      className={cn(navClass(active, mobile), iconsOnly && "justify-center")}
     >
-      {link.label}
+      {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null}
+      <span className={iconsOnly ? "sr-only" : undefined}>{link.label}</span>
     </Link>
   );
 }
@@ -304,25 +505,28 @@ function ReviewLink({
   pathname,
   waiting,
   mobile = false,
+  iconsOnly = false,
   onClick,
 }: {
   pathname: string;
   waiting: number | null;
   mobile?: boolean;
+  iconsOnly?: boolean;
   onClick?: () => void;
 }) {
   const active = isProtectedReviewPath(pathname);
-  const showCount = waiting !== null && waiting > 0;
+  const showCount = waiting !== null && waiting > 0 && !iconsOnly;
   return (
     <Link
       href="/review"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={cn(navClass(active, mobile), "inline-flex items-center gap-1.5")}
+      className={cn(navClass(active, mobile), iconsOnly && "justify-center")}
     >
-      Review
+      <ClipboardList aria-hidden="true" className="size-4 shrink-0" />
+      <span className={iconsOnly ? "sr-only" : undefined}>Review</span>
       {showCount ? (
-        <span className="rounded-full border border-border px-1.5 text-xs tabular-nums text-foreground">
+        <span className="ml-auto rounded-full border border-border px-1.5 text-xs tabular-nums text-foreground">
           {waiting}
         </span>
       ) : null}
@@ -330,58 +534,206 @@ function ReviewLink({
   );
 }
 
-function ReviewTabs({ pathname }: { pathname: string }) {
+function ReviewTabs({
+  pathname,
+  iconsOnly = false,
+  onNavigate,
+}: {
+  pathname: string;
+  iconsOnly?: boolean;
+  onNavigate?: () => void;
+}) {
   return (
-    <nav aria-label="Review" className="border-t border-border">
-      <div className="mx-auto flex max-w-7xl flex-wrap gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6 lg:px-10">
-        {reviewTabs.map((tab) => {
-          const active = reviewTabIsCurrent(tab.href, pathname);
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              aria-current={active ? "page" : undefined}
-              className={
-                active
-                  ? "text-sm font-medium text-foreground"
-                  : "text-sm text-muted-foreground hover:text-foreground"
-              }
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+    <nav
+      aria-label="Review"
+      className={cn(
+        "flex flex-col gap-0.5",
+        iconsOnly ? "" : "ml-4 border-l border-border pl-1",
+      )}
+    >
+      {reviewTabs.map((tab) => {
+        const active = reviewTabIsCurrent(tab.href, pathname);
+        const Icon = tab.icon;
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(navClass(active, true), iconsOnly && "justify-center")}
+          >
+            <Icon aria-hidden="true" className="size-4 shrink-0" />
+            <span className={iconsOnly ? "sr-only" : undefined}>{tab.label}</span>
+          </Link>
+        );
+      })}
     </nav>
   );
 }
 
-function ModelSearch({ className, inputId }: { className?: string; inputId: string }) {
+function PageSearchButton({
+  onOpen,
+  iconsOnly = false,
+}: {
+  onOpen?: () => void;
+  iconsOnly?: boolean;
+}) {
+  if (iconsOnly) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mx-auto flex size-8 items-center justify-center rounded-lg border border-input text-muted-foreground"
+      >
+        <Search aria-hidden="true" className="size-4" />
+        <span className="sr-only">Search pages</span>
+      </button>
+    );
+  }
+
   return (
-    <form action="/models" className={cn("relative", className)}>
-      <input
-        id={inputId}
-        name="q"
-        type="search"
-        placeholder="Search models"
-        aria-label="Search models"
-        autoComplete="off"
-        className="h-8 w-full rounded-lg border border-input bg-transparent pr-8 pl-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:w-40"
-      />
+    <button
+      type="button"
+      onClick={onOpen}
+      className="relative flex h-8 w-full items-center rounded-lg border border-input bg-transparent pr-20 pl-2.5 text-left text-sm text-muted-foreground"
+    >
+      Search pages
       <kbd
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 right-1.5 hidden -translate-y-1/2 rounded border border-border px-1 text-[10px] text-muted-foreground lg:inline"
+        className="pointer-events-none absolute top-1/2 right-1.5 -translate-y-1/2 rounded border border-border px-1 text-[10px]"
       >
-        K
+        ⌘/Ctrl K
       </kbd>
-    </form>
+    </button>
   );
 }
 
-function linksFor(viewer: HeaderViewer, pathname: string): HeaderLink[] {
-  if (viewer.role !== "guest") {
-    return memberLinks;
+function PageSearchDialog({
+  pages,
+  onClose,
+  onNavigate,
+}: {
+  pages: readonly RailLink[];
+  onClose: () => void;
+  onNavigate: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const matches = pages.filter((page) =>
+    page.label.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const root = event.currentTarget;
+    const links = [...root.querySelectorAll<HTMLAnchorElement>("a[href]")];
+    const input = inputRef.current;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const index = links.indexOf(document.activeElement as HTMLAnchorElement);
+      const next = index < 0 ? 0 : Math.min(index + 1, links.length - 1);
+      links[next]?.focus();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const index = links.indexOf(document.activeElement as HTMLAnchorElement);
+      if (index <= 0) {
+        input?.focus();
+        return;
+      }
+      links[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "Enter" && document.activeElement === input) {
+      event.preventDefault();
+      links[0]?.click();
+      return;
+    }
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusable: HTMLElement[] = input ? [input, ...links] : links;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
   }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[15vh]"
+      onMouseDown={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search pages"
+        data-page-search=""
+        className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-card"
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <div className="flex items-center gap-2 border-b border-border px-3">
+          <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search pages"
+            aria-label="Search pages"
+            autoComplete="off"
+            className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            esc
+          </kbd>
+        </div>
+        {matches.length === 0 ? (
+          <p className="px-4 py-8 text-sm text-muted-foreground">No pages match.</p>
+        ) : (
+          <ul className="max-h-96 overflow-y-auto py-2">
+            {matches.map((page) => {
+              const Icon = page.icon;
+              return (
+                <li key={page.href}>
+                  <Link
+                    href={page.href}
+                    onClick={onNavigate}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted focus:bg-primary/10 focus:text-primary"
+                  >
+                    <Icon aria-hidden="true" className="size-4 shrink-0" />
+                    {page.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="flex items-center gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          <span>↑↓ Navigate</span>
+          <span>↵ Select</span>
+          <span className="ml-auto">⌘K</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function guestLinks(pathname: string): HeaderLink[] {
   if (pathname === "/") {
     return [...guestPageLinks, landingHowItWorks];
   }
@@ -389,16 +741,12 @@ function linksFor(viewer: HeaderViewer, pathname: string): HeaderLink[] {
 }
 
 function AccountMenu({
-  label,
-  roleLine,
   open,
   menuId,
   signOut,
   onToggle,
   onNavigate,
 }: {
-  label: string;
-  roleLine: string;
   open: boolean;
   menuId: string;
   signOut?: () => Promise<void>;
@@ -450,11 +798,11 @@ function AccountMenu({
       {open ? (
         <div
           id={menuId}
-          className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-border bg-card py-1"
+          className="absolute right-0 bottom-full z-50 mb-2 w-56 rounded-lg border border-border bg-card py-1"
         >
-          <div className="border-b border-border px-3 py-2">
-            <p className="truncate text-sm text-foreground">{label}</p>
-            <p className="text-xs text-muted-foreground">{roleLine}</p>
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1">
+            <span className="text-sm text-foreground">Theme</span>
+            <ThemeToggle />
           </div>
           <nav aria-label="Account" className="flex flex-col py-1">
             {accountLinks.map((link) => (
@@ -489,8 +837,8 @@ function noSignOut(): Promise<void> {
 function navClass(active: boolean, mobile: boolean): string {
   if (mobile) {
     return active
-      ? "rounded-md px-2 py-2 text-sm text-primary hover:bg-muted"
-      : "rounded-md px-2 py-2 text-sm text-foreground hover:bg-muted";
+      ? "flex w-full items-center gap-2 rounded-md bg-primary/10 px-2 py-2 text-sm text-primary hover:bg-primary/15"
+      : "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground hover:bg-muted";
   }
   return active
     ? "py-1 text-sm text-primary"

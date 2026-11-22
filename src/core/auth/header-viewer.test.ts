@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headerViewer, type HeaderAuthSession } from "./header-viewer";
+import { headerViewer, homeHref, type HeaderAuthSession } from "./header-viewer";
 
 const google = { reviewer: { provider: "google", accountId: "123" } };
 const allow = new Set(["google:123"]);
@@ -77,6 +77,12 @@ describe("headerViewer", () => {
       label: "Signed in",
       waiting: null,
     });
+  });
+
+  it("sends a guest to the marketing page and everyone else to Following", () => {
+    expect(homeHref("guest")).toBe("/");
+    expect(homeHref("member")).toBe("/following");
+    expect(homeHref("reviewer")).toBe("/following");
   });
 
   it("throws when a reviewer waiting count is not a whole number", () => {
