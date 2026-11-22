@@ -47,7 +47,7 @@ No source needs Playwright or a JS-rendered fetch. Every official page is parsea
 - **Traps and rules:**
   - Footnote markers inside cells (`$0.25 / MTok<sup>1</sup>`): strip `<sup>...</sup>` before parsing.
   - Model cells contain links and parentheticals (`Claude Mythos 5.1 ([limited availability](...))`): strip the markup, keep the parenthetical as a note.
-  - `retired` in a parenthetical is a deprecation hint, so keep it as a note. `limited availability` is also a note.
+  - `retired` in a parenthetical is a deprecation hint, so keep it as a note. `limited availability` is also a note. The word stays a note, and step 41 is the decision.
   - **Tier lives in the model name, not in a column**: `Claude Haiku 5.5 (for prompts up to 100,000 tokens)` and `(... over 100,000 tokens)` are two rows. Parse the condition with a regex (`for prompts (up to|over) ([\d,]+) tokens`). If a parenthetical looks like a tier but the regex fails, throw.
   - Footnote 3 says a scheduled Sonnet 5 price increase "will not occur". **Announced future prices can be cancelled.**
   - Unknown extra columns go into an `unmappedColumns` warning, not silently ignored.
