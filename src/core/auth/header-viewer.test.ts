@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headerViewer, homeHref, type HeaderAuthSession } from "./header-viewer";
+import { headerViewer, homeHref, visitorHomePath, type HeaderAuthSession } from "./header-viewer";
 
 const google = { reviewer: { provider: "google", accountId: "123" } };
 const allow = new Set(["google:123"]);
@@ -83,6 +83,27 @@ describe("headerViewer", () => {
     expect(homeHref("guest")).toBe("/");
     expect(homeHref("member")).toBe("/following");
     expect(homeHref("reviewer")).toBe("/following");
+  });
+
+  it("keeps a guest on / and sends a real account to Following without a waiting count", () => {
+    expect(visitorHomePath({ secretConfigured: false, session: google })).toBe("/");
+    expect(visitorHomePath({ secretConfigured: true, session: null })).toBe("/");
+    expect(
+      visitorHomePath({
+        secretConfigured: true,
+        session: { user: { name: "Ada", email: "ada@example.com" } },
+      }),
+    ).toBe("/");
+    expect(
+      visitorHomePath({
+        secretConfigured: true,
+        session: {
+          user: { email: "ada@example.com" },
+          reviewer: { provider: "github", accountId: "42" },
+        },
+      }),
+    ).toBe("/following");
+    expect(visitorHomePath({ secretConfigured: true, session: google })).toBe("/following");
   });
 
   it("throws when a reviewer waiting count is not a whole number", () => {

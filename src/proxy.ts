@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
 import { parseOfficialCandidateId, parseReviewItemId } from "@/app/review/review-list";
 import { parseSourceId } from "@/app/review/source-health";
+import { visitorHomePath } from "@/core/auth/header-viewer";
 import {
   isProtectedReviewPath,
   parseReviewerAllowlist,
@@ -19,7 +20,12 @@ import { hasSource } from "@/server/db/repositories/source-health";
 import { parseDatabaseEnv } from "@/server/env";
 
 /**
- * Two checks run before a page shell starts.
+ * Three checks run before a page shell starts.
+ *
+ * A signed-in visit to `/` goes to `/following`. The marketing page
+ * stays a static shell, so this redirect cannot wait until the page
+ * reads the cookie. A missing AUTH_SECRET does not load the login
+ * library. A cookie with no account id stays on `/`.
  *
  * Unknown models must answer 404. With cache components on, the shell is
  * already sent as HTTP 200, so notFound() inside the loader cannot change
@@ -45,6 +51,10 @@ import { parseDatabaseEnv } from "@/server/env";
  * a signal lookup, and /review/candidates is not a candidate lookup.
  */
 export async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === "/") {
+    return signedInHomeResponse(request);
+  }
+
   if (isProtectedReviewPath(request.nextUrl.pathname)) {
     const denied = await protectReview(request);
     if (denied !== null) {
@@ -77,8 +87,33 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/models/:labSlug/:modelSlug", "/review", "/review/:path*"],
+  matcher: ["/", "/models/:labSlug/:modelSlug", "/review", "/review/:path*"],
 };
+
+/**
+ * Send a member or a reviewer to Following before `/` renders.
+ *
+ * A guest, including a missing secret and a cookie with no account id,
+ * continues to the marketing page. The login library stays unloaded
+ * until the secret is set.
+ */
+async function signedInHomeResponse(request: NextRequest): Promise<NextResponse> {
+  if (!reviewAuthSecretConfigured(process.env)) {
+    return NextResponse.next();
+  }
+
+  const { auth } = await import("@/server/auth/auth");
+  const session = await auth();
+  const home = visitorHomePath({ secretConfigured: true, session });
+  if (home === "/") {
+    return NextResponse.next();
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = home;
+  url.search = "";
+  return NextResponse.redirect(url);
+}
 
 async function protectReview(request: NextRequest): Promise<NextResponse | null> {
   const secretConfigured = reviewAuthSecretConfigured(process.env);

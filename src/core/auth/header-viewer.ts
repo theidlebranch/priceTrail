@@ -32,6 +32,30 @@ export function homeHref(role: HeaderViewer["role"]): "/" | "/following" {
   return role === "guest" ? "/" : "/following";
 }
 
+/**
+ * Where a visit to `/` should finish.
+ *
+ * The proxy asks this before the page shell starts. A redirect after
+ * that shell has already gone out cannot change the response, and
+ * reading the cookie inside the page stops Next.js from prerendering
+ * the marketing page. A missing secret, a missing cookie, or a cookie
+ * with no account id stays on `/`. The allowlist and the waiting count
+ * do not matter here: both a member and a reviewer go to Following.
+ */
+export function visitorHomePath(input: {
+  secretConfigured: boolean;
+  session: HeaderAuthSession;
+}): "/" | "/following" {
+  return homeHref(
+    headerViewer({
+      secretConfigured: input.secretConfigured,
+      session: input.session,
+      allowlist: new Set(),
+      waiting: null,
+    }).role,
+  );
+}
+
 export function headerViewer(input: {
   secretConfigured: boolean;
   session: HeaderAuthSession;
