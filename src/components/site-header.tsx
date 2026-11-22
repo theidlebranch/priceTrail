@@ -14,6 +14,7 @@ import {
   Bell,
   Bookmark,
   Boxes,
+  Building2,
   ClipboardList,
   Database,
   Flag,
@@ -37,6 +38,7 @@ import { cn } from "@/lib/utils";
 
 const guestPageLinks = [
   { label: "Models", href: "/models" },
+  { label: "Labs", href: "/labs" },
   { label: "Receipts", href: "/receipts" },
 ];
 
@@ -45,6 +47,7 @@ const landingHowItWorks = { label: "How it works", href: "#how-it-works" };
 const memberLinks: RailLink[] = [
   { label: "Following", href: "/following", icon: Bookmark },
   { label: "Models", href: "/models", icon: Boxes },
+  { label: "Labs", href: "/labs", icon: Building2 },
   { label: "Receipts", href: "/receipts", icon: Receipt },
   { label: "Alerts", href: "/alerts", icon: Bell },
 ];

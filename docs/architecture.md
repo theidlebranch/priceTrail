@@ -62,7 +62,7 @@ flowchart TD
   person -->|reject| stopPrice[review_status rejected and publish nothing]
 ```
 
-Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, `observation_items`, `witness_reads`, `verification_flags`, `candidate_models`, `model_signals`, and `fetch_triggers`. The row picture of the tables that exist is [price-tables.md](price-tables.md).
+Tables in the database today are `labs`, `models`, `model_aliases`, `offerings`, `price_versions`, `price_components`, `price_version_evidence`, `sources`, `fetch_log`, `observations`, `observation_items`, `witness_reads`, `verification_flags`, `candidate_models`, `model_signals`, `fetch_triggers`, and `requests`. The row picture of the tables that exist is [price-tables.md](price-tables.md).
 
 ```mermaid
 flowchart TD

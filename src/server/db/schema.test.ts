@@ -22,6 +22,9 @@ import {
   priceDimension,
   priceUnit,
   priceVersions,
+  requestKind,
+  requestStatus,
+  requests,
   reviewStatus,
   sourceType,
   sources,
@@ -672,5 +675,61 @@ describe("witness tables", () => {
     const where = checkText(pending!.config.where!).replace(/\s+/g, " ");
     expect(where).toContain("processed_at");
     expect(where.toLowerCase()).toContain("is null");
+  });
+});
+
+describe("requests", () => {
+  it("stores a lab suggestion without pointing at a lab row", () => {
+    const config = getTableConfig(requests);
+    expect(config.name).toBe("requests");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "kind",
+      "lab_name",
+      "lab_name_key",
+      "suggested_by",
+      "suggested_at",
+      "status",
+      "reviewed_by",
+      "reviewed_at",
+      "review_note",
+    ]);
+    expect(requestKind.enumValues).toEqual(["lab"]);
+    expect(requestStatus.enumValues).toEqual(["pending", "accepted", "declined"]);
+    expect(column(config.columns, "kind").enumValues).toEqual(["lab"]);
+    expect(column(config.columns, "status").default).toBe("pending");
+    expect(column(config.columns, "lab_name").notNull).toBe(true);
+    expect(column(config.columns, "reviewed_by").notNull).toBe(false);
+    expect(column(config.columns, "reviewed_at").notNull).toBe(false);
+    expect(column(config.columns, "review_note").notNull).toBe(false);
+    expect(config.foreignKeys).toEqual([]);
+
+    expect(config.indexes).toHaveLength(1);
+    const pending = config.indexes[0];
+    expect(pending).toBeDefined();
+    expect(pending!.config.name).toBe("requests_one_pending_lab");
+    expect(pending!.config.unique).toBe(true);
+    expect(pending!.config.columns.map((entry) => ("name" in entry ? entry.name : ""))).toEqual([
+      "kind",
+      "lab_name_key",
+    ]);
+    expect(pending!.config.where).toBeDefined();
+    const where = checkText(pending!.config.where!).replace(/\s+/g, " ");
+    expect(where).toContain("status");
+    expect(where).toContain("pending");
+
+    expect(config.checks).toHaveLength(2);
+    const nameCheck = config.checks.find((entry) => entry.name === "requests_lab_name_key_matches_name");
+    const decisionCheck = config.checks.find((entry) => entry.name === "requests_decision_matches_status");
+    expect(nameCheck).toBeDefined();
+    expect(decisionCheck).toBeDefined();
+    const nameText = checkText(nameCheck!.value).replace(/\s+/g, " ");
+    expect(nameText).toContain("lab_name_key");
+    expect(nameText).toContain("lower");
+    const decisionText = checkText(decisionCheck!.value).replace(/\s+/g, " ");
+    expect(decisionText).toContain("status");
+    expect(decisionText).toContain("pending");
+    expect(decisionText).toContain("reviewed_by");
+    expect(decisionText).toContain("review_note");
   });
 });

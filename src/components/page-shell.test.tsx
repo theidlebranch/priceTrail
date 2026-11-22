@@ -133,6 +133,8 @@ describe("SiteHeader", () => {
     rerender(<SiteHeader viewer={guest} />);
     expect(screen.getByRole("link", { name: "Models" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Models" }).className).toContain("text-primary");
+    expect(screen.getByRole("link", { name: "Labs" }).getAttribute("href")).toBe("/labs");
+    expect(screen.getByRole("link", { name: "Labs" }).getAttribute("aria-current")).toBeNull();
 
     expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("aria-current")).toBeNull();
     expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
@@ -156,6 +158,7 @@ describe("SiteHeader", () => {
     expect(following.getAttribute("aria-current")).toBe("page");
     expect(following.className).toContain("bg-primary/10");
     expect(screen.getByRole("link", { name: "Models" }).className).not.toContain("bg-primary/10");
+    expect(screen.getByRole("link", { name: "Labs" }).getAttribute("href")).toBe("/labs");
     const alerts = screen.getByRole("link", { name: "Alerts" });
     expect(alerts.getAttribute("href")).toBe("/alerts");
     expect(screen.getByRole("button", { name: "Search pages" })).toBeTruthy();
