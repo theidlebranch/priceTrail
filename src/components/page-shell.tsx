@@ -7,7 +7,7 @@ import { SiteHeaderSlot } from "@/components/site-header-slot";
  * The path and the sign-in cookie are request data. On a model URL they
  * are not known while Next.js builds the static shell, so the chrome and
  * the footer sit in Suspense. The fallback is the signed-out bar with no
- * link marked current. The footer fallback shows only Receipts.
+ * link marked current. The footer fallback shows Receipts and How it works.
  *
  * A signed-in visit replaces that bar with a fixed rail. The rail is out
  * of the page flow, and `.shell:has(.signed-rail)` adds the left padding

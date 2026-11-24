@@ -1,5 +1,7 @@
 # PriceTrail — Project Brief & Architecture (v3)
 
+How the code works today, in small diagrams: the [`/docs`](../src/app/docs/page.tsx) pages.
+
 An open, source-backed historical pricing database for AI models: how API costs change over time, with evidence for every price.
 
 **Core principle:** Don't track prices. Track pricing _evidence_ and the _periods_ a price was effective for. Every number must trace back to a source. This is non-negotiable, even at MVP scale.

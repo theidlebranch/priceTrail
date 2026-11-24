@@ -3,20 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const pageLinks = [{ label: "Receipts", href: "/receipts" }];
-
-const landingLinks = [
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Honest by design", href: "#honest" },
+const pageLinks = [
+  { label: "Receipts", href: "/receipts" },
+  { label: "How it works", href: "/docs" },
 ];
 
+const landingLinks = [{ label: "Honest by design", href: "#honest" }];
+
 /**
- * Receipts is its own page, so it stays on every route. How it works and
- * Honest by design are sections of the landing page, so they only show
- * there and scroll that page.
+ * Receipts and How it works are their own pages, so they stay on every
+ * route. Honest by design is a section of the landing page, so it only
+ * shows there and scrolls that page.
  *
  * The path is request data. The fallback passes an empty path, so the
- * static shell shows only Receipts until the real path streams in.
+ * static shell shows Receipts and How it works until the real path
+ * streams in. Honest by design appears only on the landing page.
  */
 function SiteFooterBar({ pathname }: { pathname: string }) {
   const links = pathname === "/" ? [...pageLinks, ...landingLinks] : pageLinks;

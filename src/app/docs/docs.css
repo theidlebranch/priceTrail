@@ -1,0 +1,355 @@
+/*
+ * Shared skin for /docs. The hues are the diagram-design examples:
+ * paper, ink, accent, link blue, and the series fills (sage, dusty
+ * blue, mustard, rust, slate). Box fills mix those hues with paper so
+ * the ink labels stay readable and the color is still obvious.
+ */
+.docs-root {
+  --dd-paper: #f5f5f5;
+  --dd-ink: #2d3142;
+  --dd-muted: #4f5d75;
+  --dd-soft: #5a6580;
+  --dd-silver: #bfc0c0;
+  --dd-rule: rgba(45, 49, 66, 0.12);
+  --dd-accent: #bf4520;
+  --dd-link: #2e5aa8;
+  --dd-sage: #7c8f6f;
+  --dd-dusty: #5e7a9b;
+  --dd-mustard: #b8915a;
+  --dd-rust: #9c6b50;
+  --dd-slate: #6e6479;
+  --dd-fill-sage: color-mix(in srgb, var(--dd-sage) 62%, var(--dd-paper));
+  --dd-fill-dusty: color-mix(in srgb, var(--dd-dusty) 58%, var(--dd-paper));
+  --dd-fill-link: color-mix(in srgb, var(--dd-link) 48%, var(--dd-paper));
+  --dd-fill-mustard: color-mix(in srgb, var(--dd-mustard) 62%, var(--dd-paper));
+  --dd-fill-rust: color-mix(in srgb, var(--dd-rust) 55%, var(--dd-paper));
+  --dd-fill-slate: color-mix(in srgb, var(--dd-slate) 58%, var(--dd-paper));
+  --dd-fill-accent: color-mix(in srgb, var(--dd-accent) 50%, var(--dd-paper));
+  --font-serif: var(--font-instrument-serif), "Iowan Old Style", Palatino, serif;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  box-sizing: border-box;
+  min-height: calc(100dvh - 3.5rem);
+  background: var(--dd-paper);
+  color: var(--dd-ink);
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.docs-root *,
+.docs-root *::before,
+.docs-root *::after {
+  box-sizing: border-box;
+}
+
+.doc-sheet {
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 40rem);
+  column-gap: 3.5rem;
+  align-items: start;
+  justify-content: center;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 3.25rem 2rem 5.5rem;
+}
+
+.docs-sections {
+  position: sticky;
+  top: 4.75rem;
+  align-self: start;
+  max-height: calc(100dvh - 6.5rem);
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dd-silver) transparent;
+}
+
+.docs-sections ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-sections li {
+  margin: 0;
+}
+
+.docs-sections a {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  column-gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.34rem 0;
+  color: var(--dd-ink);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.docs-sections a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.docs-num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--dd-accent);
+}
+
+.docs-later {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--dd-rule);
+}
+
+.docs-later a {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 2.4rem;
+  color: var(--dd-muted);
+}
+
+.doc-essay {
+  min-width: 0;
+}
+
+.doc-sheet h1,
+.doc-figure h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 0.96;
+}
+
+.doc-sheet h1 {
+  max-width: 12ch;
+  font-size: clamp(2.75rem, 5vw, 3.75rem);
+}
+
+.doc-intro {
+  margin: 1.35rem 0 0;
+  max-width: 38rem;
+  color: var(--dd-muted);
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+.doc-read {
+  margin: 1.35rem 0 0;
+  max-width: 38rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--dd-rule);
+  color: var(--dd-ink);
+}
+
+.doc-sheet section {
+  padding-top: 2.15rem;
+  margin-top: 2.15rem;
+  border-top: 1px solid var(--dd-rule);
+  scroll-margin-top: 5rem;
+}
+
+.doc-sheet h2 {
+  margin: 0 0 0.8rem;
+  font-family: var(--font-serif);
+  font-size: 1.7rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.doc-sheet p,
+.doc-figure p {
+  margin: 0 0 0.85rem;
+}
+
+.doc-sheet p:last-child,
+.doc-figure p:last-child {
+  margin-bottom: 0;
+}
+
+.docs-root a {
+  color: var(--dd-ink);
+  text-underline-offset: 0.16em;
+}
+
+.docs-root a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.docs-root a:focus-visible {
+  outline: 2px solid var(--dd-accent);
+  outline-offset: 3px;
+}
+
+.docs-root code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+.doc-see {
+  margin-top: 1.05rem;
+}
+
+.doc-see a,
+.doc-back a {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+}
+
+.doc-sheet ul {
+  margin: 0.25rem 0 0.85rem;
+  padding-left: 1.15rem;
+}
+
+.doc-sheet li {
+  margin: 0.4rem 0;
+}
+
+.doc-sheet li a {
+  font-weight: 500;
+}
+
+.doc-figure {
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+}
+
+.doc-back {
+  margin-bottom: 1.25rem;
+}
+
+.doc-eyebrow {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dd-muted);
+}
+
+.doc-figure h1 {
+  max-width: 22ch;
+  margin-bottom: 0.75rem;
+  font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.doc-sub {
+  max-width: 42rem;
+  margin-bottom: 1.25rem;
+  color: var(--dd-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.doc-diagram {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.doc-diagram svg {
+  display: block;
+  width: 100%;
+  min-width: 1280px;
+  height: auto;
+  fill: var(--dd-ink);
+  font-family: var(--font-sans);
+}
+
+.dd-paper { fill: var(--dd-paper); }
+.dd-ink { fill: var(--dd-ink); }
+.dd-muted { fill: var(--dd-muted); }
+.dd-soft { fill: var(--dd-soft); }
+.dd-accent { fill: var(--dd-accent); }
+.dd-sage { fill: var(--dd-fill-sage); }
+.dd-dusty { fill: var(--dd-fill-dusty); }
+.dd-link { fill: var(--dd-fill-link); }
+.dd-mustard { fill: var(--dd-fill-mustard); }
+.dd-rust { fill: var(--dd-fill-rust); }
+.dd-slate { fill: var(--dd-fill-slate); }
+.dd-accent-fill { fill: var(--dd-fill-accent); }
+
+.dd-stroke-ink { stroke: var(--dd-ink); }
+.dd-stroke-muted { stroke: var(--dd-muted); }
+.dd-stroke-soft { stroke: var(--dd-soft); }
+.dd-stroke-accent { stroke: var(--dd-accent); }
+.dd-stroke-silver { stroke: var(--dd-silver); }
+.dd-stroke-faint { stroke: rgba(45, 49, 66, 0.45); }
+.dd-stroke-sage { stroke: var(--dd-sage); }
+.dd-stroke-dusty { stroke: var(--dd-dusty); }
+.dd-stroke-link { stroke: var(--dd-link); }
+.dd-stroke-mustard { stroke: var(--dd-mustard); }
+.dd-stroke-rust { stroke: var(--dd-rust); }
+.dd-stroke-slate { stroke: var(--dd-slate); }
+
+.dd-sans { font-family: var(--font-sans); }
+.dd-mono { font-family: var(--font-mono); }
+.dd-serif { font-family: var(--font-serif); }
+
+@media (max-width: 52rem) {
+  .doc-sheet {
+    grid-template-columns: minmax(0, 40rem);
+    row-gap: 0;
+    padding: 1.75rem 1.25rem 3.5rem;
+  }
+
+  .docs-sections {
+    position: static;
+    max-height: none;
+    margin: 0 0 0.5rem;
+    overflow: visible;
+  }
+
+  .docs-sections a {
+    padding: 0.55rem 0;
+  }
+
+  .doc-sheet h1 {
+    max-width: 14ch;
+    font-size: 2.5rem;
+  }
+
+  .doc-sheet h2 {
+    font-size: 1.5rem;
+  }
+
+  .doc-sheet section {
+    padding-top: 1.75rem;
+    margin-top: 1.75rem;
+  }
+
+  .doc-figure {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+}
+
+@media print {
+  .doc-diagram {
+    overflow-x: visible;
+  }
+
+  .doc-diagram svg {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-root {
+    scroll-behavior: auto;
+  }
+}

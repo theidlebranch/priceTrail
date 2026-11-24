@@ -78,7 +78,12 @@ describe("PageShell", () => {
     expect(footer.textContent).toContain(
       "not affiliated with OpenAI, Anthropic, or Google",
     );
-    const howItWorks = screen.getAllByRole("link", { name: "How it works" });
+    expect(within(footer).getByRole("link", { name: "How it works" }).getAttribute("href")).toBe(
+      "/docs",
+    );
+    const howItWorks = screen.getAllByRole("link", { name: "How it works" }).filter(
+      (link) => !footer.contains(link),
+    );
     expect(howItWorks.length).toBeGreaterThan(0);
     for (const link of howItWorks) {
       expect(link.getAttribute("href")).toBe("#how-it-works");
@@ -97,7 +102,9 @@ describe("PageShell", () => {
       </PageShell>,
     );
 
-    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
+    expect(
+      within(screen.getByRole("contentinfo")).getByRole("link", { name: "How it works" }).getAttribute("href"),
+    ).toBe("/docs");
     expect(screen.queryByRole("link", { name: "Honest by design" })).toBeNull();
     const receipts = screen.getAllByRole("link", { name: "Receipts" });
     expect(receipts.length).toBeGreaterThan(0);
@@ -298,7 +305,7 @@ describe("SiteFooterFallback", () => {
     const footer = screen.getByRole("contentinfo");
     expect(footer.textContent).toContain("not affiliated with OpenAI, Anthropic, or Google");
     expect(screen.getByRole("link", { name: "Receipts" }).getAttribute("href")).toBe("/receipts");
-    expect(screen.queryByRole("link", { name: "How it works" })).toBeNull();
+    expect(screen.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/docs");
     expect(screen.queryByRole("link", { name: "Honest by design" })).toBeNull();
   });
 });
