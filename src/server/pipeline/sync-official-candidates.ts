@@ -57,8 +57,9 @@ export async function syncOfficialCandidates(
   }
 
   const openedAt = goodVisit ? await newestFetchedAt(db, input.sourceId) : snapshot.fetchedAt;
+  const conversions: OfficialCandidatePlan["conversions"] = [];
   for (const conversion of plan.conversions) {
-    await db
+    const updated = await db
       .update(candidateModels)
       .set({
         kind: "retirement",
@@ -73,10 +74,15 @@ export async function syncOfficialCandidates(
           eq(candidateModels.kind, "new_name"),
           eq(candidateModels.status, "pending_review"),
         ),
-      );
+      )
+      .returning({ id: candidateModels.id });
+    if (updated.length > 0) {
+      conversions.push(conversion);
+    }
   }
+  const openedPlan = { inserts: plan.inserts, conversions };
   if (plan.inserts.length === 0) {
-    return openedCards(plan);
+    return openedCards(openedPlan);
   }
 
   await db.insert(candidateModels).values(
@@ -90,7 +96,7 @@ export async function syncOfficialCandidates(
       hint: card.hint,
     })),
   );
-  return openedCards(plan);
+  return openedCards(openedPlan);
 }
 
 function openedCards(plan: OfficialCandidatePlan): VisitAlertCard[] {

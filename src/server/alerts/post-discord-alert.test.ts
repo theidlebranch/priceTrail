@@ -45,7 +45,8 @@ describe("postDiscordAlert", () => {
   });
 
   it("posts one JSON body whose content is the alert lines", async () => {
-    const fetchImpl = vi.fn<FetchLike>(async () => new Response("ok", { status: 204 }));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(null, { status: 204 }));
 
     await postDiscordAlert({
       events: [
@@ -56,6 +57,7 @@ describe("postDiscordAlert", () => {
       fetchImpl,
     });
 
+    expect(errorSpy).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledOnce();
     const [url, init] = fetchImpl.mock.calls[0] ?? [];
     expect(url).toBe(WEBHOOK);
@@ -68,6 +70,35 @@ describe("postDiscordAlert", () => {
         "OpenAI: gpt-6-sol has a new published price.",
       ].join("\n"),
     });
+  });
+
+  it.each([
+    {
+      events: [
+        ...Array.from({ length: 60 }, () => ({
+          kind: "new_model" as const, lab: "anthropic", model: "Claude Example",
+        })),
+        EVENT,
+      ],
+      summary: ["New models: 60", "Unreadable pricing pages: 1"],
+    },
+    {
+      events: [{ kind: "price_published" as const, lab: "openai", model: "x".repeat(2_001) }],
+      summary: ["Published prices: 1"],
+    },
+  ])("posts one bounded summary when the alert is too long ($summary)", async ({ events, summary }) => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(null, { status: 204 }));
+
+    await postDiscordAlert({ events, env: { DISCORD_WEBHOOK_URL: WEBHOOK }, fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(errorSpy).not.toHaveBeenCalled();
+    const { content } = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(content.length).toBeLessThanOrEqual(2_000);
+    for (const line of summary) {
+      expect(content).toContain(line);
+    }
   });
 
   it("accepts a discordapp.com webhook", async () => {

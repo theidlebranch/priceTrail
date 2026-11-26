@@ -100,7 +100,15 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 - Phase 8 step 42, Discord half: `postDiscordAlert()` posts one site-wide message to `DISCORD_WEBHOOK_URL`. A filed visit sends when it opens a new-model, retirement, or gone card, or when the page could not be read. A published price sends after confirm or Add and publish, once the database connection is closed. A missing URL skips the post. A failed post is logged and does not undo the visit or the price. Slack is still later, so step 42 is not done. This does not call `publishPriceVersion()`. `pnpm check` passed (775 tests, 223 skipped because `DATABASE_URL` was not in that process). The visit, trigger, confirm, and add-and-publish database files passed when run with the local env file.
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:57b16a111002d8feaaa92f65f04b2c115f0f5421e86c6aa6084d6549db25fe6d -->
+
+- Discord alert and candidate sync review fixes: there is one documented webhook variable, a large alert sends counts by event type, and a retirement alert requires a row returned by the update. Regression tests cover a bodyless 204, oversized content, and conversion attempts that update nothing.
+
 ## In progress
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
 - The next build-plan piece is the Slack half of step 42. Steps 43–46 stay in the MVP: follows, source requests, wrong-price reports, and Wayback backfill. Personal email, Slack, Discord, and the on-site bubble are step 51, and they are required even if they take longer than two hours.

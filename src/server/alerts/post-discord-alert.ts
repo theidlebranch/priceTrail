@@ -15,6 +15,14 @@ import type { FetchLike } from "@/server/sources/provider-source";
 
 const DISCORD_HOSTS = new Set(["discord.com", "discordapp.com"]);
 const POST_TIMEOUT_MS = 10_000;
+const DISCORD_CONTENT_LIMIT = 2_000;
+const SUMMARY_LABELS: Record<SiteAlertEvent["kind"], string> = {
+  new_model: "New models",
+  retirement: "Possible retirements",
+  gone: "Missing models",
+  parser_suspect: "Unreadable pricing pages",
+  price_published: "Published prices",
+};
 
 export async function postDiscordAlert(input: {
   events: readonly SiteAlertEvent[];
@@ -24,6 +32,9 @@ export async function postDiscordAlert(input: {
   let content: string;
   try {
     content = siteAlertLines(input.events);
+    if (content.length > DISCORD_CONTENT_LIMIT) {
+      content = summarizeAlert(input.events);
+    }
   } catch (error: unknown) {
     console.error(failureText(error, []));
     return;
@@ -56,6 +67,17 @@ export async function postDiscordAlert(input: {
   } catch (error: unknown) {
     console.error(failureText(error, [webhook.url]));
   }
+}
+
+function summarizeAlert(events: readonly SiteAlertEvent[]): string {
+  const counts = new Map<SiteAlertEvent["kind"], number>();
+  for (const { kind } of events) {
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return [
+    "Site alert summary (details exceed Discord's message limit):",
+    ...Array.from(counts, ([kind, count]) => `${SUMMARY_LABELS[kind]}: ${count}`),
+  ].join("\n");
 }
 
 type DiscordWebhook = { kind: "missing" } | { kind: "ignored" } | { kind: "ok"; url: string };
