@@ -46,11 +46,18 @@ erDiagram
     timestamptz reviewed_at
     text review_note
   }
+  accounts {
+    text account_id PK
+    text display_name
+    text email
+    timestamptz registered_at
+    timestamptz last_signed_in_at
+  }
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab. An `accounts` row is one Google or GitHub sign-in. It does not point at the other tables. `suggested_by` stores the same `account_id` string, and it is not a foreign key.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -361,3 +368,12 @@ A signed-in visitor can ask us to track a lab we do not have yet. That is one `r
 | 2 | lab | Cohere | cohere | github:42 | 2026-11-22T15:10:00Z | accepted | google:9 | 2026-11-22T16:00:00Z | Worth a parser later. |
 
 `kind` `lab` is a lab name. `lab_name` is what the visitor typed. `lab_name_key` is that name trimmed and lowercased, so a second pending " mistral " is the same suggestion. `suggested_by` is `google:<account id>` or `github:<numeric id>`. `status` `pending` has no reviewer stamp. `accepted` and `declined` store `reviewed_by`, `reviewed_at`, and `review_note`. Row 2 is accepted and still has no `labs` row.
+
+### accounts
+
+| account_id | display_name | email | registered_at | last_signed_in_at |
+| --- | --- | --- | --- | --- |
+| google:123 | Ada Lovelace | ada@example.com | 2026-11-26T16:04:00Z | 2026-11-26T18:15:00Z |
+| github:42 |  |  | 2026-11-26T17:00:00Z | 2026-11-26T17:00:00Z |
+
+`account_id` is `google:<account id>` or `github:<numeric id>`. `display_name` and `email` are what that provider sent. A blank cell means the provider sent no name or no email. `registered_at` is the first stored sign-in and does not move. `last_signed_in_at` is the latest sign-in. Row 2 signed in once, so the two times match. A person who signed in before this table existed has no row until the next sign-in.

@@ -201,6 +201,7 @@ describe("SiteHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search pages" }));
     const dialog = screen.getByRole("dialog", { name: "Search pages" });
     expect(within(dialog).queryByRole("link", { name: "Queue" })).toBeNull();
+    expect(within(dialog).queryByRole("link", { name: "Accounts" })).toBeNull();
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Search pages" }), {
       target: { value: "receipt" },
     });
@@ -273,6 +274,9 @@ describe("SiteHeader", () => {
     expect(within(pages).getByRole("link", { name: "Price reports" }).getAttribute("href")).toBe(
       "/review/reports",
     );
+    expect(within(pages).getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe(
+      "/review/accounts",
+    );
     fireEvent.keyDown(pages, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Search pages" })).toBeNull();
 
@@ -283,6 +287,7 @@ describe("SiteHeader", () => {
     expect(tabs.textContent).toContain("Signals");
     expect(tabs.textContent).toContain("Requests");
     expect(tabs.textContent).toContain("Price reports");
+    expect(tabs.textContent).toContain("Accounts");
     expect(screen.getByRole("link", { name: "Sources" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Requests" }).textContent).toBe("Requests");
 

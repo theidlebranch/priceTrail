@@ -99,6 +99,13 @@
       "when": 1795700902061,
       "tag": "0013_conscious_black_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795710367683,
+      "tag": "0014_fuzzy_ultimo",
+      "breakpoints": true
     }
   ]
 }

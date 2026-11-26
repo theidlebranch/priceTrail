@@ -27,6 +27,7 @@ import {
   Search,
   Settings,
   UserRound,
+  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -58,6 +59,7 @@ const reviewTabs: RailLink[] = [
   { label: "Signals", href: "/review/signals", icon: Radio },
   { label: "Requests", href: "/review/requests", icon: Inbox },
   { label: "Price reports", href: "/review/reports", icon: Flag },
+  { label: "Accounts", href: "/review/accounts", icon: Users },
 ];
 
 const accountLinks = [

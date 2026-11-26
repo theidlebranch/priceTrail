@@ -101,6 +101,8 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 - Phase 8 step 42, Discord half: `postDiscordAlert()` posts one site-wide message to `DISCORD_WEBHOOK_URL`. A filed visit sends when it opens a new-model, retirement, or gone card, or when the page could not be read. A published price sends after confirm or Add and publish, once the database connection is closed. A missing URL skips the post. A failed post is logged and does not undo the visit or the price. Slack is still later, so step 42 is not done. This does not call `publishPriceVersion()`. `pnpm check` passed (775 tests, 223 skipped because `DATABASE_URL` was not in that process). The visit, trigger, confirm, and add-and-publish database files passed when run with the local env file.
 - Phase 8 step 42, Slack half: `postSlackAlert()` posts one site-wide message to `SLACK_WEBHOOK_URL`. The body is `{ "text": "..." }` with the same sentences Discord already sends. A filed visit sends when it opens a new-model, retirement, or gone card, or when the page could not be read. A published price sends after confirm or Add and publish, once the database connection is closed. A missing URL skips Slack and still posts to Discord. A URL that is not https on `hooks.slack.com` is skipped and is not logged. A failed post is logged and does not undo the visit, the price, or the Discord post. Step 42 is done. This does not call `publishPriceVersion()`. `pnpm check` passed (787 tests, 223 skipped because `DATABASE_URL` was not in that process). This is not a page change, so nothing was opened in the browser.
 
+- Phase 8 step 43: a Google or GitHub sign-in stores one `accounts` row. The first sign-in sets the registration time. A later sign-in refreshes the name, the email, and the last sign-in, and leaves the registration time. A page view does not write. `/review/accounts` lists those rows for an allowlisted reviewer, newest registration first. A member does not see the link. A person who signed in before this table existed appears only after the next sign-in. Migration `drizzle/0014_fuzzy_ultimo.sql` is applied. This does not call `publishPriceVersion()`. `pnpm check` passed (796 tests, 224 skipped because `DATABASE_URL` was not in that process). The account database file passed when run with the local env file. A signed-out visit to `/review/accounts` was sent to review sign-in. The table itself was checked in the component test, because this browser is signed out.
+
 <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:57b16a111002d8feaaa92f65f04b2c115f0f5421e86c6aa6084d6549db25fe6d -->
@@ -112,7 +114,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 <!-- /coderabbit-ai-generated:v1 -->
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
-- The next build-plan piece is step 43: follow a model or a lab. Steps 44–46 stay in the MVP: source requests, wrong-price reports, and Wayback backfill. Personal email, Slack, Discord, and the on-site bubble are step 51, and they are required even if they take longer than two hours.
+- The next build-plan piece is step 44: follow a model or a lab. Source requests, wrong-price reports, and Wayback backfill are the post-MVP backlog in step 50. Personal email, Slack, Discord, and the on-site bubble are step 51, and they are required even if they take longer than two hours.
 
 ## Blocked
 
