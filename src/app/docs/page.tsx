@@ -144,8 +144,8 @@ export default function DocsIndexPage() {
           </p>
           <p>
             The visit ends as <code>fetch_error</code>, <code>parser_suspect</code> (a failed sanity
-            check, including a missing tracked model, or a parser that threw, and the page text is not
-            stored), <code>unchanged</code>, or <code>changed</code>.
+            check, or a parser that threw, and the page text is not stored), <code>unchanged</code>, or{" "}
+            <code>changed</code>. A tracked model missing from the page is still stored.
           </p>
           <p>
             Those four endings write a log row (<code>fetch_log</code>). A throw before that insert
@@ -160,7 +160,8 @@ export default function DocsIndexPage() {
           <h2>6. A changed page</h2>
           <p>
             A new fingerprint stores the snapshot (<code>observations</code>) and one row per tracked
-            offering (<code>observation_items</code>; an offering is one way to buy that model), and{" "}
+            offering whose model is on the page (<code>observation_items</code>; an offering is one
+            way to buy that model), and{" "}
             <code>trackedPriceUnchanged()</code> compares the prices that apply today with the open
             price.
           </p>
@@ -173,7 +174,7 @@ export default function DocsIndexPage() {
           <p>
             <code>syncOfficialCandidates()</code> files candidate cards, then{" "}
             <code>archiveObservation()</code> asks Wayback to save the page. A missing tracked model
-            never reaches this path.
+            does not get a price-review row. Two good misses open a gone card.
           </p>
           <p className="doc-see">
             <Link href="/docs/a-changed-page">A changed page</Link>

@@ -14,6 +14,7 @@ import { candidateModels, labs, observations, sources } from "@/server/db/schema
 export type OfficialCandidateListRead = {
   id: number;
   status: string;
+  kind: string;
   labName: string;
   modelName: string;
   sourceUrl: string;
@@ -23,10 +24,13 @@ export type OfficialCandidateListRead = {
 export type OfficialCandidateDetailRead = {
   id: number;
   status: string;
+  kind: string;
+  hint: string | null;
   labName: string;
   modelName: string;
   modelSlug: string;
   sourceUrl: string;
+  firstSeenAt: Date;
   fetchedAt: Date | null;
   parsedData: unknown;
 };
@@ -54,6 +58,7 @@ export async function listPendingOfficialCandidates(
     .select({
       id: candidateModels.id,
       status: candidateModels.status,
+      kind: candidateModels.kind,
       labName: labs.name,
       modelName: candidateModels.rawName,
       sourceUrl: sources.url,
@@ -74,11 +79,14 @@ export async function findOfficialCandidate(
     .select({
       id: candidateModels.id,
       status: candidateModels.status,
+      kind: candidateModels.kind,
+      hint: candidateModels.hint,
       labName: labs.name,
       modelName: candidateModels.rawName,
       modelSlug: candidateModels.rawSlug,
       sourceUrl: sources.url,
       sourceId: candidateModels.sourceId,
+      firstSeenAt: candidateModels.firstSeenAt,
     })
     .from(candidateModels)
     .innerJoin(labs, eq(labs.id, candidateModels.labId))
@@ -103,10 +111,13 @@ export async function findOfficialCandidate(
   return {
     id: card.id,
     status: card.status,
+    kind: card.kind,
+    hint: card.hint,
     labName: card.labName,
     modelName: card.modelName,
     modelSlug: card.modelSlug,
     sourceUrl: card.sourceUrl,
+    firstSeenAt: card.firstSeenAt,
     fetchedAt: snapshot?.fetchedAt ?? null,
     parsedData: snapshot?.parsedData ?? null,
   };

@@ -13,6 +13,8 @@ import type { Condition, NormalizedPrice } from "@/core/pricing/shape";
  * schedule segment. Two amounts for one dimension in that group are
  * suspect. A cache price with no input price in that group is suspect.
  * OpenAI and Google rows are left out of those group checks.
+ * A tracked model that is missing from the rows is not suspect. The
+ * visit still stores the page. Two good misses become a gone card.
  */
 
 const AMOUNT_PATTERN = /^\d+(\.\d+)?$/;
@@ -25,7 +27,6 @@ type ParsedPriceCheck =
 
 export function checkParsedPrices(input: {
   rows: readonly NormalizedPrice[];
-  expectedModelSlugs: readonly string[];
 }): ParsedPriceCheck {
   if (input.rows.length === 0) {
     return { status: "suspect", reasons: ["parsed price rows are empty"] };
@@ -39,15 +40,7 @@ export function checkParsedPrices(input: {
     }
   }
 
-  const reasons: string[] = [];
-  const present = new Set(input.rows.map((row) => row.modelSlug));
-  for (const slug of input.expectedModelSlugs) {
-    if (!present.has(slug)) {
-      reasons.push(`missing tracked model: ${slug}`);
-    }
-  }
-
-  reasons.push(...anthropicRatioReasons(input.rows));
+  const reasons: string[] = [...anthropicRatioReasons(input.rows)];
 
   if (reasons.length === 0) {
     return { status: "ok" };

@@ -13,10 +13,13 @@ function detail(overrides: Partial<OfficialCandidateDetailRow> = {}): OfficialCa
   return {
     id: 4,
     status: "pending_review",
+    kind: "new_name",
+    hint: null,
     labName: "Anthropic",
     modelName: "Claude Haiku 4.5",
     modelSlug: "claude-haiku-4.5",
     sourceUrl: "https://example.test/pricing",
+    firstSeenAt: SEEN,
     fetchedAt: SEEN,
     parsedData: {
       rows: [
@@ -42,6 +45,7 @@ describe("toOfficialCandidateEntries", () => {
         {
           id: 4,
           status: "pending_review",
+          kind: "new_name",
           labName: "Anthropic",
           modelName: "Claude Haiku 4.5",
           sourceUrl: "https://example.test/pricing",
@@ -51,6 +55,7 @@ describe("toOfficialCandidateEntries", () => {
     ).toEqual([
       {
         href: "/review/candidates/4",
+        kind: "new_name",
         labName: "Anthropic",
         modelName: "Claude Haiku 4.5",
         sourceUrl: "https://example.test/pricing",
@@ -65,6 +70,7 @@ describe("toOfficialCandidateEntries", () => {
         {
           id: 4,
           status: "approved",
+          kind: "new_name",
           labName: "Anthropic",
           modelName: "Claude Haiku 4.5",
           sourceUrl: "https://example.test/pricing",
@@ -77,14 +83,48 @@ describe("toOfficialCandidateEntries", () => {
 
 describe("toOfficialCandidateDetail", () => {
   it("shows the price Add and publish would write", () => {
-    const view = toOfficialCandidateDetail(detail(), REVIEWED);
+    const later = new Date("2026-11-20T00:00:00.000Z");
+    const view = toOfficialCandidateDetail(detail({ fetchedAt: later }), REVIEWED);
 
     expect(view.prices).toEqual([
       { dimensionLabel: "Input", amountText: "1", conditionText: null },
     ]);
     expect(view.refusal).toBeNull();
     expect(view.canDecide).toBe(true);
+    expect(view.decision).toBe("publish");
     expect(view.statusText).toBe("Waiting for review.");
+    expect(view.fetchedAtText).toBe("2026-11-20 00:00:00 UTC");
+  });
+
+  it("offers Accept for a retirement note and does not quote a price to publish", () => {
+    const later = new Date("2026-11-20T00:00:00.000Z");
+    const view = toOfficialCandidateDetail(
+      detail({ kind: "retirement", hint: "retired", fetchedAt: later }),
+      REVIEWED,
+    );
+
+    expect(view.decision).toBe("accept");
+    expect(view.prices).toBeNull();
+    expect(view.hint).toBe("retired");
+    expect(view.decisionText).toMatch(/does not publish/);
+    expect(view.fetchedAtText).toBe("2026-11-01 00:00:00 UTC");
+  });
+
+  it("offers Accept for a model missing from two good visits", () => {
+    const later = new Date("2026-11-20T00:00:00.000Z");
+    const view = toOfficialCandidateDetail(
+      detail({
+        kind: "gone",
+        hint: "Missing from two good pricing visits.",
+        fetchedAt: later,
+      }),
+      REVIEWED,
+    );
+
+    expect(view.decision).toBe("accept");
+    expect(view.hint).toBe("Missing from two good pricing visits.");
+    expect(view.decisionText).toMatch(/published price stays/);
+    expect(view.fetchedAtText).toBe("2026-11-01 00:00:00 UTC");
   });
 
   it("keeps Reject available when no price applies that day", () => {

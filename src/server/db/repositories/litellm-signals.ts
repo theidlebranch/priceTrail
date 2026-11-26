@@ -54,7 +54,7 @@ export type LiteLLMSignalPage = {
     rawSlug: string;
     rawName: string;
     firstSeenAt: Date;
-    kind: "new_name" | "retirement";
+    kind: "new_name" | "retirement" | "gone";
     hint: string | null;
   }[];
   signals: {

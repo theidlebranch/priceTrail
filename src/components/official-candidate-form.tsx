@@ -25,10 +25,12 @@ function nextNoteFieldKey(previous: NoteField, state: DecideReviewFormState): No
 export function OfficialCandidateForm({
   candidateId,
   canPublish,
+  mode,
   action,
 }: {
   candidateId: number;
   canPublish: boolean;
+  mode: "publish" | "accept";
   action: (
     previous: DecideReviewFormState,
     formData: FormData,
@@ -63,7 +65,18 @@ export function OfficialCandidateForm({
         <p className="text-sm leading-6 text-destructive">{state.message}</p>
       ) : null}
       <div className="flex flex-wrap gap-3">
-        {canPublish ? (
+        {mode === "accept" ? (
+          <button
+            type="submit"
+            name="decision"
+            value="accept"
+            disabled={pending}
+            className={buttonVariants()}
+          >
+            Accept
+          </button>
+        ) : null}
+        {mode === "publish" && canPublish ? (
           <button
             type="submit"
             name="decision"

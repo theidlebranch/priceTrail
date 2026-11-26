@@ -1,0 +1,2 @@
+ALTER TABLE "candidate_models" DROP CONSTRAINT "candidate_models_source_id_raw_slug";--> statement-breakpoint
+ALTER TABLE "candidate_models" ADD CONSTRAINT "candidate_models_source_id_raw_slug_kind" UNIQUE("source_id","raw_slug","kind");

@@ -450,9 +450,24 @@ describe.skipIf(databaseUrl.length === 0)("recordSourceCheck", () => {
     });
   });
 
-  it("records a missing tracked model as parser_suspect and drops the page text", async () => {
+  it("stores a page that omits a tracked model and reviews only the models on it", async () => {
     await withEvidence(async (tx) => {
       const planted = await plantCatalog(tx);
+      const catalog = createCatalogRepository(tx);
+      const lab = await catalog.findLabBySlug(planted.labSlug);
+      if (lab === null) {
+        throw new Error("planted lab is missing");
+      }
+      const presentSlug = uniqueSlug("present");
+      const present = await catalog.insertModel({
+        labId: lab.id,
+        name: "Present Model",
+        slug: presentSlug,
+      });
+      const presentOffering = await catalog.insertOffering({
+        modelId: present.id,
+        platform: "official-api",
+      });
       const rawContent = "SECRET-PAGE-BODY";
 
       const filed = await recordSourceCheck(
@@ -461,22 +476,23 @@ describe.skipIf(databaseUrl.length === 0)("recordSourceCheck", () => {
           sourceId: planted.sourceId,
           labSlug: planted.labSlug,
           fetchedAt: FIRST_SEEN,
-          rows: [priceRow("some-other-model", "1")],
+          rows: [priceRow(presentSlug, "1")],
           rawContent,
         }),
       );
 
-      expect(filed).toEqual({ outcome: "parser_suspect", observationId: null });
-      expect(await observationCount(tx, planted.sourceId)).toBe(0);
-      const logs = await logsFor(tx, planted.sourceId);
-      expect(logs).toHaveLength(1);
-      expect(logs[0]).toMatchObject({
-        outcome: "parser_suspect",
-        observationId: null,
-        httpStatus: 200,
-        note: `missing tracked model: ${planted.modelSlug}`,
-      });
-      expect(logs[0]?.note).not.toContain(rawContent);
+      expect(filed.outcome).toBe("changed");
+      expect(await observationCount(tx, planted.sourceId)).toBe(1);
+      const items = await tx
+        .select({ offeringId: observationItems.offeringId })
+        .from(observationItems)
+        .where(eq(observationItems.observationId, filed.observationId ?? 0));
+      expect(items).toEqual([{ offeringId: presentOffering.id }]);
+      const stored = await tx
+        .select({ rawContent: observations.rawContent })
+        .from(observations)
+        .where(eq(observations.sourceId, planted.sourceId));
+      expect(stored[0]?.rawContent).toBe(rawContent);
       expect(await priceCount(tx, planted.offeringId)).toBe(0);
     });
   });

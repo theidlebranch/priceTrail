@@ -10,7 +10,7 @@ export function OneOfficialVisitDiagram() {
             {"One official visit"}
           </title>
           <desc id="05-one-official-visit-desc">
-            {"verifyOfficialSource downloads with source.fetchPage, parses with source.parse, then recordSourceCheck runs checkParsedPrices and fingerprintParsedPrices. Endings are fetch_error, parser_suspect, unchanged, and changed. parser_suspect covers a parse throw, a failed sanity check, and a missing tracked model, and it does not store page text. All four endings write fetch_log. A throw before that insert writes no log row: missing sources row, unreadable amount, or fetchedAt earlier than the last observation. None publishes a price."}
+            {"verifyOfficialSource downloads with source.fetchPage, parses with source.parse, then recordSourceCheck runs checkParsedPrices and fingerprintParsedPrices. Endings are fetch_error, parser_suspect, unchanged, and changed. parser_suspect covers a parse throw and a failed sanity check, and it does not store page text. A missing tracked model is stored with the page. All four endings write fetch_log. A throw before that insert writes no log row: missing sources row, unreadable amount, or fetchedAt earlier than the last observation. None publishes a price."}
           </desc>
           <defs>
             <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
@@ -101,7 +101,7 @@ export function OneOfficialVisitDiagram() {
             {"parser_suspect"}
           </text>
           <text className="dd-ink dd-mono" x="1012" y="244" fontSize="9" textAnchor="middle">
-            {"parse throw, sanity fail, missing model"}
+            {"parse throw, sanity fail"}
           </text>
           <text className="dd-ink dd-mono" x="1012" y="258" fontSize="9" textAnchor="middle">
             {"raw_content is not stored"}

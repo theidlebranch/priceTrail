@@ -59,6 +59,27 @@ describe.skipIf(databaseUrl.length === 0)("publishNewOfficialModel", () => {
     await close?.();
   });
 
+  it("refuses to publish a retirement card and leaves it pending", async () => {
+    await withPublish(async (tx) => {
+      const planted = await plantCandidate(tx, {
+        kind: "retirement",
+        rows: [priceRow("claude-haiku-4.5", "Claude Haiku 4.5", "1")],
+      });
+
+      await expect(publishNewOfficialModel(tx, decision(planted.candidateId))).rejects.toThrow(
+        /use accept/,
+      );
+      const card = await tx
+        .select({ status: candidateModels.status })
+        .from(candidateModels)
+        .where(eq(candidateModels.id, planted.candidateId));
+      expect(card[0]?.status).toBe("pending_review");
+      expect(await tx.select({ id: models.id }).from(models).where(eq(models.labId, planted.labId))).toEqual(
+        [],
+      );
+    });
+  });
+
   it("adds the model and publishes the price from the latest snapshot", async () => {
     await withPublish(async (tx) => {
       const planted = await plantCandidate(tx, {
@@ -235,6 +256,7 @@ async function plantCandidate(
   input: {
     rows: ReturnType<typeof priceRow>[];
     sourceType?: "official" | "aggregator";
+    kind?: "new_name" | "retirement" | "gone";
   },
 ) {
   const catalog = createCatalogRepository(tx);
@@ -272,6 +294,8 @@ async function plantCandidate(
         rawSlug: "claude-haiku-4.5",
         sourceId: source.id,
         firstSeenAt: FETCHED_AT,
+        kind: input.kind ?? "new_name",
+        hint: input.kind === "new_name" || input.kind === undefined ? null : "retired",
       })
       .returning({ id: candidateModels.id }),
     "insert candidate",

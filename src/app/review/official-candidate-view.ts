@@ -14,9 +14,12 @@ import { componentsForConfirm, ReviewRefusal, type ConfirmPriceComponent } from 
  * open a database and does not call new Date().
  */
 
+export type OfficialCandidateKind = "new_name" | "retirement" | "gone";
+
 export type OfficialCandidateListRow = {
   id: number;
   status: string;
+  kind: string;
   labName: string;
   modelName: string;
   sourceUrl: string;
@@ -25,6 +28,7 @@ export type OfficialCandidateListRow = {
 
 export type OfficialCandidateListEntry = {
   href: string;
+  kind: OfficialCandidateKind;
   labName: string;
   modelName: string;
   sourceUrl: string;
@@ -34,10 +38,13 @@ export type OfficialCandidateListEntry = {
 export type OfficialCandidateDetailRow = {
   id: number;
   status: string;
+  kind: string;
+  hint: string | null;
   labName: string;
   modelName: string;
   modelSlug: string;
   sourceUrl: string;
+  firstSeenAt: Date;
   fetchedAt: Date | null;
   parsedData: unknown;
 };
@@ -60,6 +67,9 @@ export type OfficialCandidateDetailView = {
   scheduleText: string | null;
   canDecide: boolean;
   candidateId: number;
+  decision: "publish" | "accept";
+  decisionText: string;
+  hint: string | null;
 };
 
 const SCHEDULE_TEXT =
@@ -78,6 +88,7 @@ export function toOfficialCandidateEntries(
     assertText(row.sourceUrl, "source url");
     return {
       href: `/review/candidates/${id}`,
+      kind: readKind(row.kind),
       labName: row.labName,
       modelName: row.modelName,
       sourceUrl: row.sourceUrl,
@@ -108,29 +119,54 @@ export function toOfficialCandidateDetail(
     throw new Error(`candidate status ${row.status} is not known`);
   }
 
-  const quoted = quotePrices(row, reviewedAt);
+  const kind = readKind(row.kind);
+  const quoted = kind === "new_name" ? quotePrices(row, reviewedAt) : acceptQuote(row);
+  const shownAt = kind === "new_name" ? row.fetchedAt : row.firstSeenAt;
   return {
     modelName: row.modelName,
     labName: row.labName,
     modelSlug: row.modelSlug,
     sourceUrl: row.sourceUrl,
     fetchedAtText:
-      row.fetchedAt === null ? null : formatReviewTimestamp(row.fetchedAt, "fetchedAt"),
-    statusText: statusText(row.status),
+      shownAt === null
+        ? null
+        : formatReviewTimestamp(shownAt, kind === "new_name" ? "fetchedAt" : "firstSeenAt"),
+    statusText: statusText(row.status, kind),
     prices: quoted.prices,
     refusal: quoted.refusal,
     scheduleText: quoted.schedule ? SCHEDULE_TEXT : null,
     canDecide: row.status === "pending_review",
     candidateId,
+    decision: kind === "new_name" ? "publish" : "accept",
+    decisionText: decisionText(kind),
+    hint: quoted.hint,
   };
+}
+
+function acceptQuote(row: OfficialCandidateDetailRow): {
+  prices: null;
+  refusal: null;
+  schedule: false;
+  hint: string;
+} {
+  const hint = row.hint?.trim() ?? "";
+  if (hint.length === 0) {
+    throw new Error("this card has no hint");
+  }
+  return { prices: null, refusal: null, schedule: false, hint };
 }
 
 function quotePrices(
   row: OfficialCandidateDetailRow,
   reviewedAt: Date,
-): { prices: OfficialCandidatePrice[] | null; refusal: string | null; schedule: boolean } {
+): { prices: OfficialCandidatePrice[] | null; refusal: string | null; schedule: boolean; hint: null } {
   if (row.fetchedAt === null) {
-    return { prices: null, refusal: "This official page has no stored snapshot.", schedule: false };
+    return {
+      prices: null,
+      refusal: "This official page has no stored snapshot.",
+      schedule: false,
+      hint: null,
+    };
   }
   const schedule = snapshotHasSchedule(row.parsedData, row.modelSlug);
   try {
@@ -139,10 +175,11 @@ function quotePrices(
       prices: components.map(toPrice),
       refusal: null,
       schedule,
+      hint: null,
     };
   } catch (error) {
     if (error instanceof ReviewRefusal) {
-      return { prices: null, refusal: error.message, schedule };
+      return { prices: null, refusal: error.message, schedule, hint: null };
     }
     throw error;
   }
@@ -202,14 +239,40 @@ function conditionText(condition: Condition | undefined): string | null {
   return parts.length === 0 ? null : parts.join("; ");
 }
 
-function statusText(status: "pending_review" | "approved" | "rejected"): string {
+function statusText(
+  status: "pending_review" | "approved" | "rejected",
+  kind: OfficialCandidateKind,
+): string {
   if (status === "pending_review") {
     return "Waiting for review.";
   }
-  if (status === "approved") {
+  if (status === "approved" && kind === "new_name") {
     return "This model was added and its price was published.";
   }
-  return "A reviewer rejected this name.";
+  if (status === "approved") {
+    return "A reviewer accepted this retirement.";
+  }
+  if (kind === "new_name") {
+    return "A reviewer rejected this name.";
+  }
+  return "A reviewer rejected this retirement.";
+}
+
+function decisionText(kind: OfficialCandidateKind): string {
+  if (kind === "new_name") {
+    return "Add and publish adds this model and publishes this price. Reject leaves it off the catalog.";
+  }
+  if (kind === "retirement") {
+    return "Accept marks this model retired and does not publish a price. Reject leaves it as it is.";
+  }
+  return "Accept marks this model retired. The published price stays. Reject leaves it current.";
+}
+
+function readKind(kind: string): OfficialCandidateKind {
+  if (kind === "new_name" || kind === "retirement" || kind === "gone") {
+    return kind;
+  }
+  throw new Error(`candidate kind ${kind} is unknown`);
 }
 
 function assertText(value: string, label: string): void {

@@ -156,6 +156,66 @@ describe.skipIf(databaseUrl.length === 0)("platform model review", () => {
     });
   });
 
+  it("accepts a pricing-page retirement without publishing a price", async () => {
+    await withRollback(async (tx) => {
+      const slug = uniqueSlug("page-retire");
+      const planted = await plantCard(tx, {
+        rawSlug: slug,
+        kind: "retirement",
+        hint: "retired",
+        rawName: "Claude Old",
+        sourceUrl: `https://example.test/pricing/${slug}`,
+        sourceType: "official",
+      });
+
+      const result = await acceptModelRetirement(tx, decision(planted.candidateId, "Track it as retired."));
+
+      const model = await tx.select().from(models).where(eq(models.id, result.modelId));
+      expect(model[0]?.slug).toBe(slug);
+      expect(model[0]?.deprecatedAt?.getTime()).toBe(REVIEWED_AT.getTime());
+      expect(await pricesFor(tx, result.modelId)).toEqual([]);
+    });
+  });
+
+  it("accepts a gone card by retiring the tracked model and does not publish", async () => {
+    await withRollback(async (tx) => {
+      const slug = uniqueSlug("gone");
+      const model = await plantModel(tx, slug);
+      const planted = await plantCard(tx, {
+        rawSlug: slug,
+        kind: "gone",
+        hint: "Missing from two good pricing visits.",
+        sourceUrl: `https://example.test/pricing/${slug}`,
+        sourceType: "official",
+      });
+
+      const result = await acceptModelRetirement(tx, decision(planted.candidateId, "It left the page."));
+
+      expect(result.modelId).toBe(model.id);
+      const row = await tx.select({ deprecatedAt: models.deprecatedAt }).from(models).where(eq(models.id, model.id));
+      expect(row[0]?.deprecatedAt?.getTime()).toBe(REVIEWED_AT.getTime());
+      expect(await pricesFor(tx, model.id)).toEqual([]);
+    });
+  });
+
+  it("refuses a gone card when the model is not tracked", async () => {
+    await withRollback(async (tx) => {
+      const slug = uniqueSlug("gone-missing");
+      const planted = await plantCard(tx, {
+        rawSlug: slug,
+        kind: "gone",
+        hint: "Missing from two good pricing visits.",
+        sourceUrl: `https://example.test/pricing/${slug}`,
+        sourceType: "official",
+      });
+
+      await expect(acceptModelRetirement(tx, decision(planted.candidateId, "No model."))).rejects.toThrow(
+        /not tracked/,
+      );
+      expect(await cardStatus(tx, planted.candidateId)).toBe("pending_review");
+    });
+  });
+
   it("rejects a retirement without changing the model", async () => {
     await withRollback(async (tx) => {
       const slug = uniqueSlug("keep");
@@ -223,11 +283,11 @@ async function plantCard(
   tx: SignalDb,
   input: {
     rawSlug: string;
-    kind: "new_name" | "retirement";
+    kind: "new_name" | "retirement" | "gone";
     hint?: string;
     rawName?: string;
     sourceUrl?: string;
-    sourceType?: "platform_api" | "aggregator";
+    sourceType?: "platform_api" | "aggregator" | "official";
   },
 ) {
   const catalog = createCatalogRepository(tx);

@@ -21,16 +21,19 @@ import { parseAnthropicPricing } from "@/core/pricing/anthropic";
 import type { NormalizedPrice } from "@/core/pricing/shape";
 import { createDb } from "@/server/db/client";
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
-import type { EvidenceDb } from "@/server/db/repositories/evidence";
+import { recordSourceCheck, type EvidenceDb } from "@/server/db/repositories/evidence";
 import {
   candidateModels,
   fetchLog,
+  labs,
+  models,
   observationItems,
   observations,
   priceVersions,
   sources,
 } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
+import { syncOfficialCandidates } from "@/server/pipeline/sync-official-candidates";
 import {
   failureNote,
   filedNote,
@@ -234,20 +237,319 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
     });
   });
 
-  it("records a suspect parse when a tracked model is missing from the page", async () => {
+  it("stores the page when a tracked model is missing and does not retire it on the first miss", async () => {
     await withEvidence(async (tx) => {
       const planted = await plantTracked(tx, { modelSlug: uniqueSlug("missing-model") });
-      const network = pageFetch(planted.pageUrl, { body: fixture });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [officialRow("claude-other", "Claude Other")]);
+
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+      });
+
+      expect(result.kind).toBe("changed");
+      expect(await observationCount(tx, planted.sourceId)).toBe(1);
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([
+        { rawSlug: "claude-other", rawName: "Claude Other", status: "pending_review" },
+      ]);
+      const model = await tx
+        .select({ deprecatedAt: models.deprecatedAt })
+        .from(models)
+        .where(eq(models.slug, planted.modelSlug));
+      expect(model[0]?.deprecatedAt).toBeNull();
+    });
+  });
+
+  it("opens a gone card on the second good visit that still misses the model", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: uniqueSlug("gone-model") });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [officialRow("claude-other", "Claude Other")]);
+
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+        fetchedAt: FIRST_SEEN,
+      });
+      const second = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+        fetchedAt: NEXT_SEEN,
+      });
+
+      expect(second).toEqual({ kind: "unchanged" });
+      const cards = await tx
+        .select({
+          rawSlug: candidateModels.rawSlug,
+          kind: candidateModels.kind,
+          hint: candidateModels.hint,
+        })
+        .from(candidateModels)
+        .where(eq(candidateModels.rawSlug, planted.modelSlug));
+      expect(cards).toEqual([
+        {
+          rawSlug: planted.modelSlug,
+          kind: "gone",
+          hint: "Missing from two good pricing visits.",
+        },
+      ]);
+    });
+  });
+
+  it("does not let a suspect visit count as a miss or open the gone card", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: uniqueSlug("gap-model") });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const missing = rowsSource(planted, [officialRow("claude-other", "Claude Other")]);
+
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source: missing,
+        fetchedAt: FIRST_SEEN,
+      });
+      const failed = testSource({
+        labSlug: planted.labSlug,
+        pageUrl: planted.pageUrl,
+        fetchPage: downloadingPage(planted.pageUrl),
+        parse: () => {
+          throw new Error("parse failed");
+        },
+      });
+      const suspect = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source: failed,
+        fetchedAt: NEXT_SEEN,
+      });
+
+      expect(suspect.kind).toBe("parser_suspect");
+      const cards = await tx
+        .select({ kind: candidateModels.kind })
+        .from(candidateModels)
+        .where(eq(candidateModels.rawSlug, planted.modelSlug));
+      expect(cards).toEqual([]);
+    });
+  });
+
+  it("opens a retirement card from the price note and not a new-model card", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [
+        officialRow(planted.modelSlug, "Claude Fable 5.1"),
+        officialRow("claude-old", "Claude Old", "input", "retired"),
+        officialRow("claude-kept", "Claude Kept", "input", "limited availability"),
+      ]);
+
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+      });
+
+      const cards = await tx
+        .select({
+          rawSlug: candidateModels.rawSlug,
+          kind: candidateModels.kind,
+          hint: candidateModels.hint,
+        })
+        .from(candidateModels)
+        .where(eq(candidateModels.sourceId, planted.sourceId))
+        .orderBy(asc(candidateModels.rawSlug));
+      expect(cards).toEqual([
+        { rawSlug: "claude-kept", kind: "new_name", hint: null },
+        { rawSlug: "claude-old", kind: "retirement", hint: "retired" },
+      ]);
+    });
+  });
+
+  it("does not open a retirement card from a bad visit", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx, { modelSlug: "claude-fable-5.1" });
+      await recordSourceCheck(tx, {
+        sourceId: planted.sourceId,
+        fetchedAt: FIRST_SEEN,
+        httpStatus: 200,
+        labSlug: planted.labSlug,
+        result: {
+          kind: "parsed",
+          rawContent: "stored page",
+          rows: [
+            officialRow(planted.modelSlug, "Claude Fable 5.1"),
+            officialRow("claude-old", "Claude Old", "input", "retired"),
+          ],
+          warnings: [],
+        },
+      });
+      const network = pageFetch(planted.pageUrl, { body: "not a pricing page" });
+
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        fetchedAt: NEXT_SEEN,
+      });
+
+      expect(result.kind).toBe("parser_suspect");
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([]);
+    });
+  });
+
+  it("opens a retirement card beside an approved new-name card", async () => {
+    await withEvidence(async (tx) => {
+      const modelSlug = uniqueSlug("added");
+      const planted = await plantTracked(tx, { modelSlug });
+      await plantCandidate(tx, planted, {
+        rawSlug: modelSlug,
+        rawName: "Added Model",
+        status: "approved",
+        kind: "new_name",
+      });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [officialRow(modelSlug, "Added Model", "input", "retired")]);
+
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+      });
+
+      expect(result.kind).toBe("changed");
+      const cards = await tx
+        .select({
+          rawSlug: candidateModels.rawSlug,
+          kind: candidateModels.kind,
+          status: candidateModels.status,
+          hint: candidateModels.hint,
+        })
+        .from(candidateModels)
+        .where(eq(candidateModels.sourceId, planted.sourceId))
+        .orderBy(asc(candidateModels.kind));
+      expect(cards).toEqual([
+        { rawSlug: modelSlug, kind: "new_name", status: "approved", hint: null },
+        { rawSlug: modelSlug, kind: "retirement", status: "pending_review", hint: "retired" },
+      ]);
+    });
+  });
+
+  it("turns a pending new-name card into a retirement card", async () => {
+    await withEvidence(async (tx) => {
+      const pendingSlug = uniqueSlug("soon-retired");
+      const planted = await plantTracked(tx);
+      await plantCandidate(tx, planted, {
+        rawSlug: pendingSlug,
+        rawName: "Soon Retired",
+        status: "pending_review",
+        kind: "new_name",
+        firstSeenAt: FIRST_SEEN,
+      });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [
+        officialRow(planted.modelSlug, "Example Model"),
+        officialRow(pendingSlug, "Soon Retired", "input", "retired"),
+      ]);
+
+      await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+        fetchedAt: NEXT_SEEN,
+      });
+
+      const cards = await tx
+        .select({
+          rawSlug: candidateModels.rawSlug,
+          kind: candidateModels.kind,
+          status: candidateModels.status,
+          hint: candidateModels.hint,
+          firstSeenAt: candidateModels.firstSeenAt,
+        })
+        .from(candidateModels)
+        .where(eq(candidateModels.sourceId, planted.sourceId))
+        .orderBy(asc(candidateModels.rawSlug));
+      expect(cards).toEqual([
+        {
+          rawSlug: pendingSlug,
+          kind: "retirement",
+          status: "pending_review",
+          hint: "retired",
+          firstSeenAt: NEXT_SEEN,
+        },
+      ]);
+    });
+  });
+
+  it("opens cards when an unreferenced observation is not a price list", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx);
+      await insertObservation(tx, planted.sourceId, {
+        fetchedAt: new Date("2026-05-01T00:00:00.000Z"),
+        parsedData: { example: "pending-review", modelSlug: planted.modelSlug },
+      });
+      const network = pageFetch(planted.pageUrl, { body: fixture, wayback: "success" });
+      const source = rowsSource(planted, [
+        officialRow(planted.modelSlug, "Example Model"),
+        officialRow("claude-other", "Claude Other"),
+      ]);
+
+      const result = await verifyOfficialSource(tx, {
+        ...visit(planted, network.fetchImpl),
+        source,
+      });
+
+      expect(result.kind).toBe("changed");
+      expect(await candidateRows(tx, planted.sourceId)).toEqual([
+        { rawSlug: "claude-other", rawName: "Claude Other", status: "pending_review" },
+      ]);
+    });
+  });
+
+  it("does not abort a failed visit when the newest observation is not a price list", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx);
+      await insertObservation(tx, planted.sourceId, {
+        fetchedAt: new Date("2026-05-01T00:00:00.000Z"),
+        parsedData: { example: "pending-review", modelSlug: planted.modelSlug },
+      });
+      const network = pageFetch(planted.pageUrl, {
+        error: new Error("getaddrinfo ENOTFOUND example.test"),
+      });
 
       const result = await verifyOfficialSource(tx, visit(planted, network.fetchImpl));
 
-      expect(result.kind).toBe("parser_suspect");
-      if (result.kind !== "parser_suspect") {
-        return;
-      }
-      expect(result.note).toMatch(new RegExp(`missing tracked model: ${planted.modelSlug}`));
-      expect(network.waybackCalls()).toBe(0);
-      expect(await observationCount(tx, planted.sourceId)).toBe(0);
+      expect(result.kind).toBe("fetch_error");
+    });
+  });
+
+  it("throws when a logged visit points at an observation that is not a price list", async () => {
+    await withEvidence(async (tx) => {
+      const planted = await plantTracked(tx);
+      const validId = await insertObservation(tx, planted.sourceId, {
+        fetchedAt: FIRST_SEEN,
+        parsedData: {
+          rows: [officialRow(planted.modelSlug, "Example Model")],
+          warnings: [],
+        },
+      });
+      const badId = await insertObservation(tx, planted.sourceId, {
+        fetchedAt: NEXT_SEEN,
+        parsedData: { example: "pending-review", modelSlug: planted.modelSlug },
+      });
+      await tx.insert(fetchLog).values([
+        {
+          sourceId: planted.sourceId,
+          fetchedAt: FIRST_SEEN,
+          httpStatus: 200,
+          outcome: "changed",
+          observationId: validId,
+        },
+        {
+          sourceId: planted.sourceId,
+          fetchedAt: NEXT_SEEN,
+          httpStatus: 200,
+          outcome: "changed",
+          observationId: badId,
+        },
+      ]);
+
+      await expect(
+        syncOfficialCandidates(tx, { sourceId: planted.sourceId, labSlug: planted.labSlug }),
+      ).rejects.toThrow(new RegExp(`observation ${badId} is not a parsed price list`));
     });
   });
 
@@ -548,6 +850,67 @@ type PlantedTracked = PlantedSource & {
   offeringId: number;
 };
 
+async function plantCandidate(
+  tx: EvidenceDb,
+  planted: PlantedTracked,
+  input: {
+    rawSlug: string;
+    rawName: string;
+    status: "pending_review" | "approved" | "rejected";
+    kind: "new_name" | "retirement" | "gone";
+    firstSeenAt?: Date;
+  },
+): Promise<void> {
+  const labRows = await tx
+    .select({ id: labs.id })
+    .from(labs)
+    .where(eq(labs.slug, planted.labSlug))
+    .limit(1);
+  const lab = labRows[0];
+  if (lab === undefined) {
+    throw new Error(`lab ${planted.labSlug} is missing`);
+  }
+  requireInsertedRow(
+    await tx
+      .insert(candidateModels)
+      .values({
+        labId: lab.id,
+        rawName: input.rawName,
+        rawSlug: input.rawSlug,
+        sourceId: planted.sourceId,
+        firstSeenAt: input.firstSeenAt ?? FIRST_SEEN,
+        status: input.status,
+        kind: input.kind,
+      })
+      .returning({ id: candidateModels.id }),
+    "insert candidate",
+  );
+}
+
+async function insertObservation(
+  tx: EvidenceDb,
+  sourceId: number,
+  input: { fetchedAt: Date; parsedData: unknown },
+): Promise<number> {
+  const rawContent = JSON.stringify(input.parsedData);
+  const hash = randomUUID();
+  const row = requireInsertedRow(
+    await tx
+      .insert(observations)
+      .values({
+        sourceId,
+        fetchedAt: input.fetchedAt,
+        contentHash: hash,
+        rawContent,
+        rawContentHash: `${hash}-raw`,
+        parsedData: input.parsedData,
+      })
+      .returning({ id: observations.id }),
+    "insert observation",
+  );
+  return row.id;
+}
+
 async function plantSource(
   tx: EvidenceDb,
   options: { active?: boolean; type?: "official" | "aggregator" } = {},
@@ -605,6 +968,7 @@ function officialRow(
   modelSlug: string,
   modelName: string,
   dimension: NormalizedPrice["dimension"] = "input",
+  note?: string,
 ): NormalizedPrice {
   return {
     provider: "anthropic",
@@ -613,7 +977,17 @@ function officialRow(
     dimension,
     usdPer1M: "1",
     source: "official",
+    ...(note === undefined ? {} : { note }),
   };
+}
+
+function rowsSource(planted: PlantedTracked, rows: NormalizedPrice[]): ProviderSource {
+  return testSource({
+    labSlug: planted.labSlug,
+    pageUrl: planted.pageUrl,
+    fetchPage: downloadingPage(planted.pageUrl),
+    parse: () => ({ rows, warnings: [] }),
+  });
 }
 
 async function candidateRows(tx: EvidenceDb, sourceId: number) {

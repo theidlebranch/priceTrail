@@ -35,19 +35,21 @@ export function OfficialCandidateDetail({ view }: { view: OfficialCandidateDetai
               <p className="text-sm text-muted-foreground">{view.fetchedAtText}</p>
             )}
           </div>
-          <Prices prices={view.prices} refusal={view.refusal} scheduleText={view.scheduleText} />
+          {view.hint === null ? (
+            <Prices prices={view.prices} refusal={view.refusal} scheduleText={view.scheduleText} />
+          ) : (
+            <p className="text-sm leading-6">{view.hint}</p>
+          )}
         </div>
         <aside className="space-y-4 rounded-xl border border-border p-4">
           <p className="text-sm leading-6">{view.statusText}</p>
           {view.canDecide ? (
             <>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Add and publish adds this model and publishes this price. Reject leaves it off the
-                catalog.
-              </p>
+              <p className="text-sm leading-6 text-muted-foreground">{view.decisionText}</p>
               <OfficialCandidateForm
                 candidateId={view.candidateId}
                 canPublish={view.prices !== null}
+                mode={view.decision}
                 action={publishCandidateAction}
               />
             </>
