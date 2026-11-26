@@ -160,7 +160,8 @@ export default function DocsIndexPage() {
           <h2>6. A changed page</h2>
           <p>
             A new fingerprint stores the snapshot (<code>observations</code>) and one row per tracked
-            offering (<code>observation_items</code>; an offering is one way to buy that model), and{" "}
+            offering whose model is on the page (<code>observation_items</code>; an offering is one
+            way to buy that model), and{" "}
             <code>trackedPriceUnchanged()</code> compares the prices that apply today with the open
             price.
           </p>

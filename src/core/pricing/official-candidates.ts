@@ -7,8 +7,11 @@ import type { NormalizedPrice } from "@/core/pricing/shape";
  * or deprecated. A retirement card is any slug whose note does say that.
  * Only that note counts. A gone card is a tracked model missing from two
  * good visits. A failed download or a suspect parse does not count and
- * does not reset the previous good miss. This file does not open a
- * database and does not publish a price.
+ * does not reset the previous good miss. An approved new-name card does
+ * not block a later retirement or gone card. A pending new-name card
+ * becomes the retirement card. A rejected new-name card blocks a
+ * retirement card. This file does not open a database and does not
+ * publish a price.
  */
 
 const RETIREMENT_NOTE = /\b(?:retired|deprecated)\b/i;
@@ -36,6 +39,32 @@ export type GoneModelCard = {
 };
 
 const GONE_HINT = "Missing from two good pricing visits.";
+
+export type StoredOfficialCard = {
+  id: number;
+  rawSlug: string;
+  kind: "new_name" | "retirement" | "gone";
+  status: "pending_review" | "approved" | "rejected";
+};
+
+export type PlannedCandidateInsert = {
+  rawName: string;
+  rawSlug: string;
+  kind: "new_name" | "retirement" | "gone";
+  hint: string | null;
+};
+
+export type PlannedRetirementConversion = {
+  id: number;
+  rawName: string;
+  rawSlug: string;
+  hint: string;
+};
+
+export type OfficialCandidatePlan = {
+  inserts: PlannedCandidateInsert[];
+  conversions: PlannedRetirementConversion[];
+};
 
 export function officialCandidateCards(input: {
   rows: readonly NormalizedPrice[];
@@ -88,6 +117,114 @@ export function goneModelCards(input: {
     }
   }
   return cards;
+}
+
+/**
+ * Decide which cards to insert and which pending new-name card to turn
+ * into a retirement card. A bad visit still opens new-name cards from
+ * the latest good snapshot. It does not open a retirement or gone card,
+ * and it does not convert a pending card.
+ */
+export function planOfficialCandidateChanges(input: {
+  rows: readonly NormalizedPrice[];
+  tracked: readonly { slug: string; name: string }[];
+  visits: readonly PricingVisit[];
+  goodVisit: boolean;
+  stored: readonly StoredOfficialCard[];
+}): OfficialCandidatePlan {
+  const newNames = officialCandidateCards({
+    rows: input.rows,
+    trackedSlugs: input.tracked.map((model) => model.slug),
+    existingCandidateSlugs: uniqueSlugs(input.stored.map((card) => card.rawSlug)),
+  });
+  const retirements = input.goodVisit
+    ? pricingRetirementCards({
+        rows: input.rows,
+        existingCandidateSlugs: retirementBlockedSlugs(input.stored),
+      })
+    : [];
+  const conversions = pendingRetirementConversions(input.stored, retirements);
+  const converting = new Set(conversions.map((card) => card.rawSlug));
+  const gone = input.goodVisit
+    ? goneModelCards({
+        visits: input.visits,
+        tracked: input.tracked,
+        existingCandidateSlugs: goneBlockedSlugs(input.stored),
+      })
+    : [];
+
+  return {
+    inserts: [
+      ...newNames.map((card) => ({
+        rawName: card.modelName,
+        rawSlug: card.modelSlug,
+        kind: "new_name" as const,
+        hint: null,
+      })),
+      ...retirements
+        .filter((card) => !converting.has(card.modelSlug))
+        .map((card) => ({
+          rawName: card.modelName,
+          rawSlug: card.modelSlug,
+          kind: "retirement" as const,
+          hint: card.hint,
+        })),
+      ...gone.map((card) => ({
+        rawName: card.modelName,
+        rawSlug: card.modelSlug,
+        kind: "gone" as const,
+        hint: card.hint,
+      })),
+    ],
+    conversions,
+  };
+}
+
+function retirementBlockedSlugs(stored: readonly StoredOfficialCard[]): string[] {
+  return uniqueSlugs(
+    stored
+      .filter(
+        (card) =>
+          card.kind === "retirement" || (card.kind === "new_name" && card.status === "rejected"),
+      )
+      .map((card) => card.rawSlug),
+  );
+}
+
+function goneBlockedSlugs(stored: readonly StoredOfficialCard[]): string[] {
+  return uniqueSlugs(
+    stored.filter((card) => card.kind === "gone").map((card) => card.rawSlug),
+  );
+}
+
+function pendingRetirementConversions(
+  stored: readonly StoredOfficialCard[],
+  retirements: readonly PricingRetirementCard[],
+): PlannedRetirementConversion[] {
+  const pendingBySlug = new Map<string, StoredOfficialCard>();
+  for (const card of stored) {
+    if (card.kind === "new_name" && card.status === "pending_review") {
+      pendingBySlug.set(card.rawSlug, card);
+    }
+  }
+  return retirements.flatMap((retirement) => {
+    const pending = pendingBySlug.get(retirement.modelSlug);
+    if (pending === undefined) {
+      return [];
+    }
+    return [
+      {
+        id: pending.id,
+        rawName: retirement.modelName,
+        rawSlug: retirement.modelSlug,
+        hint: retirement.hint,
+      },
+    ];
+  });
+}
+
+function uniqueSlugs(slugs: readonly string[]): string[] {
+  return [...new Set(slugs)];
 }
 
 function missStreak(visits: readonly PricingVisit[], slug: string): number {

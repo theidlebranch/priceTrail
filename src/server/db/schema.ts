@@ -411,9 +411,14 @@ export const verificationFlags = pgTable("verification_flags", {
 /**
  * A model name a witness saw that we do not track yet, a retirement
  * hint, or a tracked model missing from the pricing page.
- * One row per source and slug. Rejected stays rejected so the name
- * does not come back. An official pricing-page new-name card can be
- * added and published. Approve on a witness or model-list new name
+ * One row per source, slug, and kind. An approved new-name card can
+ * sit beside a later retirement or gone card. A rejected card of that
+ * kind does not come back. A rejected new-name card also blocks a
+ * retirement card, so Accept cannot create a model the reviewer already
+ * refused. A pending new-name card becomes the retirement card when the
+ * page note says retired or deprecated. An official pricing-page
+ * new-name card can be added and published. Approve on a witness or
+ * model-list new name
  * adds the model and does not publish a price. Accept on a retirement
  * or gone card sets deprecated_at and does not publish a price.
  *
@@ -454,7 +459,13 @@ export const candidateModels = pgTable(
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewNote: text("review_note"),
   },
-  (table) => [unique("candidate_models_source_id_raw_slug").on(table.sourceId, table.rawSlug)],
+  (table) => [
+    unique("candidate_models_source_id_raw_slug_kind").on(
+      table.sourceId,
+      table.rawSlug,
+      table.kind,
+    ),
+  ],
 );
 
 /**

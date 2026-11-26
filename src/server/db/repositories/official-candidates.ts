@@ -30,6 +30,7 @@ export type OfficialCandidateDetailRead = {
   modelName: string;
   modelSlug: string;
   sourceUrl: string;
+  firstSeenAt: Date;
   fetchedAt: Date | null;
   parsedData: unknown;
 };
@@ -85,6 +86,7 @@ export async function findOfficialCandidate(
       modelSlug: candidateModels.rawSlug,
       sourceUrl: sources.url,
       sourceId: candidateModels.sourceId,
+      firstSeenAt: candidateModels.firstSeenAt,
     })
     .from(candidateModels)
     .innerJoin(labs, eq(labs.id, candidateModels.labId))
@@ -115,6 +117,7 @@ export async function findOfficialCandidate(
     modelName: card.modelName,
     modelSlug: card.modelSlug,
     sourceUrl: card.sourceUrl,
+    firstSeenAt: card.firstSeenAt,
     fetchedAt: snapshot?.fetchedAt ?? null,
     parsedData: snapshot?.parsedData ?? null,
   };

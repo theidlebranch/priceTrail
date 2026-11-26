@@ -101,7 +101,7 @@ export function OneOfficialVisitDiagram() {
             {"parser_suspect"}
           </text>
           <text className="dd-ink dd-mono" x="1012" y="244" fontSize="9" textAnchor="middle">
-            {"parse throw, sanity fail, missing model"}
+            {"parse throw, sanity fail"}
           </text>
           <text className="dd-ink dd-mono" x="1012" y="258" fontSize="9" textAnchor="middle">
             {"raw_content is not stored"}

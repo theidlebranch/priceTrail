@@ -627,7 +627,7 @@ describe("witness tables", () => {
     expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
   });
 
-  it("keeps one candidate row per witness and slug", () => {
+  it("keeps one candidate row per source, slug, and kind", () => {
     const config = getTableConfig(candidateModels);
     expect(config.name).toBe("candidate_models");
     expect(candidateStatus.enumValues).toEqual(["pending_review", "approved", "rejected"]);
@@ -636,9 +636,11 @@ describe("witness tables", () => {
     expect(column(config.columns, "kind").default).toBe("new_name");
     expect(column(config.columns, "hint").notNull).toBe(false);
     expect(column(config.columns, "resolved_model_id").notNull).toBe(false);
+    expect(config.uniqueConstraints[0]?.name).toBe("candidate_models_source_id_raw_slug_kind");
     expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
       "source_id",
       "raw_slug",
+      "kind",
     ]);
     expect(foreignKeyTo(config, "lab_id").onDelete).toBe("restrict");
   });

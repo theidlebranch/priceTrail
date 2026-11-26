@@ -3,7 +3,9 @@ import type { NormalizedPrice } from "@/core/pricing/shape";
 import {
   goneModelCards,
   officialCandidateCards,
+  planOfficialCandidateChanges,
   pricingRetirementCards,
+  type StoredOfficialCard,
 } from "@/core/pricing/official-candidates";
 
 function row(overrides: Partial<NormalizedPrice> = {}): NormalizedPrice {
@@ -211,5 +213,137 @@ describe("goneModelCards", () => {
     });
 
     expect(cards).toEqual([]);
+  });
+});
+
+describe("planOfficialCandidateChanges", () => {
+  const twoMisses = [
+    { outcome: "unchanged" as const, presentSlugs: [] as string[] },
+    { outcome: "changed" as const, presentSlugs: [] as string[] },
+  ];
+
+  function stored(overrides: Partial<StoredOfficialCard> = {}): StoredOfficialCard {
+    return {
+      id: 7,
+      rawSlug: "claude-haiku-4.5",
+      kind: "new_name",
+      status: "approved",
+      ...overrides,
+    };
+  }
+
+  it("opens a retirement card beside an approved new-name card", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [row({ note: "retired" })],
+      tracked: [{ slug: "claude-haiku-4.5", name: "Claude Haiku 4.5" }],
+      visits: [],
+      goodVisit: true,
+      stored: [stored()],
+    });
+
+    expect(plan.conversions).toEqual([]);
+    expect(plan.inserts).toEqual([
+      {
+        rawName: "Claude Haiku 4.5",
+        rawSlug: "claude-haiku-4.5",
+        kind: "retirement",
+        hint: "retired",
+      },
+    ]);
+  });
+
+  it("opens a gone card beside an approved new-name card", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [row({ modelName: "Claude Other", modelSlug: "claude-other" })],
+      tracked: [{ slug: "claude-haiku-4.5", name: "Claude Haiku 4.5" }],
+      visits: twoMisses,
+      goodVisit: true,
+      stored: [stored()],
+    });
+
+    expect(plan.inserts).toEqual([
+      {
+        rawName: "Claude Other",
+        rawSlug: "claude-other",
+        kind: "new_name",
+        hint: null,
+      },
+      {
+        rawName: "Claude Haiku 4.5",
+        rawSlug: "claude-haiku-4.5",
+        kind: "gone",
+        hint: "Missing from two good pricing visits.",
+      },
+    ]);
+  });
+
+  it("turns a pending new-name card into the retirement card", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [row({ note: "Deprecated next month" })],
+      tracked: [],
+      visits: [],
+      goodVisit: true,
+      stored: [stored({ status: "pending_review" })],
+    });
+
+    expect(plan.inserts).toEqual([]);
+    expect(plan.conversions).toEqual([
+      {
+        id: 7,
+        rawName: "Claude Haiku 4.5",
+        rawSlug: "claude-haiku-4.5",
+        hint: "Deprecated next month",
+      },
+    ]);
+  });
+
+  it("does not convert a pending card on a bad visit", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [row({ note: "retired" })],
+      tracked: [],
+      visits: [],
+      goodVisit: false,
+      stored: [stored({ status: "pending_review" })],
+    });
+
+    expect(plan).toEqual({ inserts: [], conversions: [] });
+  });
+
+  it("does not open a retirement card after the new name was rejected", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [row({ note: "retired" })],
+      tracked: [],
+      visits: [],
+      goodVisit: true,
+      stored: [stored({ status: "rejected" })],
+    });
+
+    expect(plan).toEqual({ inserts: [], conversions: [] });
+  });
+
+  it("does not open a second retirement or gone card after reject", () => {
+    const plan = planOfficialCandidateChanges({
+      rows: [
+        row({ note: "retired" }),
+        row({ modelName: "Claude Other", modelSlug: "claude-other" }),
+      ],
+      tracked: [{ slug: "claude-haiku-4.5", name: "Claude Haiku 4.5" }],
+      visits: twoMisses,
+      goodVisit: true,
+      stored: [
+        stored({ id: 1, kind: "retirement", status: "rejected" }),
+        stored({ id: 2, kind: "gone", status: "rejected" }),
+      ],
+    });
+
+    expect(plan.inserts).toEqual([
+      {
+        rawName: "Claude Other",
+        rawSlug: "claude-other",
+        kind: "new_name",
+        hint: null,
+      },
+    ]);
+    expect(plan.conversions).toEqual([]);
   });
 });

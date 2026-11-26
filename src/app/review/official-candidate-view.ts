@@ -44,6 +44,7 @@ export type OfficialCandidateDetailRow = {
   modelName: string;
   modelSlug: string;
   sourceUrl: string;
+  firstSeenAt: Date;
   fetchedAt: Date | null;
   parsedData: unknown;
 };
@@ -120,13 +121,16 @@ export function toOfficialCandidateDetail(
 
   const kind = readKind(row.kind);
   const quoted = kind === "new_name" ? quotePrices(row, reviewedAt) : acceptQuote(row);
+  const shownAt = kind === "new_name" ? row.fetchedAt : row.firstSeenAt;
   return {
     modelName: row.modelName,
     labName: row.labName,
     modelSlug: row.modelSlug,
     sourceUrl: row.sourceUrl,
     fetchedAtText:
-      row.fetchedAt === null ? null : formatReviewTimestamp(row.fetchedAt, "fetchedAt"),
+      shownAt === null
+        ? null
+        : formatReviewTimestamp(shownAt, kind === "new_name" ? "fetchedAt" : "firstSeenAt"),
     statusText: statusText(row.status, kind),
     prices: quoted.prices,
     refusal: quoted.refusal,
