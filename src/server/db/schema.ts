@@ -409,17 +409,19 @@ export const verificationFlags = pgTable("verification_flags", {
 });
 
 /**
- * A model name a witness saw that we do not track yet, or a retirement
- * hint from an official model list.
+ * A model name a witness saw that we do not track yet, a retirement
+ * hint, or a tracked model missing from the pricing page.
  * One row per source and slug. Rejected stays rejected so the name
- * does not come back. An official pricing-page card can be added and
- * published. Approve on a new-name card adds the model and does not
- * publish a price. Accept on a retirement card sets deprecated_at and
- * does not publish a price.
+ * does not come back. An official pricing-page new-name card can be
+ * added and published. Approve on a witness or model-list new name
+ * adds the model and does not publish a price. Accept on a retirement
+ * or gone card sets deprecated_at and does not publish a price.
  *
  * kind new_name is a model we do not track. kind retirement is a
- * shutdown date or a deprecated or retired lifecycle. hint is the
- * sentence the review page shows. A new-name card leaves hint empty.
+ * shutdown date, a deprecated or retired lifecycle, or a pricing-page
+ * note that says retired or deprecated. kind gone is a tracked model
+ * missing from two good pricing visits. hint is the sentence the
+ * review page shows. A new-name card leaves hint empty.
  */
 export const candidateStatus = pgEnum("candidate_status", [
   "pending_review",
@@ -427,7 +429,7 @@ export const candidateStatus = pgEnum("candidate_status", [
   "rejected",
 ]);
 
-export const candidateKind = pgEnum("candidate_kind", ["new_name", "retirement"]);
+export const candidateKind = pgEnum("candidate_kind", ["new_name", "retirement", "gone"]);
 
 export const candidateModels = pgTable(
   "candidate_models",

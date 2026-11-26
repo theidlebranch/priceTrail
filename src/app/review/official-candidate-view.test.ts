@@ -13,6 +13,8 @@ function detail(overrides: Partial<OfficialCandidateDetailRow> = {}): OfficialCa
   return {
     id: 4,
     status: "pending_review",
+    kind: "new_name",
+    hint: null,
     labName: "Anthropic",
     modelName: "Claude Haiku 4.5",
     modelSlug: "claude-haiku-4.5",
@@ -42,6 +44,7 @@ describe("toOfficialCandidateEntries", () => {
         {
           id: 4,
           status: "pending_review",
+          kind: "new_name",
           labName: "Anthropic",
           modelName: "Claude Haiku 4.5",
           sourceUrl: "https://example.test/pricing",
@@ -51,6 +54,7 @@ describe("toOfficialCandidateEntries", () => {
     ).toEqual([
       {
         href: "/review/candidates/4",
+        kind: "new_name",
         labName: "Anthropic",
         modelName: "Claude Haiku 4.5",
         sourceUrl: "https://example.test/pricing",
@@ -65,6 +69,7 @@ describe("toOfficialCandidateEntries", () => {
         {
           id: 4,
           status: "approved",
+          kind: "new_name",
           labName: "Anthropic",
           modelName: "Claude Haiku 4.5",
           sourceUrl: "https://example.test/pricing",
@@ -84,7 +89,34 @@ describe("toOfficialCandidateDetail", () => {
     ]);
     expect(view.refusal).toBeNull();
     expect(view.canDecide).toBe(true);
+    expect(view.decision).toBe("publish");
     expect(view.statusText).toBe("Waiting for review.");
+  });
+
+  it("offers Accept for a retirement note and does not quote a price to publish", () => {
+    const view = toOfficialCandidateDetail(
+      detail({ kind: "retirement", hint: "retired" }),
+      REVIEWED,
+    );
+
+    expect(view.decision).toBe("accept");
+    expect(view.prices).toBeNull();
+    expect(view.hint).toBe("retired");
+    expect(view.decisionText).toMatch(/does not publish/);
+  });
+
+  it("offers Accept for a model missing from two good visits", () => {
+    const view = toOfficialCandidateDetail(
+      detail({
+        kind: "gone",
+        hint: "Missing from two good pricing visits.",
+      }),
+      REVIEWED,
+    );
+
+    expect(view.decision).toBe("accept");
+    expect(view.hint).toBe("Missing from two good pricing visits.");
+    expect(view.decisionText).toMatch(/published price stays/);
   });
 
   it("keeps Reject available when no price applies that day", () => {

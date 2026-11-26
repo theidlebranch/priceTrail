@@ -1,0 +1,1 @@
+ALTER TYPE "public"."candidate_kind" ADD VALUE 'gone';

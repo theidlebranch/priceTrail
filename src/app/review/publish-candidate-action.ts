@@ -7,6 +7,7 @@ import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { ReviewRefusal } from "@/core/review/confirm-price";
 import { createDb } from "@/server/db/client";
 import { parseDatabaseEnv } from "@/server/env";
+import { acceptModelRetirement } from "@/server/review/accept-model-retirement";
 import { publishNewOfficialModel } from "@/server/review/publish-new-official-model";
 import { rejectCandidateModel } from "@/server/review/reject-candidate";
 
@@ -23,8 +24,8 @@ export async function publishCandidateAction(
 ): Promise<DecideReviewFormState> {
   const reviewedBy = await requireAllowedReviewer();
   const decision = formData.get("decision");
-  if (decision !== "publish" && decision !== "reject") {
-    return refusedReview("review decision is not add and publish or reject", formData);
+  if (decision !== "publish" && decision !== "accept" && decision !== "reject") {
+    return refusedReview("review decision is not add and publish, accept, or reject", formData);
   }
 
   const rawId = formData.get("candidateId");
@@ -48,20 +49,18 @@ export async function publishCandidateAction(
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
   try {
+    const review = {
+      candidateId,
+      note,
+      reviewedBy,
+      reviewedAt: new Date(),
+    };
     if (decision === "reject") {
-      await rejectCandidateModel(db, {
-        candidateId,
-        note,
-        reviewedBy,
-        reviewedAt: new Date(),
-      });
+      await rejectCandidateModel(db, review);
+    } else if (decision === "accept") {
+      await acceptModelRetirement(db, review);
     } else {
-      await publishNewOfficialModel(db, {
-        candidateId,
-        note,
-        reviewedBy,
-        reviewedAt: new Date(),
-      });
+      await publishNewOfficialModel(db, review);
     }
   } catch (error) {
     if (error instanceof ReviewRefusal) {

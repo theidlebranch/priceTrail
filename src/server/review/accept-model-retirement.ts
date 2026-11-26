@@ -7,14 +7,16 @@ import type { SignalDb } from "@/server/pipeline/read-litellm-signal";
 import { isOfficialModelListUrl } from "@/server/sources/official-model-list";
 
 /**
- * Accept a retirement hint from an official model list.
+ * Accept a retirement hint or a gone card.
  *
- * The card, and the model when we do not track it yet, share one
- * transaction. Accept sets deprecated_at to the review time passed in.
- * It creates one global official-api offering for a new model and does
- * not add an alias. Reject is a separate function and leaves the model
- * as it is. A blank note writes nothing. A second decision throws.
- * This file does not call publishPriceVersion() and does not call new Date().
+ * The card, and the model when a retirement is not tracked yet, share
+ * one transaction. Accept sets deprecated_at to the review time passed
+ * in. A retirement from a model list or a pricing page creates one
+ * global official-api offering when the model is new. A gone card only
+ * stamps a model we already track. Reject is a separate function and
+ * leaves the model as it is. A blank note writes nothing. A second
+ * decision throws. This file does not call publishPriceVersion() and
+ * does not call new Date().
  */
 
 const LABS = new Set(["anthropic", "openai", "google"]);
@@ -50,19 +52,27 @@ export async function acceptModelRetirement(
     if (card.status !== "pending_review") {
       throw new ReviewRefusal(`candidate model ${card.id} is not pending`);
     }
-    if (card.kind !== "retirement") {
-      throw new ReviewRefusal("new-name cards use approve");
+    if (card.kind !== "retirement" && card.kind !== "gone") {
+      throw new ReviewRefusal("new-name cards are not accepted here");
     }
-    if (card.sourceType !== "platform_api" || !isOfficialModelListUrl(card.sourceUrl)) {
-      throw new ReviewRefusal("source url is not an official model list");
+    const pricingPage = card.sourceType === "official";
+    const modelList = card.sourceType === "platform_api" && isOfficialModelListUrl(card.sourceUrl);
+    if (card.kind === "gone" && !pricingPage) {
+      throw new ReviewRefusal("gone cards come from an official pricing page");
+    }
+    if (card.kind === "retirement" && !pricingPage && !modelList) {
+      throw new ReviewRefusal("source url is not an official model list or pricing page");
     }
     if (!LABS.has(card.labSlug)) {
-      throw new ReviewRefusal(`lab ${card.labSlug} is not a model-list lab`);
+      throw new ReviewRefusal(`lab ${card.labSlug} is not a tracked lab`);
     }
     assertPublicModelSlug(card.rawSlug);
 
     const catalog = createCatalogRepository(tx);
     const existing = await catalog.findModelByLabAndSlug(card.labId, card.rawSlug);
+    if (card.kind === "gone" && existing === null) {
+      throw new ReviewRefusal("gone model is not tracked");
+    }
     const modelId = existing?.id ?? (await createRetiredModel(tx, card, reviewedAt)).id;
     if (existing !== null) {
       await tx.update(models).set({ deprecatedAt: reviewedAt }).where(eq(models.id, existing.id));

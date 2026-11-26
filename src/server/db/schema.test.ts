@@ -631,7 +631,7 @@ describe("witness tables", () => {
     const config = getTableConfig(candidateModels);
     expect(config.name).toBe("candidate_models");
     expect(candidateStatus.enumValues).toEqual(["pending_review", "approved", "rejected"]);
-    expect(candidateKind.enumValues).toEqual(["new_name", "retirement"]);
+    expect(candidateKind.enumValues).toEqual(["new_name", "retirement", "gone"]);
     expect(column(config.columns, "status").default).toBe("pending_review");
     expect(column(config.columns, "kind").default).toBe("new_name");
     expect(column(config.columns, "hint").notNull).toBe(false);

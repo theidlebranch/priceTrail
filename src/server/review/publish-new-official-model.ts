@@ -60,6 +60,9 @@ export async function publishNewOfficialModel(
     if (card.sourceType !== "official") {
       throw new ReviewRefusal(`source type ${card.sourceType} is not official`);
     }
+    if (card.kind !== "new_name") {
+      throw new ReviewRefusal("retirement and gone cards use accept");
+    }
     assertPublicModelSlug(card.rawSlug);
 
     const snapshot = await latestSnapshot(tx, card.sourceId);
@@ -124,6 +127,7 @@ async function loadCard(db: PublishDb, candidateId: number) {
       labId: candidateModels.labId,
       rawName: candidateModels.rawName,
       rawSlug: candidateModels.rawSlug,
+      kind: candidateModels.kind,
       sourceId: candidateModels.sourceId,
       sourceType: sources.type,
     })

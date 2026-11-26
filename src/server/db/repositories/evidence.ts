@@ -524,7 +524,6 @@ async function fileVisit(
 
   const check = checkParsedPrices({
     rows: input.checked.rows,
-    expectedModelSlugs: input.tracked.map((item) => item.modelSlug),
   });
   if (check.status === "suspect") {
     await insertFetchLog(db, {
@@ -686,6 +685,11 @@ async function insertSnapshot(
   );
 
   for (const item of input.tracked) {
+    // A tracked model that is not on this page is a miss. It does not get
+    // a price-review item. The models that are on the page still do.
+    if (!input.rows.some((row) => row.modelSlug === item.modelSlug)) {
+      continue;
+    }
     const unchanged = trackedPriceUnchanged({
       nextRows: input.rows,
       modelSlug: item.modelSlug,

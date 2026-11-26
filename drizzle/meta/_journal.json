@@ -85,6 +85,13 @@
       "when": 1795694484557,
       "tag": "0011_sparkling_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795698654522,
+      "tag": "0012_nifty_chronomancer",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedPrice } from "@/core/pricing/shape";
-import { officialCandidateCards } from "@/core/pricing/official-candidates";
+import {
+  goneModelCards,
+  officialCandidateCards,
+  pricingRetirementCards,
+} from "@/core/pricing/official-candidates";
 
 function row(overrides: Partial<NormalizedPrice> = {}): NormalizedPrice {
   return {
@@ -80,5 +84,132 @@ describe("officialCandidateCards", () => {
         existingCandidateSlugs: [],
       }),
     ).toThrow(/official/);
+  });
+
+  it("does not card a new model whose note says retired or deprecated", () => {
+    const cards = officialCandidateCards({
+      rows: [
+        row({ note: "retired" }),
+        row({ modelName: "Claude Kept", modelSlug: "claude-kept", note: "limited availability" }),
+        row({ modelName: "Retired Haiku", modelSlug: "retired-haiku" }),
+      ],
+      trackedSlugs: [],
+      existingCandidateSlugs: [],
+    });
+
+    expect(cards.map((card) => card.modelSlug)).toEqual(["claude-kept", "retired-haiku"]);
+  });
+});
+
+describe("pricingRetirementCards", () => {
+  it("opens one card from the note, including a model we already track", () => {
+    const cards = pricingRetirementCards({
+      rows: [
+        row({ note: "limited availability" }),
+        row({ modelName: "Claude Old", modelSlug: "claude-old", note: "Deprecated next month" }),
+        row({ modelName: "Claude Old", modelSlug: "claude-old", dimension: "output", note: "deprecated next month" }),
+      ],
+      existingCandidateSlugs: [],
+    });
+
+    expect(cards).toEqual([
+      {
+        modelName: "Claude Old",
+        modelSlug: "claude-old",
+        hint: "Deprecated next month",
+      },
+    ]);
+  });
+
+  it("skips a slug that already has a card", () => {
+    const cards = pricingRetirementCards({
+      rows: [row({ note: "retired" })],
+      existingCandidateSlugs: ["claude-haiku-4.5"],
+    });
+
+    expect(cards).toEqual([]);
+  });
+
+  it("throws when one slug has two retirement notes", () => {
+    expect(() =>
+      pricingRetirementCards({
+        rows: [
+          row({ note: "retired" }),
+          row({ dimension: "output", note: "deprecated" }),
+        ],
+        existingCandidateSlugs: [],
+      }),
+    ).toThrow(/two retirement notes/);
+  });
+});
+
+describe("goneModelCards", () => {
+  const tracked = [{ slug: "claude-fable-5.1", name: "Claude Fable 5.1" }];
+
+  it("waits for a second good miss", () => {
+    const once = goneModelCards({
+      visits: [{ outcome: "changed", presentSlugs: [] }],
+      tracked,
+      existingCandidateSlugs: [],
+    });
+    const twice = goneModelCards({
+      visits: [
+        { outcome: "unchanged", presentSlugs: [] },
+        { outcome: "changed", presentSlugs: [] },
+      ],
+      tracked,
+      existingCandidateSlugs: [],
+    });
+
+    expect(once).toEqual([]);
+    expect(twice).toEqual([
+      {
+        modelName: "Claude Fable 5.1",
+        modelSlug: "claude-fable-5.1",
+        hint: "Missing from two good pricing visits.",
+      },
+    ]);
+  });
+
+  it("lets a bad visit sit between two misses without resetting them", () => {
+    const cards = goneModelCards({
+      visits: [
+        { outcome: "changed", presentSlugs: ["other"] },
+        { outcome: "parser_suspect", presentSlugs: ["claude-fable-5.1"] },
+        { outcome: "fetch_error", presentSlugs: ["claude-fable-5.1"] },
+        { outcome: "changed", presentSlugs: [] },
+      ],
+      tracked,
+      existingCandidateSlugs: [],
+    });
+
+    expect(cards).toHaveLength(1);
+  });
+
+  it("starts the count again when a good visit includes the model", () => {
+    const cards = goneModelCards({
+      visits: [
+        { outcome: "changed", presentSlugs: [] },
+        { outcome: "changed", presentSlugs: ["claude-fable-5.1"] },
+        { outcome: "changed", presentSlugs: [] },
+      ],
+      tracked,
+      existingCandidateSlugs: [],
+    });
+
+    expect(cards).toEqual([]);
+  });
+
+  it("does not open a card that already exists", () => {
+    const cards = goneModelCards({
+      visits: [
+        { outcome: "unchanged", presentSlugs: [] },
+        { outcome: "changed", presentSlugs: [] },
+      ],
+      tracked,
+      existingCandidateSlugs: ["claude-fable-5.1"],
+    });
+
+    expect(cards).toEqual([]);
   });
 });

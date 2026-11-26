@@ -10,7 +10,7 @@ export function AChangedPageDiagram() {
             {"A changed page"}
           </title>
           <desc id="06-a-changed-page-desc">
-            {"After fingerprintParsedPrices finds a new contentHash, recordSourceCheck stores observations and one observation_items row per tracked offering. trackedPriceUnchanged stamps system:same-price and review_status confirmed when the open price matches, including 10 and 10.0, and opens no new period. Anything else stays review_status flagged, including a missing open price or a snapshot the check cannot read. A later-dated price is ignored. syncOfficialCandidates writes candidate_models for untracked slugs, then archiveObservation asks Wayback. A missing tracked model never reaches this path. Neither stamp publishes a price."}
+            {"After fingerprintParsedPrices finds a new contentHash, recordSourceCheck stores observations and one observation_items row per tracked offering. trackedPriceUnchanged stamps system:same-price and review_status confirmed when the open price matches, including 10 and 10.0, and opens no new period. Anything else stays review_status flagged, including a missing open price or a snapshot the check cannot read. A later-dated price is ignored. syncOfficialCandidates writes candidate_models for untracked slugs, a retirement note, and a model missing from two good visits, then archiveObservation asks Wayback. A missing tracked model does not get a price-review row. Neither stamp publishes a price."}
           </desc>
           <defs>
             <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
@@ -103,7 +103,7 @@ export function AChangedPageDiagram() {
             {"same price, no new period"}
           </text>
           <text className="dd-muted dd-sans" x="520" y="693" fontSize="8.5">
-            {"A missing tracked model never reaches this path. Neither stamp publishes."}
+            {"A missing tracked model does not get a price-review row. Neither stamp publishes."}
           </text>
         </svg>
       </div>

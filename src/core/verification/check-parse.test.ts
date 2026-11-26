@@ -49,12 +49,7 @@ describe("checkParsedPrices", () => {
     const { rows } = parseAnthropicPricing(fixture);
 
     expect(rows.length).toBeGreaterThan(0);
-    expect(
-      checkParsedPrices({
-        rows,
-        expectedModelSlugs: ["claude-fable-5.1", "claude-mythos-5.1"],
-      }),
-    ).toEqual({ status: "ok" });
+    expect(checkParsedPrices({ rows })).toEqual({ status: "ok" });
   });
 
   it("keeps the parsed rows when a cache write does not follow a fixed ratio", () => {
@@ -70,7 +65,7 @@ describe("checkParsedPrices", () => {
     const { rows } = parseAnthropicPricing(markdown);
 
     expect(rows).toHaveLength(5);
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
@@ -95,34 +90,22 @@ describe("checkParsedPrices", () => {
     const { rows } = parseAnthropicPricing(markdown);
 
     expect(
-      checkParsedPrices({
-        rows,
-        expectedModelSlugs: ["claude-fable-5.1"],
-      }),
+      checkParsedPrices({ rows }),
     ).toEqual({ status: "ok" });
   });
 
-  it("reports a tracked model that the parse did not return", () => {
+  it("keeps a page when a tracked model is absent", () => {
     const { rows } = parseAnthropicPricing(
       markdownTable(REQUIRED_HEADERS, [validRow("Claude Test")]),
     );
 
-    expect(
-      checkParsedPrices({
-        rows,
-        expectedModelSlugs: ["claude-test", "claude-fable-5.1"],
-      }),
-    ).toEqual({
-      status: "suspect",
-      reasons: ["missing tracked model: claude-fable-5.1"],
-    });
+    expect(checkParsedPrices({ rows })).toEqual({ status: "ok" });
   });
 
   it("reports an empty parse once, without listing every missing slug", () => {
     expect(
       checkParsedPrices({
         rows: [],
-        expectedModelSlugs: ["claude-fable-5.1", "claude-mythos-5.1"],
       }),
     ).toEqual({
       status: "suspect",
@@ -142,7 +125,7 @@ describe("checkParsedPrices", () => {
       }),
     ];
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["gpt-6-astra"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
@@ -150,7 +133,7 @@ describe("checkParsedPrices", () => {
   it("throws when an amount is not a decimal", () => {
     const rows = [priceRow({ dimension: "input", usdPer1M: "nope" })];
 
-    expect(() => checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toThrow(
+    expect(() => checkParsedPrices({ rows })).toThrow(
       /unreadable price amount for claude-test input: nope/,
     );
   });
@@ -174,7 +157,7 @@ describe("checkParsedPrices", () => {
     ]);
     const { rows } = parseAnthropicPricing(markdown);
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-haiku-5.5"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
@@ -185,7 +168,7 @@ describe("checkParsedPrices", () => {
       priceRow({ dimension: "cache_read", usdPer1M: "0.10" }),
     ];
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
@@ -197,7 +180,7 @@ describe("checkParsedPrices", () => {
       priceRow({ dimension: "cache_read", usdPer1M: "0.1" }),
     ];
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "suspect",
       reasons: ["two input rows for claude-test"],
     });
@@ -206,7 +189,7 @@ describe("checkParsedPrices", () => {
   it("reports a cache price that has no input price in the same tier", () => {
     const rows = [priceRow({ dimension: "cache_write_5m", usdPer1M: "1.25" })];
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "suspect",
       reasons: ["missing input price for claude-test"],
     });
@@ -220,7 +203,7 @@ describe("checkParsedPrices", () => {
     const { rows, warnings } = parseAnthropicPricing(markdown);
 
     expect(warnings.some((warning) => /unmappedColumns/i.test(warning))).toBe(true);
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
@@ -239,7 +222,7 @@ describe("checkParsedPrices", () => {
       priceRow({ dimension: "cache_read", usdPer1M: "0.2", ...later }),
     ];
 
-    expect(checkParsedPrices({ rows, expectedModelSlugs: ["claude-test"] })).toEqual({
+    expect(checkParsedPrices({ rows })).toEqual({
       status: "ok",
     });
   });
