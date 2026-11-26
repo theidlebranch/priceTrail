@@ -118,7 +118,10 @@ async function followAnthropic(
       throw new OfficialListReadError("parse_error", "Anthropic model list data is not a list");
     }
     rows.push(...record.data);
-    if (record.has_more !== true) {
+    if (typeof record.has_more !== "boolean") {
+      throw new OfficialListReadError("parse_error", "Anthropic model list has_more is not true or false");
+    }
+    if (!record.has_more) {
       return rows;
     }
     if (typeof record.last_id !== "string" || record.last_id.trim() === "") {

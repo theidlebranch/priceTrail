@@ -28,6 +28,7 @@ describe("official model list filters", () => {
       "gpt-4o-mini-search-api",
       "gpt-4o-audio-preview",
       "gpt-4o-transcribe-diarize",
+      "ft:gpt-4o-mini-2024-07-18:example-org:custom:abc123",
     ]) {
       expect(chat("openai", slug)).toBe(false);
     }
@@ -37,7 +38,9 @@ describe("official model list filters", () => {
 
   it("keeps an Anthropic chat id and still skips a dated snapshot", () => {
     expect(chat("anthropic", "claude-fable-5")).toBe(true);
+    expect(chat("anthropic", "claude-sonnet-4-6")).toBe(true);
     expect(chat("anthropic", "claude-fable-5-2026-03-05")).toBe(false);
+    expect(chat("anthropic", "claude-sonnet-4-5-20250929")).toBe(false);
     expect(chat("anthropic", "claude-fable-latest")).toBe(false);
   });
 
@@ -159,6 +162,18 @@ describe("official model list parsers", () => {
         data: [{ id: "claude-fable-5", max_input_tokens: 1.5, lifecycle: "active" }],
       }),
     ).toThrow(/positive whole number/);
+  });
+
+  it("rejects a token count that does not fit the stored integer column", () => {
+    expect(() =>
+      parseAnthropicModelList({
+        data: [{ id: "claude-fable-5", max_input_tokens: 2_147_483_648, lifecycle: "active" }],
+      }),
+    ).toThrow(/larger than 2147483647/);
+    const models = parseAnthropicModelList({
+      data: [{ id: "claude-fable-5", max_input_tokens: 2_147_483_647, lifecycle: "active" }],
+    });
+    expect(models[0]?.maxInputTokens).toBe(2_147_483_647);
   });
 });
 

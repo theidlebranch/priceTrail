@@ -76,6 +76,24 @@ describe("downloadOfficialModelList", () => {
     });
   });
 
+  it("rejects an Anthropic page whose has_more flag is missing or not true or false", async () => {
+    const missing = downloadOfficialModelList("anthropic", ANTHROPIC_KEY, async () =>
+      json({ data: [{ id: "claude-fable-5", lifecycle: "active" }] }),
+    );
+    await expect(missing).rejects.toMatchObject({
+      outcome: "parse_error",
+      message: "Anthropic model list has_more is not true or false",
+    });
+
+    const textFlag = downloadOfficialModelList("anthropic", ANTHROPIC_KEY, async () =>
+      json({ data: [{ id: "claude-fable-5", lifecycle: "active" }], has_more: "false" }),
+    );
+    await expect(textFlag).rejects.toMatchObject({
+      outcome: "parse_error",
+      message: "Anthropic model list has_more is not true or false",
+    });
+  });
+
   it("reports a failed download without keeping the body", async () => {
     const fetchImpl: FetchLike = async () => new Response("secret body", { status: 403 });
     await expect(downloadOfficialModelList("openai", OPENAI_KEY, fetchImpl)).rejects.toMatchObject({

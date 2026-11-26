@@ -14,8 +14,13 @@ import { cronRequestAuthorized } from "@/server/pipeline/scheduled-visit";
  * that lab. A filed read, including a failed download, is HTTP 200.
  * A throw is HTTP 500. The body leaves out keys and the database URL.
  * This file does not call publishPriceVersion().
+ *
+ * Each download stops after 30 seconds. OpenAI, both Anthropic passes,
+ * and Google run one after another. 60 seconds can end the function
+ * before a later lab is recorded. 300 seconds is the longest a Hobby
+ * function may run.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const SCHEDULE_NAME_HEADER = "ce-vssschedulename";
 const EXECUTION_ID_HEADER = "ce-id";

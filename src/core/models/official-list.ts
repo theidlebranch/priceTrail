@@ -37,9 +37,10 @@ export type OfficialListChange = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
-// Ends with 2026-03-05, or with 03-2026. The digits are enough. We do
-// not check that the month is a real month.
-const DATED_SNAPSHOT = /(?:-\d{4}-\d{2}-\d{2}|-\d{2}-\d{4})$/;
+// Ends with 2026-03-05, 03-2026, or 20250929. The digits are enough.
+// We do not check that the month is a real month. Anthropic's list
+// uses the compact day on older snapshot ids.
+const DATED_SNAPSHOT = /(?:-\d{4}-\d{2}-\d{2}|-\d{2}-\d{4}|-\d{8})$/;
 
 const OPENAI_SKIP = [
   "tts",
@@ -69,6 +70,11 @@ const GOOGLE_SKIP = [
 ] as const;
 
 const TOKEN_FORMAT = new Intl.NumberFormat("en-US");
+
+// model_limits stores each count in a Postgres integer column. A bigger
+// number cannot be written, and that write would cancel the whole lab
+// instead of being filed as a bad parse.
+const MAX_STORED_TOKEN_COUNT = 2_147_483_647;
 
 export function parseOpenAiModelList(payload: unknown): OfficialModel[] {
   return readRows(payload, "data", "OpenAI model list").map((row, index) => {
@@ -131,8 +137,10 @@ export function parseGoogleModelList(payload: unknown): OfficialModel[] {
  *
  * A dated snapshot and a moving alias are skipped for every lab.
  * OpenAI has no method field, so the id itself has to look like chat.
- * Google has to list generateContent and must not be image, music,
- * or another non-chat product. Anthropic's list is chat models.
+ * A fine-tune id starts with ft: and belongs to a customer, so it is
+ * not an official model. Google has to list generateContent and must
+ * not be image, music, or another non-chat product. Anthropic's list
+ * is chat models.
  */
 export function isOfficialChatModel(
   lab: OfficialLab,
@@ -146,7 +154,7 @@ export function isOfficialChatModel(
     return true;
   }
   if (lab === "openai") {
-    if (slug.startsWith("text-") || slug.startsWith("omni-")) {
+    if (slug.startsWith("ft:") || slug.startsWith("text-") || slug.startsWith("omni-")) {
       return false;
     }
     return !OPENAI_SKIP.some((part) => slug.includes(part));
@@ -349,6 +357,9 @@ function readTokenCount(value: unknown, label: string): number | null {
   }
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label} is not a positive whole number`);
+  }
+  if (value > MAX_STORED_TOKEN_COUNT) {
+    throw new Error(`${label} is larger than ${MAX_STORED_TOKEN_COUNT}`);
   }
   return value;
 }
