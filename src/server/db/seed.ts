@@ -346,6 +346,21 @@ export function redactDatabaseUrl(message: string): string {
   return message.replace(/postgres(?:ql)?:\/\/\S+/gi, "postgresql://[redacted]");
 }
 
+/**
+ * Hide a database URL and any secret that was passed in.
+ * An API key can show up in a fetch error. The caller passes the
+ * key strings. This function does not print them.
+ */
+export function redactSecrets(message: string, secrets: readonly string[]): string {
+  let text = redactDatabaseUrl(message);
+  const unique = [...new Set(secrets.map((secret) => secret.trim()).filter((secret) => secret.length > 0))];
+  unique.sort((left, right) => right.length - left.length);
+  for (const secret of unique) {
+    text = text.split(secret).join("[redacted]");
+  }
+  return text;
+}
+
 function parseFixture(parser: SeedLabSpec["parser"], rawContent: string) {
   if (parser === "anthropic") {
     return parseAnthropicPricing(rawContent);
