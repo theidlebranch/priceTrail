@@ -10,7 +10,7 @@ import {
 import { anthropicSource } from "@/server/sources/anthropic-source";
 import { googleSource } from "@/server/sources/google-source";
 import { openaiSource } from "@/server/sources/openai-source";
-import type { ProviderSource } from "@/server/sources/provider-source";
+import type { FetchLike, ProviderSource } from "@/server/sources/provider-source";
 
 const SECRET = "cron-secret-16ch";
 const DATABASE_URL = "postgres://price_trail:secret@localhost:5432/price_trail";
@@ -105,7 +105,7 @@ describe("respondToSchedule", () => {
     const openDb = vi.fn(() => ({ db, close }));
     const runVisit = vi.fn(async (_db: EvidenceDb, source: ProviderSource) => {
       expect(source.lab).toBe("google");
-      return { kind: "unchanged" as const };
+      return { kind: "unchanged" as const, cards: [] };
     });
 
     const response = await respondToSchedule({
@@ -132,6 +132,7 @@ describe("respondToSchedule", () => {
         kind: "changed",
         observationId: 313,
         archive: { kind: "failed", reason: "fetch failed" },
+        cards: [],
       }),
     });
 
@@ -150,7 +151,7 @@ describe("respondToSchedule", () => {
       authorization: `Bearer ${SECRET}`,
       env: { CRON_SECRET: SECRET, DATABASE_URL },
       openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
-      runVisit: async () => ({ kind: "fetch_error", note: "download failed" }),
+      runVisit: async () => ({ kind: "fetch_error", note: "download failed", cards: [] }),
     });
 
     expect(response.status).toBe(200);
@@ -170,7 +171,7 @@ describe("respondToSchedule", () => {
       }),
       env: { CRON_SECRET: SECRET, DATABASE_URL },
       openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
-      runVisit: async () => ({ kind: "unchanged" as const }),
+      runVisit: async () => ({ kind: "unchanged" as const, cards: [] }),
     });
 
     expect(response.status).toBe(200);
@@ -195,7 +196,7 @@ describe("respondToSchedule", () => {
       authorization: `Bearer ${SECRET}`,
       env: { CRON_SECRET: SECRET, DATABASE_URL },
       openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
-      runVisit: async () => ({ kind: "fetch_error" as const, note: "download failed" }),
+      runVisit: async () => ({ kind: "fetch_error" as const, note: "download failed", cards: [] }),
     });
 
     const line = String(logSpy.mock.calls[0]?.[0]);
@@ -222,6 +223,7 @@ describe("respondToSchedule", () => {
         kind: "changed" as const,
         observationId: 313,
         archive: { kind: "failed" as const, reason: "fetch failed" },
+        cards: [],
       }),
     });
 
@@ -260,5 +262,77 @@ describe("respondToSchedule", () => {
     expect(errorSpy.mock.calls.join(" ")).not.toContain(DATABASE_URL);
     expect(errorSpy.mock.calls.join(" ")).not.toContain(SECRET);
     errorSpy.mockRestore();
+  });
+
+  it("posts one discord message for a new model, a retirement, and a page that could not be read", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(null, { status: 204 }));
+    const webhook = "https://discord.com/api/webhooks/1/hook-token";
+
+    const response = await respondToSchedule({
+      lab: "anthropic",
+      authorization: `Bearer ${SECRET}`,
+      env: { CRON_SECRET: SECRET, DATABASE_URL, DISCORD_WEBHOOK_URL: webhook },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      fetchImpl,
+      runVisit: async () => ({
+        kind: "parser_suspect" as const,
+        note: "0 matching tables",
+        cards: [
+          { kind: "new_name" as const, modelName: "Claude Example", modelSlug: "claude-example" },
+          { kind: "retirement" as const, modelName: "Old Model", modelSlug: "old-model" },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ kind: "parser_suspect", note: "0 matching tables" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(body.content).toContain("Claude Example is a new model waiting for review.");
+    expect(body.content).toContain("Old Model may be retired and is waiting for review.");
+    expect(body.content).toContain("the pricing page could not be read.");
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(webhook);
+    expect(JSON.stringify(body)).not.toContain("hook-token");
+  });
+
+  it("returns 200 when discord throws and does not log the webhook URL", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhook = "https://discord.com/api/webhooks/1/hook-token";
+
+    const response = await respondToSchedule({
+      lab: "openai",
+      authorization: `Bearer ${SECRET}`,
+      env: { CRON_SECRET: SECRET, DATABASE_URL, DISCORD_WEBHOOK_URL: webhook },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      fetchImpl: async () => {
+        throw new Error(`connect failed for ${webhook}`);
+      },
+      runVisit: async () => ({
+        kind: "unchanged" as const,
+        cards: [{ kind: "gone" as const, modelName: "Missing Model", modelSlug: "missing-model" }],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ kind: "unchanged" });
+    expect(errorSpy.mock.calls.join(" ")).not.toContain("hook-token");
+    expect(errorSpy.mock.calls.join(" ")).not.toContain(webhook);
+    errorSpy.mockRestore();
+  });
+
+  it("does not call discord when an unchanged visit opened no card", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(null, { status: 204 }));
+
+    const response = await respondToSchedule({
+      lab: "google",
+      authorization: `Bearer ${SECRET}`,
+      env: { CRON_SECRET: SECRET, DATABASE_URL },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      fetchImpl,
+      runVisit: async () => ({ kind: "unchanged" as const, cards: [] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

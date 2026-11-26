@@ -7,7 +7,9 @@ import {
   type DecideReviewFormState,
 } from "@/app/review/decision-form";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
+import { priceAlertEvents, type SiteAlertEvent } from "@/core/alerts/site-alert";
 import { ReviewRefusal } from "@/core/review/confirm-price";
+import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
 import { createDb } from "@/server/db/client";
 import { parseDatabaseEnv } from "@/server/env";
 import { decideReviewItem } from "@/server/review/decide-review-item";
@@ -23,6 +25,10 @@ import { decideReviewItem } from "@/server/review/decide-review-item";
  * typed. A missing database still throws. refresh() asks Next.js to
  * render this page again, so a finished item drops the buttons. An
  * action that does not ask is not re-rendered.
+ *
+ * A published price tells Discord after the database connection is
+ * closed. The same price, a rejection, and a refusal stay quiet. A
+ * failed post does not undo the price.
  */
 export async function decideReviewAction(
   _previous: DecideReviewFormState,
@@ -41,14 +47,22 @@ export async function decideReviewAction(
 
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
+  let events: SiteAlertEvent[] = [];
   try {
-    await decideReviewItem(db, {
+    const result = await decideReviewItem(db, {
       observationItemId: fields.observationItemId,
       decision: fields.decision,
       note: fields.note,
       reviewedBy,
       reviewedAt: new Date(),
     });
+    if (result.decision === "confirmed" && result.published) {
+      events = priceAlertEvents({
+        published: true,
+        lab: result.labSlug,
+        model: result.modelSlug,
+      });
+    }
   } catch (error) {
     if (error instanceof ReviewRefusal) {
       return refusedReview(error.message, formData);
@@ -58,6 +72,11 @@ export async function decideReviewAction(
     await close();
   }
 
+  try {
+    await postDiscordAlert({ events, env: process.env, fetchImpl: fetch });
+  } catch {
+    console.error("Discord post failed");
+  }
   refresh();
   return null;
 }

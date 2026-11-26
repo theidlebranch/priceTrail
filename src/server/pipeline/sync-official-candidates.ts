@@ -1,7 +1,9 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import type { VisitAlertCard } from "@/core/alerts/site-alert";
 import {
   planOfficialCandidateChanges,
+  type OfficialCandidatePlan,
   type PricingVisit,
   type StoredOfficialCard,
 } from "@/core/pricing/official-candidates";
@@ -20,7 +22,8 @@ import { candidateModels, fetchLog, labs, models, observations } from "@/server/
  * row. A pending new-name card becomes the retirement card. A rejected
  * card does not come back. A rejected new-name card also blocks a
  * retirement card. An observation that is not a price list is skipped
- * unless a fetch log points at it. This does not call
+ * unless a fetch log points at it. The returned cards are the ones this
+ * call inserted or turned into a retirement. This does not call
  * publishPriceVersion().
  */
 
@@ -32,10 +35,10 @@ const storedSnapshotSchema = z.object({
 export async function syncOfficialCandidates(
   db: EvidenceDb,
   input: { sourceId: number; labSlug: string },
-): Promise<number> {
+): Promise<VisitAlertCard[]> {
   const snapshot = await latestSnapshot(db, input.sourceId);
   if (snapshot === null) {
-    return 0;
+    return [];
   }
 
   const lab = await findLab(db, input.labSlug);
@@ -50,12 +53,13 @@ export async function syncOfficialCandidates(
     stored,
   });
   if (plan.inserts.length === 0 && plan.conversions.length === 0) {
-    return 0;
+    return [];
   }
 
   const openedAt = goodVisit ? await newestFetchedAt(db, input.sourceId) : snapshot.fetchedAt;
+  const conversions: OfficialCandidatePlan["conversions"] = [];
   for (const conversion of plan.conversions) {
-    await db
+    const updated = await db
       .update(candidateModels)
       .set({
         kind: "retirement",
@@ -70,10 +74,15 @@ export async function syncOfficialCandidates(
           eq(candidateModels.kind, "new_name"),
           eq(candidateModels.status, "pending_review"),
         ),
-      );
+      )
+      .returning({ id: candidateModels.id });
+    if (updated.length > 0) {
+      conversions.push(conversion);
+    }
   }
+  const openedPlan = { inserts: plan.inserts, conversions };
   if (plan.inserts.length === 0) {
-    return plan.conversions.length;
+    return openedCards(openedPlan);
   }
 
   await db.insert(candidateModels).values(
@@ -87,7 +96,22 @@ export async function syncOfficialCandidates(
       hint: card.hint,
     })),
   );
-  return plan.inserts.length + plan.conversions.length;
+  return openedCards(openedPlan);
+}
+
+function openedCards(plan: OfficialCandidatePlan): VisitAlertCard[] {
+  return [
+    ...plan.conversions.map((conversion) => ({
+      kind: "retirement" as const,
+      modelName: conversion.rawName,
+      modelSlug: conversion.rawSlug,
+    })),
+    ...plan.inserts.map((card) => ({
+      kind: card.kind,
+      modelName: card.rawName,
+      modelSlug: card.rawSlug,
+    })),
+  ];
 }
 
 async function latestSnapshot(

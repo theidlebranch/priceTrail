@@ -151,6 +151,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
       expect(result).toEqual({
         kind: "fetch_error",
         note: "getaddrinfo ENOTFOUND example.test",
+        cards: [],
       });
       expect(network.waybackCalls()).toBe(0);
       expect(await observationCount(tx, planted.sourceId)).toBe(0);
@@ -207,7 +208,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
         source,
       });
 
-      expect(result).toEqual({ kind: "fetch_error", note: "download failed" });
+      expect(result).toEqual({ kind: "fetch_error", note: "download failed", cards: [] });
       expect(network.waybackCalls()).toBe(0);
       expect(await observationCount(tx, planted.sourceId)).toBe(0);
     });
@@ -278,7 +279,10 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
         fetchedAt: NEXT_SEEN,
       });
 
-      expect(second).toEqual({ kind: "unchanged" });
+      expect(second).toEqual({
+        kind: "unchanged",
+        cards: [{ kind: "gone", modelName: "Example Model", modelSlug: planted.modelSlug }],
+      });
       const cards = await tx
         .select({
           rawSlug: candidateModels.rawSlug,
@@ -683,7 +687,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
         fetchedAt: NEXT_SEEN,
       });
 
-      expect(second).toEqual({ kind: "unchanged" });
+      expect(second).toEqual({ kind: "unchanged", cards: [] });
       expect(await candidateRows(tx, planted.sourceId)).toEqual([
         { rawSlug: "claude-haiku-4.5", rawName: "Claude Haiku 4.5", status: "pending_review" },
       ]);
@@ -761,7 +765,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource", () => {
         fetchedAt: NEXT_SEEN,
       });
 
-      expect(second).toEqual({ kind: "unchanged" });
+      expect(second).toEqual({ kind: "unchanged", cards: [] });
       expect(network.waybackCalls()).toBe(waybackAfterFirst);
       expect(await observationCount(tx, planted.sourceId)).toBe(1);
     });

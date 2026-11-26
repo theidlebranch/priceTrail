@@ -87,7 +87,13 @@ describe.skipIf(databaseUrl.length === 0)("decideReviewItem", () => {
 
       const result = await decideReviewItem(tx, decision(item.id, "confirm"));
 
-      expect(result).toEqual({ decision: "confirmed", published: true, priceVersionId: expect.any(Number) });
+      expect(result).toEqual({
+        decision: "confirmed",
+        published: true,
+        priceVersionId: expect.any(Number),
+        labSlug: planted.labSlug,
+        modelSlug: planted.modelSlug,
+      });
       const versions = await versionsFor(tx, planted.offeringId);
       expect(versions).toHaveLength(1);
       expect(versions[0]).toMatchObject({
@@ -560,7 +566,7 @@ async function plantCatalog(tx: PublishDb) {
     modelId: model.id,
     platform: "official-api",
   });
-  return { modelSlug: model.slug, offeringId: offering.id };
+  return { labSlug: lab.slug, modelSlug: model.slug, offeringId: offering.id };
 }
 
 async function plantSource(tx: PublishDb, type: "official" | "aggregator"): Promise<number> {

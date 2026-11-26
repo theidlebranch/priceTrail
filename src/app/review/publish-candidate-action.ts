@@ -4,7 +4,9 @@ import { refresh } from "next/cache";
 import { refusedReview, type DecideReviewFormState } from "@/app/review/decision-form";
 import { parseOfficialCandidateId } from "@/app/review/official-candidate-view";
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
+import { priceAlertEvents, type SiteAlertEvent } from "@/core/alerts/site-alert";
 import { ReviewRefusal } from "@/core/review/confirm-price";
+import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
 import { createDb } from "@/server/db/client";
 import { parseDatabaseEnv } from "@/server/env";
 import { acceptModelRetirement } from "@/server/review/accept-model-retirement";
@@ -16,7 +18,9 @@ import { rejectCandidateModel } from "@/server/review/reject-candidate";
  *
  * The reviewer is checked again here. The browser does not send a price.
  * A refusal puts the typed note back. refresh() asks Next.js to render
- * the page again, so a finished card drops the buttons.
+ * the page again, so a finished card drops the buttons. Add and publish
+ * tells Discord after the database connection is closed. Reject and
+ * accept stay quiet. A failed post does not undo the price.
  */
 export async function publishCandidateAction(
   _previous: DecideReviewFormState,
@@ -48,6 +52,7 @@ export async function publishCandidateAction(
 
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
+  let events: SiteAlertEvent[] = [];
   try {
     const review = {
       candidateId,
@@ -60,7 +65,12 @@ export async function publishCandidateAction(
     } else if (decision === "accept") {
       await acceptModelRetirement(db, review);
     } else {
-      await publishNewOfficialModel(db, review);
+      const published = await publishNewOfficialModel(db, review);
+      events = priceAlertEvents({
+        published: true,
+        lab: published.labSlug,
+        model: published.modelSlug,
+      });
     }
   } catch (error) {
     if (error instanceof ReviewRefusal) {
@@ -71,6 +81,11 @@ export async function publishCandidateAction(
     await close();
   }
 
+  try {
+    await postDiscordAlert({ events, env: process.env, fetchImpl: fetch });
+  } catch {
+    console.error("Discord post failed");
+  }
   refresh();
   return null;
 }

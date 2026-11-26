@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import type { VisitAlertCard } from "@/core/alerts/site-alert";
 import { archiveObservation, type ArchiveObservationResult } from "@/server/archive/archive-observation";
 import {
   recordSourceCheck,
@@ -12,7 +13,8 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
 /**
  * Check one official pricing page and, when the parsed prices are new,
  * ask Wayback to save that page. It then opens a card for each model on
- * the latest stored snapshot that we do not track yet.
+ * the latest stored snapshot that we do not track yet. Those cards are
+ * returned so the caller can tell Discord. This file does not post.
  *
  * This chains the pieces that already exist. The caller picks the page
  * (Anthropic, OpenAI, or Google). It does not call publishPriceVersion().
@@ -30,13 +32,14 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
  */
 
 export type VerifyOfficialResult =
-  | { kind: "fetch_error"; note: string }
-  | { kind: "parser_suspect"; note: string }
-  | { kind: "unchanged" }
+  | { kind: "fetch_error"; note: string; cards: VisitAlertCard[] }
+  | { kind: "parser_suspect"; note: string; cards: VisitAlertCard[] }
+  | { kind: "unchanged"; cards: VisitAlertCard[] }
   | {
       kind: "changed";
       observationId: number;
       archive: ArchiveObservationResult;
+      cards: VisitAlertCard[];
     };
 
 export async function verifyOfficialSource(
@@ -64,8 +67,11 @@ export async function verifyOfficialSource(
       labSlug: input.source.lab,
       result: { kind: "fetch_error", note },
     });
-    await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
-    return { kind: "fetch_error", note };
+    const cards = await syncOfficialCandidates(db, {
+      sourceId: sourceRow.id,
+      labSlug: input.source.lab,
+    });
+    return { kind: "fetch_error", note, cards };
   }
 
   let parsed: ReturnType<ProviderSource["parse"]>;
@@ -80,8 +86,11 @@ export async function verifyOfficialSource(
       labSlug: input.source.lab,
       result: { kind: "parser_suspect", note },
     });
-    await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
-    return { kind: "parser_suspect", note };
+    const cards = await syncOfficialCandidates(db, {
+      sourceId: sourceRow.id,
+      labSlug: input.source.lab,
+    });
+    return { kind: "parser_suspect", note, cards };
   }
 
   const filed = await recordSourceCheck(db, {
@@ -97,13 +106,16 @@ export async function verifyOfficialSource(
     },
   });
 
-  await syncOfficialCandidates(db, { sourceId: sourceRow.id, labSlug: input.source.lab });
+  const cards = await syncOfficialCandidates(db, {
+    sourceId: sourceRow.id,
+    labSlug: input.source.lab,
+  });
 
   if (filed.outcome === "unchanged") {
-    return { kind: "unchanged" };
+    return { kind: "unchanged", cards };
   }
   if (filed.outcome === "parser_suspect" || filed.outcome === "fetch_error") {
-    return { kind: filed.outcome, note: await latestNote(db, sourceRow.id) };
+    return { kind: filed.outcome, note: await latestNote(db, sourceRow.id), cards };
   }
 
   const observationId = requireChangedObservationId(filed);
@@ -114,7 +126,7 @@ export async function verifyOfficialSource(
     now: input.now,
     sleep: input.sleep,
   });
-  return { kind: "changed", observationId, archive };
+  return { kind: "changed", observationId, archive, cards };
 }
 
 /**

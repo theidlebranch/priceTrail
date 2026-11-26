@@ -5,6 +5,7 @@ import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-v
 import { createCatalogRepository, requireInsertedRow } from "@/server/db/repositories/catalog";
 import {
   candidateModels,
+  labs,
   observationItems,
   observations,
   sources,
@@ -31,6 +32,8 @@ export type PublishNewOfficialModelInput = {
 export type PublishNewOfficialModelResult = {
   modelId: number;
   priceVersionId: number;
+  labSlug: string;
+  modelSlug: string;
 };
 
 export async function publishNewOfficialModel(
@@ -115,7 +118,12 @@ export async function publishNewOfficialModel(
     if (updated.length !== 1) {
       throw new ReviewRefusal(`candidate model ${card.id} was no longer pending`);
     }
-    return { modelId: model.id, priceVersionId: published.priceVersionId };
+    return {
+      modelId: model.id,
+      priceVersionId: published.priceVersionId,
+      labSlug: card.labSlug,
+      modelSlug: card.rawSlug,
+    };
   });
 }
 
@@ -130,9 +138,11 @@ async function loadCard(db: PublishDb, candidateId: number) {
       kind: candidateModels.kind,
       sourceId: candidateModels.sourceId,
       sourceType: sources.type,
+      labSlug: labs.slug,
     })
     .from(candidateModels)
     .innerJoin(sources, eq(sources.id, candidateModels.sourceId))
+    .innerJoin(labs, eq(labs.id, candidateModels.labId))
     .where(eq(candidateModels.id, candidateId))
     .limit(1);
   const card = rows[0];
