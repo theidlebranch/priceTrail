@@ -78,6 +78,13 @@
       "when": 1795362557011,
       "tag": "0010_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795694484557,
+      "tag": "0011_sparkling_thanos",
+      "breakpoints": true
     }
   ]
 }

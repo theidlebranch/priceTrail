@@ -3,6 +3,7 @@ import { getTableConfig, type PgColumn } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
   archiveStatus,
+  candidateKind,
   candidateModels,
   candidateStatus,
   fetchOutcome,
@@ -12,6 +13,7 @@ import {
   labs,
   modelAliasKind,
   modelAliases,
+  modelLimits,
   modelSignalKind,
   modelSignals,
   models,
@@ -591,6 +593,7 @@ describe("witness tables", () => {
       "outcome",
       "note",
       "seen_slugs",
+      "retiring_slugs",
       "is_baseline",
       "agreed_count",
       "not_compared_count",
@@ -601,6 +604,7 @@ describe("witness tables", () => {
     expect(witnessReadOutcome.enumValues).toEqual(outcome.enumValues);
     expect(column(config.columns, "agreed_count").notNull).toBe(false);
     expect(column(config.columns, "not_compared_count").notNull).toBe(false);
+    expect(column(config.columns, "retiring_slugs").notNull).toBe(true);
     expect(config.checks).toHaveLength(1);
     expect(config.checks[0]?.name).toBe("witness_reads_counts_match_outcome");
     expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
@@ -627,7 +631,10 @@ describe("witness tables", () => {
     const config = getTableConfig(candidateModels);
     expect(config.name).toBe("candidate_models");
     expect(candidateStatus.enumValues).toEqual(["pending_review", "approved", "rejected"]);
+    expect(candidateKind.enumValues).toEqual(["new_name", "retirement"]);
     expect(column(config.columns, "status").default).toBe("pending_review");
+    expect(column(config.columns, "kind").default).toBe("new_name");
+    expect(column(config.columns, "hint").notNull).toBe(false);
     expect(column(config.columns, "resolved_model_id").notNull).toBe(false);
     expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual([
       "source_id",
@@ -731,5 +738,33 @@ describe("requests", () => {
     expect(decisionText).toContain("pending");
     expect(decisionText).toContain("reviewed_by");
     expect(decisionText).toContain("review_note");
+  });
+});
+
+describe("model limits", () => {
+  it("keeps one current token-limit row per model", () => {
+    const config = getTableConfig(modelLimits);
+    expect(config.name).toBe("model_limits");
+    expect(config.columns.map((entry) => entry.name)).toEqual([
+      "id",
+      "model_id",
+      "source_id",
+      "max_input_tokens",
+      "max_output_tokens",
+      "observed_at",
+    ]);
+    expect(column(config.columns, "max_input_tokens").notNull).toBe(false);
+    expect(column(config.columns, "max_output_tokens").notNull).toBe(false);
+    expect(column(config.columns, "observed_at").notNull).toBe(true);
+    expect(config.uniqueConstraints[0]?.name).toBe("model_limits_model_id");
+    expect(config.uniqueConstraints[0]?.columns.map((entry) => entry.name)).toEqual(["model_id"]);
+    expect(foreignKeyTo(config, "model_id").onDelete).toBe("restrict");
+    expect(foreignKeyTo(config, "source_id").onDelete).toBe("restrict");
+    expect(config.checks).toHaveLength(1);
+    expect(config.checks[0]?.name).toBe("model_limits_has_a_token_count");
+    const text = checkText(config.checks[0]!.value).replace(/\s+/g, " ");
+    expect(text).toContain("max_input_tokens");
+    expect(text).toContain("max_output_tokens");
+    expect(text).toContain("IS NOT NULL");
   });
 });
