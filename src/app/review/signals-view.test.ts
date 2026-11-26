@@ -158,6 +158,8 @@ describe("toSignalsView", () => {
             rawSlug: "claude-new",
             rawName: "Anthropic: Claude New",
             firstSeenAt: GOOD,
+            kind: "new_name",
+            hint: null,
           },
         ],
       }),
@@ -178,9 +180,16 @@ describe("toSignalBoardView", () => {
     const view = toSignalBoardView([
       job(SIGNAL_JOB_URLS[1]),
       job(SIGNAL_JOB_URLS[0]),
+      ...SIGNAL_JOB_URLS.slice(2).map((url) => job(url)),
     ]);
 
-    expect(view.entries.map((entry) => entry.title)).toEqual(["LiteLLM", "OpenRouter"]);
+    expect(view.entries.map((entry) => entry.title)).toEqual([
+      "LiteLLM",
+      "OpenRouter",
+      "OpenAI model list",
+      "Anthropic model list",
+      "Google model list",
+    ]);
     expect(view.entries[0]).toMatchObject({
       href: null,
       lastRun: null,
@@ -188,6 +197,7 @@ describe("toSignalBoardView", () => {
       failed: false,
       disagreements: null,
       newNames: null,
+      retirements: null,
       missing: null,
     });
     expect(JSON.stringify(view)).not.toMatch(/wayback|archive/i);
@@ -217,6 +227,7 @@ describe("toSignalBoardView", () => {
       fromLastGood: null,
       disagreements: null,
       newNames: null,
+      retirements: null,
       missing: null,
     });
   });
@@ -234,6 +245,7 @@ describe("toSignalBoardView", () => {
           hasSuccessfulRead: true,
           disagreementCount: 1,
           newNameCount: 2,
+          retirementCount: 0,
           missingCount: 0,
         },
       }),
@@ -246,6 +258,7 @@ describe("toSignalBoardView", () => {
       fromLastGood: "These counts are from the last good read.",
       disagreements: "1 disagreement",
       newNames: "2 new names",
+      retirements: "0 retirement hints",
       missing: "0 missing models",
     });
   });
@@ -259,6 +272,7 @@ describe("toSignalBoardView", () => {
           hasSuccessfulRead: true,
           disagreementCount: 0,
           newNameCount: 0,
+          retirementCount: 0,
           missingCount: 0,
         },
       }),
@@ -270,12 +284,13 @@ describe("toSignalBoardView", () => {
       fromLastGood: null,
       disagreements: "0 disagreements",
       newNames: "0 new names",
+      retirements: "0 retirement hints",
       missing: "0 missing models",
     });
   });
 
-  it("throws when one of the two jobs is missing", () => {
-    expect(() => toSignalBoardView([job(SIGNAL_JOB_URLS[0])])).toThrow(/LiteLLM and OpenRouter/);
+  it("throws when one job is missing", () => {
+    expect(() => toSignalBoardView([job(SIGNAL_JOB_URLS[0])])).toThrow(/missing a job/);
   });
 });
 
@@ -347,6 +362,7 @@ function job(url: string, overrides: Partial<SignalJobRow> = {}): SignalJobRow {
     hasSuccessfulRead: false,
     disagreementCount: null,
     newNameCount: null,
+    retirementCount: null,
     missingCount: null,
     ...overrides,
   };
@@ -356,7 +372,15 @@ function bothJobs(overrides: {
   litellm?: Partial<SignalJobRow>;
   openrouter?: Partial<SignalJobRow>;
 }): SignalJobRow[] {
-  return [job(SIGNAL_JOB_URLS[0], overrides.litellm), job(SIGNAL_JOB_URLS[1], overrides.openrouter)];
+  return SIGNAL_JOB_URLS.map((url, index) => {
+    if (index === 0) {
+      return job(url, overrides.litellm);
+    }
+    if (index === 1) {
+      return job(url, overrides.openrouter);
+    }
+    return job(url);
+  });
 }
 
 function read(overrides: Partial<WitnessReadRow> = {}): WitnessReadRow {

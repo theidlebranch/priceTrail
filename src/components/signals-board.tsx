@@ -18,8 +18,9 @@ export function SignalJobBoard({ view }: { view: SignalBoardView }) {
       <header>
         <h1 className="text-page-title font-semibold tracking-tight">Signals</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-          A witness is another site&apos;s price list. It can disagree with this site, and it can name a
-          model we do not track. It cannot publish a price.
+          LiteLLM and OpenRouter are other sites&apos; price lists. OpenAI, Anthropic, and Google also
+          have official model lists. A list can name a model or a retirement. None of these publish a
+          price.
         </p>
         <div className="mt-4">
           <Link
@@ -76,7 +77,7 @@ function JobBody({
       )}
       {entry.disagreements === null ? null : (
         <p className="mt-2 text-sm tabular-nums text-foreground">
-          {entry.disagreements}. {entry.newNames}. {entry.missing}.
+          {entry.disagreements}. {entry.newNames}. {entry.retirements}. {entry.missing}.
         </p>
       )}
     </div>
@@ -133,10 +134,22 @@ export function SignalsBoard({
               <li key={row.id} className="border-b border-border px-4 py-4 last:border-b-0">
                 <p className="font-mono text-sm">{row.label}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
-                <SignalCandidateForm candidateId={row.id} action={action} />
+                <SignalCandidateForm candidateId={row.id} action={action} decision="approve" />
               </li>
             ))}
           </FindingList>
+          {view.listsRetirement || view.retirements.length > 0 ? (
+            <FindingList title="Retirement hints" empty={view.emptyRetirements}>
+              {view.retirements.map((row) => (
+                <li key={row.id} className="border-b border-border px-4 py-4 last:border-b-0">
+                  <p className="font-mono text-sm">{row.label}</p>
+                  <p className="mt-1 text-sm text-foreground">{row.hint}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{row.time}</p>
+                  <SignalCandidateForm candidateId={row.id} action={action} decision="accept" />
+                </li>
+              ))}
+            </FindingList>
+          ) : null}
           <FindingList title="Missing models" empty={view.emptyMissing}>
             {view.missing.map((row) => (
               <li key={row.key} className="border-b border-border px-4 py-4 text-sm last:border-b-0">

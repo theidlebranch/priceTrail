@@ -8,15 +8,11 @@ import { decideCandidateAction } from "@/app/review/decide-candidate-action";
 import { SignalDetail } from "@/components/signal-detail";
 import { createDb } from "@/server/db/client";
 import {
-  findLiteLLMSignalPage,
-  findOpenRouterSignalPage,
+  findSignalPage,
   findSignalSource,
   listWitnessReadPage,
 } from "@/server/db/repositories/litellm-signals";
-import type { SignalDb } from "@/server/pipeline/read-litellm-signal";
 import { parseDatabaseEnv } from "@/server/env";
-import { LITELLM_COST_MAP_URL } from "@/server/sources/litellm-signal";
-import { OPENROUTER_MODELS_URL } from "@/server/sources/openrouter-signal";
 
 export const metadata: Metadata = {
   title: "Signal history · PriceTrail",
@@ -74,7 +70,7 @@ async function SignalHistoryLoader({
       throw new Error("signal disappeared before the page could read it");
     }
     const [findings, history] = await Promise.all([
-      findingsFor(db, source.url),
+      findSignalPage(db, source.url),
       listWitnessReadPage(db, source.id, cursor),
     ]);
     return (
@@ -87,14 +83,4 @@ async function SignalHistoryLoader({
   } finally {
     await close();
   }
-}
-
-function findingsFor(db: SignalDb, url: string) {
-  if (url === LITELLM_COST_MAP_URL) {
-    return findLiteLLMSignalPage(db);
-  }
-  if (url === OPENROUTER_MODELS_URL) {
-    return findOpenRouterSignalPage(db);
-  }
-  throw new Error("signal url is not a witness this page reads");
 }

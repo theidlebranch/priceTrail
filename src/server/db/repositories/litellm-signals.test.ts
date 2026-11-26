@@ -38,7 +38,13 @@ import {
 } from "@/server/db/schema";
 import { parseDatabaseEnv } from "@/server/env";
 import { LITELLM_COST_MAP_URL } from "@/server/sources/litellm-signal";
+import {
+  ANTHROPIC_MODELS_URL,
+  GOOGLE_MODELS_URL,
+  OPENAI_MODELS_URL,
+} from "@/server/sources/official-model-list";
 import { OPENROUTER_MODELS_URL } from "@/server/sources/openrouter-signal";
+import { anthropicSource } from "@/server/sources/anthropic-source";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
 const NEWER = new Date("2026-11-15T12:00:00.000Z");
@@ -125,6 +131,7 @@ describe.skipIf(databaseUrl.length === 0)("signal job reads", () => {
         hasSuccessfulRead: false,
         disagreementCount: null,
         newNameCount: null,
+        retirementCount: null,
         missingCount: null,
       });
       expect(listed[0]).toMatchObject({
@@ -162,7 +169,7 @@ describe.skipIf(databaseUrl.length === 0)("signal job reads", () => {
     });
   });
 
-  it("accepts only the LiteLLM and OpenRouter aggregator rows", async () => {
+  it("accepts the witness rows and the three official model lists", async () => {
     await withRollback(async (tx) => {
       const suffix = randomUUID();
       const official = requireInsertedRow(
@@ -185,6 +192,18 @@ describe.skipIf(databaseUrl.length === 0)("signal job reads", () => {
       expect(await hasSignalSource(tx, 9_007_199_254_740_991)).toBe(false);
       expect(await hasSignalSource(tx, await signalSourceId(tx, LITELLM_COST_MAP_URL))).toBe(true);
       expect(await hasSignalSource(tx, await signalSourceId(tx, OPENROUTER_MODELS_URL))).toBe(true);
+      expect(await hasSignalSource(tx, await platformSourceId(tx, OPENAI_MODELS_URL))).toBe(true);
+      expect(await hasSignalSource(tx, await platformSourceId(tx, ANTHROPIC_MODELS_URL))).toBe(true);
+      expect(await hasSignalSource(tx, await platformSourceId(tx, GOOGLE_MODELS_URL))).toBe(true);
+      const pricing = await tx
+        .select({ id: sources.id })
+        .from(sources)
+        .where(eq(sources.url, anthropicSource.url))
+        .limit(1);
+      const pricingId = pricing[0]?.id;
+      if (pricingId !== undefined) {
+        expect(await hasSignalSource(tx, pricingId)).toBe(false);
+      }
     });
   });
 
@@ -318,6 +337,25 @@ async function plantReads(tx: SignalDb, sourceId: number, secret: string): Promi
     notComparedCount: null,
   });
   await tx.insert(witnessReads).values(reads);
+}
+
+async function platformSourceId(tx: SignalDb, url: string): Promise<number> {
+  const existing = await tx
+    .select({ id: sources.id, type: sources.type })
+    .from(sources)
+    .where(eq(sources.url, url));
+  const row = existing[0];
+  if (row === undefined) {
+    const inserted = requireInsertedRow(
+      await tx.insert(sources).values({ url, type: "platform_api" }).returning({ id: sources.id }),
+      "platform source",
+    );
+    return inserted.id;
+  }
+  if (row.type !== "platform_api") {
+    await tx.update(sources).set({ type: "platform_api" }).where(eq(sources.id, row.id));
+  }
+  return row.id;
 }
 
 async function signalSourceId(tx: SignalDb, url: string): Promise<number> {

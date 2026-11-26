@@ -63,6 +63,8 @@ function page(): LiteLLMSignalPage {
         rawSlug: "claude-new",
         rawName: "claude-new",
         firstSeenAt: READ,
+        kind: "new_name",
+        hint: null,
       },
     ],
     signals: [],

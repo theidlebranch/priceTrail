@@ -8,18 +8,21 @@ export type DecideCandidateState = { ok: false; message: string; note: string } 
 type NoteField = { state: DecideCandidateState; key: number };
 
 /**
- * Approve or reject one witness new-name card.
+ * Approve, accept, or reject one card.
  *
- * The note is required. Approve adds the model and does not publish a
- * price. A refusal puts the typed note back. This file does not open a
- * database.
+ * The note is required. Approve adds a new name and does not publish a
+ * price. Accept marks a retirement and does not publish a price. A
+ * refusal puts the typed note back. This file does not open a database
+ * and does not offer Add and publish.
  */
 export function SignalCandidateForm({
   candidateId,
   action,
+  decision = "approve",
 }: {
   candidateId: number;
   action: (previous: DecideCandidateState, formData: FormData) => Promise<DecideCandidateState>;
+  decision?: "approve" | "accept";
 }) {
   const [state, formAction, pending] = useActionState<DecideCandidateState, FormData>(action, null);
   const [field, setField] = useState<NoteField>({ state, key: 0 });
@@ -48,18 +51,19 @@ export function SignalCandidateForm({
         <p className="text-sm leading-6 text-destructive">{state.message}</p>
       ) : null}
       <p className="text-sm leading-6 text-muted-foreground">
-        If this name is not on the official pricing page, the next visit for that lab is treated as
-        a broken page until the name appears.
+        {decision === "accept"
+          ? "Accept marks this model retired. It does not publish a price."
+          : "If this name is not on the official pricing page, the next visit for that lab is treated as a broken page until the name appears."}
       </p>
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"
           name="decision"
-          value="approve"
+          value={decision}
           disabled={pending}
           className={buttonVariants({ size: "sm" })}
         >
-          Approve
+          {decision === "accept" ? "Accept" : "Approve"}
         </button>
         <button
           type="submit"

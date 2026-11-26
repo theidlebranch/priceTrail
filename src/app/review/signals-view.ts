@@ -60,6 +60,9 @@ export type SignalsView = {
   emptyDisagreements: string | null;
   candidates: { id: number; label: string; time: string }[];
   emptyCandidates: string | null;
+  retirements: { id: number; label: string; time: string; hint: string }[];
+  emptyRetirements: string | null;
+  listsRetirement: boolean;
   missing: { key: string; model: string; time: string }[];
   emptyMissing: string | null;
   notLinked: { key: string; model: string; sentence: string; time: string }[];
@@ -70,6 +73,9 @@ export type WitnessCopy = {
   title: string;
   description: string;
   unread: string;
+  listsRetirement: boolean;
+  firstRead?: string;
+  laterRead?: string;
 };
 
 const LITELLM_COPY: WitnessCopy = {
@@ -77,6 +83,7 @@ const LITELLM_COPY: WitnessCopy = {
   description:
     "LiteLLM's cost map is a second price list for Anthropic, OpenAI, and Google. It can disagree with this site, and it can name a model we do not track. It cannot publish a price.",
   unread: "LiteLLM has not been read yet.",
+  listsRetirement: false,
 };
 
 export const OPENROUTER_COPY: WitnessCopy = {
@@ -84,6 +91,37 @@ export const OPENROUTER_COPY: WitnessCopy = {
   description:
     "OpenRouter's model list is a second price list for Anthropic, OpenAI, and Google. It can disagree with this site, and it can name a model we do not track. It cannot publish a price.",
   unread: "OpenRouter has not been read yet.",
+  listsRetirement: false,
+};
+
+const OPENAI_LIST_COPY: WitnessCopy = {
+  title: "OpenAI model list",
+  description:
+    "OpenAI's model list names the models that lab serves. It has no token limits and no prices. A shutdown date can ask for a review. It cannot publish a price.",
+  unread: "The OpenAI model list has not been read yet.",
+  listsRetirement: true,
+  firstRead: "First read. A new name or a retirement hint shows up on the next read.",
+  laterRead: "New names were not in the previous list. A retirement hint is a shutdown date that is new.",
+};
+
+const ANTHROPIC_LIST_COPY: WitnessCopy = {
+  title: "Anthropic model list",
+  description:
+    "Anthropic's model list names models and their token limits. It has no prices. A deprecated or retired model can ask for a review. It cannot publish a price.",
+  unread: "The Anthropic model list has not been read yet.",
+  listsRetirement: true,
+  firstRead: "First read. A new name or a retirement hint shows up on the next read.",
+  laterRead: "New names were not in the previous list. A retirement hint is a lifecycle that is newly deprecated or retired.",
+};
+
+const GOOGLE_LIST_COPY: WitnessCopy = {
+  title: "Google model list",
+  description:
+    "Google's model list names models and their token limits. It has no prices and no retirement field. It cannot publish a price.",
+  unread: "The Google model list has not been read yet.",
+  listsRetirement: true,
+  firstRead: "First read. A new name shows up on the next read.",
+  laterRead: "New names were not in the previous list.",
 };
 
 export function toSignalsView(page: LiteLLMSignalPage, copy: WitnessCopy = LITELLM_COPY): SignalsView {
@@ -100,8 +138,8 @@ export function toSignalsView(page: LiteLLMSignalPage, copy: WitnessCopy = LITEL
         : {
             count: successful.seenCount,
             sentence: successful.isBaseline
-              ? "First read. A new name shows up on the next read."
-              : "New names are slugs that were not in the previous file.",
+              ? (copy.firstRead ?? "First read. A new name shows up on the next read.")
+              : (copy.laterRead ?? "New names are slugs that were not in the previous file."),
           },
     compared:
       successful === null
@@ -121,12 +159,26 @@ export function toSignalsView(page: LiteLLMSignalPage, copy: WitnessCopy = LITEL
       time: stamp(row.detectedAt),
     })),
     emptyDisagreements: emptyFindings(successful, "No prices disagree."),
-    candidates: page.candidates.map((row) => ({
-      id: row.id,
-      label: row.rawName === row.rawSlug ? `${row.labName} ${row.rawSlug}` : `${row.rawName} (${row.rawSlug})`,
-      time: stamp(row.firstSeenAt),
-    })),
+    candidates: checkedCandidates(page.candidates)
+      .filter((row) => row.kind === "new_name")
+      .map((row) => ({
+        id: row.id,
+        label: row.rawName === row.rawSlug ? `${row.labName} ${row.rawSlug}` : `${row.rawName} (${row.rawSlug})`,
+        time: stamp(row.firstSeenAt),
+      })),
     emptyCandidates: emptyFindings(successful, "No new names are waiting."),
+    retirements: page.candidates
+      .filter((row) => row.kind === "retirement")
+      .map((row) => ({
+        id: row.id,
+        label: row.rawName === row.rawSlug ? `${row.labName} ${row.rawSlug}` : `${row.rawName} (${row.rawSlug})`,
+        time: stamp(row.firstSeenAt),
+        hint: retirementHint(row.hint),
+      })),
+    emptyRetirements: copy.listsRetirement
+      ? emptyFindings(successful, "No retirement hints are waiting.")
+      : null,
+    listsRetirement: copy.listsRetirement,
     missing: page.signals
       .filter((row) => row.kind === "missing")
       .map((row) => ({
@@ -193,6 +245,22 @@ function stamp(value: Date): string {
   return `${formatUtcCompact(value).short} UTC`;
 }
 
+function checkedCandidates(rows: LiteLLMSignalPage["candidates"]): LiteLLMSignalPage["candidates"] {
+  for (const row of rows) {
+    if (row.kind !== "new_name" && row.kind !== "retirement") {
+      throw new Error(`candidate kind ${row.kind} is unknown`);
+    }
+  }
+  return rows;
+}
+
+function retirementHint(hint: string | null): string {
+  if (hint === null || hint.trim() === "") {
+    throw new Error("retirement card has no hint");
+  }
+  return hint.trim();
+}
+
 function dimensionLabel(dimension: string): string {
   const label = DIMENSION_LABEL[dimension];
   if (label === undefined) {
@@ -202,13 +270,16 @@ function dimensionLabel(dimension: string): string {
 }
 
 /**
- * The job board is always LiteLLM, then OpenRouter.
+ * LiteLLM, OpenRouter, then the three official model lists.
  * Counts stay empty until a read has succeeded. A later failure
  * keeps the last good counts and says so.
  */
 const BOARD_COPY: Record<(typeof SIGNAL_JOB_URLS)[number], WitnessCopy> = {
   [SIGNAL_JOB_URLS[0]]: LITELLM_COPY,
   [SIGNAL_JOB_URLS[1]]: OPENROUTER_COPY,
+  [SIGNAL_JOB_URLS[2]]: OPENAI_LIST_COPY,
+  [SIGNAL_JOB_URLS[3]]: ANTHROPIC_LIST_COPY,
+  [SIGNAL_JOB_URLS[4]]: GOOGLE_LIST_COPY,
 };
 
 export type SignalBoardEntry = {
@@ -221,6 +292,7 @@ export type SignalBoardEntry = {
   fromLastGood: string | null;
   disagreements: string | null;
   newNames: string | null;
+  retirements: string | null;
   missing: string | null;
 };
 
@@ -253,13 +325,13 @@ export function witnessCopyForUrl(url: string): WitnessCopy {
 export function toSignalBoardView(jobs: readonly SignalJobRow[]): SignalBoardView {
   const byUrl = new Map(jobs.map((job) => [job.url, job]));
   if (byUrl.size !== jobs.length || jobs.length !== SIGNAL_JOB_URLS.length) {
-    throw new Error("signal board expects LiteLLM and OpenRouter");
+    throw new Error("signal board is missing a job");
   }
   return {
     entries: SIGNAL_JOB_URLS.map((url) => {
       const job = byUrl.get(url);
       if (job === undefined) {
-        throw new Error("signal board expects LiteLLM and OpenRouter");
+        throw new Error("signal board is missing a job");
       }
       return toBoardEntry(job, BOARD_COPY[url]);
     }),
@@ -324,14 +396,18 @@ function toBoardEntry(job: SignalJobRow, copy: WitnessCopy): SignalBoardEntry {
     fromLastGood: failed && job.hasSuccessfulRead ? FROM_LAST_GOOD : null,
     disagreements: counts?.disagreements ?? null,
     newNames: counts?.newNames ?? null,
+    retirements: counts?.retirements ?? null,
     missing: counts?.missing ?? null,
   };
 }
 
-function boardCounts(
-  job: SignalJobRow,
-): { disagreements: string; newNames: string; missing: string } | null {
-  const counts = [job.disagreementCount, job.newNameCount, job.missingCount];
+function boardCounts(job: SignalJobRow): {
+  disagreements: string;
+  newNames: string;
+  retirements: string;
+  missing: string;
+} | null {
+  const counts = [job.disagreementCount, job.newNameCount, job.retirementCount, job.missingCount];
   const anyCount = counts.some((count) => count !== null);
   const allCounts = counts.every((count) => count !== null);
   if (job.hasSuccessfulRead !== allCounts || anyCount !== allCounts) {
@@ -343,6 +419,7 @@ function boardCounts(
   return {
     disagreements: tally(job.disagreementCount ?? 0, "disagreement", "disagreements"),
     newNames: tally(job.newNameCount ?? 0, "new name", "new names"),
+    retirements: tally(job.retirementCount ?? 0, "retirement hint", "retirement hints"),
     missing: tally(job.missingCount ?? 0, "missing model", "missing models"),
   };
 }

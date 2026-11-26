@@ -13,9 +13,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Two jobs: LiteLLM, then OpenRouter. Each row is the last run and the
- * counts from the last good read. The findings themselves are on
- * /review/signals/<id>.
+ * LiteLLM, OpenRouter, then the three official model lists. Each row is
+ * the last run and the counts from the last good read. The findings
+ * themselves are on /review/signals/<id>.
  *
  * The proxy already locks /review. requireAllowedReviewer() repeats that
  * check. connection() runs before the database opens so the page is not
