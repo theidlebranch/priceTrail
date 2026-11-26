@@ -86,7 +86,7 @@ describe("respondToTriggerDrain", () => {
       runDrain: async () => ({
         processed: 1,
         triggerId: 4,
-        result: { kind: "fetch_error", note: "network down" },
+        result: { kind: "fetch_error", note: "network down", cards: [] },
       }),
     });
 

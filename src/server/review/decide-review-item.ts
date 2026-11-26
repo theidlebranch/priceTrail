@@ -9,6 +9,7 @@ import {
 import { publishPriceVersion, type PublishDb } from "@/server/db/publish-price-version";
 import {
   fetchLog,
+  labs,
   models,
   observationItems,
   observations,
@@ -46,7 +47,13 @@ export type DecideReviewItemInput = {
 export type DecideReviewItemResult =
   | { decision: "rejected" }
   | { decision: "confirmed"; published: false }
-  | { decision: "confirmed"; published: true; priceVersionId: number };
+  | {
+      decision: "confirmed";
+      published: true;
+      priceVersionId: number;
+      labSlug: string;
+      modelSlug: string;
+    };
 
 type LockedItem = {
   id: number;
@@ -57,6 +64,7 @@ type LockedItem = {
   parsedData: unknown;
   sourceId: number;
   sourceType: string;
+  labSlug: string;
   modelSlug: string;
 };
 
@@ -130,6 +138,8 @@ export async function decideReviewItem(
         decision: "confirmed",
         published: true,
         priceVersionId: published.priceVersionId,
+        labSlug: item.labSlug,
+        modelSlug: item.modelSlug,
       };
     }
 
@@ -157,6 +167,8 @@ export async function decideReviewItem(
       decision: "confirmed",
       published: true,
       priceVersionId: published.priceVersionId,
+      labSlug: item.labSlug,
+      modelSlug: item.modelSlug,
     };
   });
 }
@@ -172,6 +184,7 @@ async function loadItem(db: PublishDb, observationItemId: number): Promise<Locke
       parsedData: observations.parsedData,
       sourceId: observations.sourceId,
       sourceType: sources.type,
+      labSlug: labs.slug,
       modelSlug: models.slug,
     })
     .from(observationItems)
@@ -179,6 +192,7 @@ async function loadItem(db: PublishDb, observationItemId: number): Promise<Locke
     .innerJoin(sources, eq(sources.id, observations.sourceId))
     .innerJoin(offerings, eq(offerings.id, observationItems.offeringId))
     .innerJoin(models, eq(models.id, offerings.modelId))
+    .innerJoin(labs, eq(labs.id, models.labId))
     .where(eq(observationItems.id, observationItemId))
     .limit(1);
   const item = rows[0];

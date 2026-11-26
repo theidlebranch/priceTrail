@@ -127,7 +127,7 @@ describe.skipIf(databaseUrl.length === 0)("verifyOfficialSource for OpenAI", () 
         fetchedAt: NEXT_SEEN,
       });
 
-      expect(second).toEqual({ kind: "unchanged" });
+      expect(second).toEqual({ kind: "unchanged", cards: [] });
       expect(network.waybackCalls()).toBe(waybackAfterFirst);
       const stored = await tx
         .select({ id: observations.id })

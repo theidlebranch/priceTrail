@@ -1,4 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { eventsFromVisit } from "@/core/alerts/site-alert";
+import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
 import { redactDatabaseUrl } from "@/server/db/seed";
 import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import { fetchTriggers, sources } from "@/server/db/schema";
@@ -17,8 +19,11 @@ import type { FetchLike, ProviderSource } from "@/server/sources/provider-source
  * then the lock ends before the visit. The visit commits on its own, so a
  * missing archive key can keep the snapshot. A returned result, including
  * a failed download, sets processed_at. A throw leaves the row pending.
- * One call visits one page. This file does not call publishPriceVersion().
- * The open price stays open.
+ * After a filed visit, a Discord message names a new model, a retirement
+ * or gone card, or a page that could not be read. That post runs before
+ * processed_at is set. A failed post does not skip the stamp, and a
+ * failed stamp does not undo the post. One call visits one page. This
+ * file does not call publishPriceVersion(). The open price stays open.
  */
 
 export type PendingTriggerRun =
@@ -57,6 +62,17 @@ export async function runPendingTriggers(
     now: input.now,
     sleep: input.sleep,
   });
+
+  try {
+    await postDiscordAlert({
+      events: eventsFromVisit(claimed.source.lab, result.kind, result.cards),
+      env: input.env,
+      fetchImpl: input.fetchImpl,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Discord post failed";
+    console.error(redactDatabaseUrl(message));
+  }
 
   await db
     .update(fetchTriggers)

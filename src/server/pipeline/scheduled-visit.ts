@@ -1,4 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { eventsFromVisit } from "@/core/alerts/site-alert";
+import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
 import { redactDatabaseUrl } from "@/server/db/seed";
 import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import { parseDatabaseEnv } from "@/server/env";
@@ -9,7 +11,7 @@ import {
 import { anthropicSource } from "@/server/sources/anthropic-source";
 import { googleSource } from "@/server/sources/google-source";
 import { openaiSource } from "@/server/sources/openai-source";
-import type { ProviderSource } from "@/server/sources/provider-source";
+import type { FetchLike, ProviderSource } from "@/server/sources/provider-source";
 
 /**
  * One scheduled visit of one official pricing page.
@@ -89,7 +91,10 @@ type ScheduleHeaders = {
  * the database URL or the archive keys. A filed visit also prints one JSON
  * line for the host log. That line repeats the response body, plus the
  * schedule name and execution id when Vercel sent them. It does not include
- * the secret or the database URL. This does not call publishPriceVersion().
+ * the secret or the database URL. After the visit is filed, a Discord
+ * message names a new model, a retirement or gone card, or a page that
+ * could not be read. A failed post is logged and does not change the
+ * response. This does not call publishPriceVersion().
  */
 export async function respondToSchedule(input: {
   lab: string;
@@ -97,6 +102,7 @@ export async function respondToSchedule(input: {
   headers?: ScheduleHeaders | null;
   env: NodeJS.Dict<string>;
   openDb: (databaseUrl: string) => OpenedVisit;
+  fetchImpl?: FetchLike;
   runVisit: (db: EvidenceDb, source: ProviderSource) => Promise<VerifyOfficialResult>;
 }): Promise<Response> {
   if (!cronRequestAuthorized(input.authorization, input.env.CRON_SECRET)) {
@@ -113,6 +119,16 @@ export async function respondToSchedule(input: {
     const { databaseUrl } = parseDatabaseEnv(input.env);
     opened = input.openDb(databaseUrl);
     const result = await input.runVisit(opened.db, source);
+    try {
+      await postDiscordAlert({
+        events: eventsFromVisit(input.lab, result.kind, result.cards),
+        env: input.env,
+        fetchImpl: input.fetchImpl ?? fetch,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Discord post failed";
+      console.error(redactDatabaseUrl(message));
+    }
     const body = visitBody(result);
     console.log(JSON.stringify(filedVisitLog(input.lab, body, input.headers)));
     return Response.json(body);
