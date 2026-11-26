@@ -83,6 +83,7 @@ describe.skipIf(databaseUrl.length === 0)("findModelDetail", () => {
         labName: "Anthropic",
         modelName: "Claude Fable 5.1",
         deprecatedAt: null,
+        tokenLimit: null,
         offerings: [
           {
             openVersions: [

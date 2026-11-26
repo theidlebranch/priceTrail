@@ -344,6 +344,11 @@ export const fetchLog = pgTable(
  * alone. agreed_count and not_compared_count are empty unless the read
  * succeeded. seen_slugs is the model ids in that file. The first success
  * is the baseline: is_baseline is true only then.
+ *
+ * retiring_slugs is the filtered chat ids that were already retiring on
+ * that read. Official model lists use it so a later read can tell a new
+ * retirement from an old one. Aggregator reads leave it empty. A missing
+ * id is not stored here and does not retire a model.
  */
 export const witnessReadOutcome = pgEnum("witness_read_outcome", [
   "ok",
@@ -362,6 +367,7 @@ export const witnessReads = pgTable(
     outcome: witnessReadOutcome("outcome").notNull(),
     note: text("note").notNull().default(""),
     seenSlugs: jsonb("seen_slugs").$type<string[]>().notNull().default([]),
+    retiringSlugs: jsonb("retiring_slugs").$type<string[]>().notNull().default([]),
     isBaseline: boolean("is_baseline").notNull().default(false),
     agreedCount: integer("agreed_count"),
     notComparedCount: integer("not_compared_count"),
@@ -403,16 +409,25 @@ export const verificationFlags = pgTable("verification_flags", {
 });
 
 /**
- * A model name a witness saw that we do not track yet.
+ * A model name a witness saw that we do not track yet, or a retirement
+ * hint from an official model list.
  * One row per source and slug. Rejected stays rejected so the name
- * does not come back. An official card can be added and published.
- * Approve on a witness card adds the model and does not publish a price.
+ * does not come back. An official pricing-page card can be added and
+ * published. Approve on a new-name card adds the model and does not
+ * publish a price. Accept on a retirement card sets deprecated_at and
+ * does not publish a price.
+ *
+ * kind new_name is a model we do not track. kind retirement is a
+ * shutdown date or a deprecated or retired lifecycle. hint is the
+ * sentence the review page shows. A new-name card leaves hint empty.
  */
 export const candidateStatus = pgEnum("candidate_status", [
   "pending_review",
   "approved",
   "rejected",
 ]);
+
+export const candidateKind = pgEnum("candidate_kind", ["new_name", "retirement"]);
 
 export const candidateModels = pgTable(
   "candidate_models",
@@ -428,6 +443,8 @@ export const candidateModels = pgTable(
       .references(() => sources.id, { onDelete: "restrict" }),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
     status: candidateStatus("status").notNull().default("pending_review"),
+    kind: candidateKind("kind").notNull().default("new_name"),
+    hint: text("hint"),
     resolvedModelId: bigint("resolved_model_id", { mode: "number" }).references(() => models.id, {
       onDelete: "restrict",
     }),
@@ -533,6 +550,38 @@ export const requests = pgTable(
     check(
       "requests_decision_matches_status",
       sql`(${table.status} = 'pending' AND ${table.reviewedBy} IS NULL AND ${table.reviewedAt} IS NULL AND ${table.reviewNote} IS NULL) OR (${table.status} <> 'pending' AND ${table.reviewedBy} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.reviewNote} IS NOT NULL AND length(btrim(${table.reviewNote})) > 0)`,
+    ),
+  ],
+);
+
+/**
+ * The latest input and output token limits for one model we already track.
+ *
+ * One row per model. source_id is the platform_api list that said the
+ * numbers. At least one of the two counts is filled. A later successful
+ * read replaces the numbers and observed_at. A failed read or a missing
+ * key leaves the row alone. OpenAI's list has no token numbers, so an
+ * OpenAI model has no row. This table does not store a price.
+ */
+export const modelLimits = pgTable(
+  "model_limits",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    modelId: bigint("model_id", { mode: "number" })
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    sourceId: bigint("source_id", { mode: "number" })
+      .notNull()
+      .references(() => sources.id, { onDelete: "restrict" }),
+    maxInputTokens: integer("max_input_tokens"),
+    maxOutputTokens: integer("max_output_tokens"),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("model_limits_model_id").on(table.modelId),
+    check(
+      "model_limits_has_a_token_count",
+      sql`(${table.maxInputTokens} IS NULL OR ${table.maxInputTokens} > 0) AND (${table.maxOutputTokens} IS NULL OR ${table.maxOutputTokens} > 0) AND (${table.maxInputTokens} IS NOT NULL OR ${table.maxOutputTokens} IS NOT NULL)`,
     ),
   ],
 );

@@ -31,6 +31,8 @@ erDiagram
   models ||--o{ candidate_models : "resolved_model_id"
   sources ||--o{ model_signals : "source_id"
   models ||--o{ model_signals : "model_id"
+  models ||--o| model_limits : "model_id"
+  sources ||--o{ model_limits : "source_id"
   sources ||--o{ fetch_triggers : "source_id"
   requests {
     bigint id PK
@@ -48,7 +50,7 @@ erDiagram
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -289,16 +291,20 @@ The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The chi
 | --- | --- | --- | --- | --- |
 | 2 | https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json | aggregator | true | 2026-11-13T16:30:00Z |
 | 3 | https://openrouter.ai/api/v1/models | aggregator | true | 2026-11-15T16:40:00Z |
+| 4 | https://api.openai.com/v1/models | platform_api | true |  |
+| 5 | https://api.anthropic.com/v1/models | platform_api | true |  |
+| 6 | https://generativelanguage.googleapis.com/v1beta/models | platform_api | true |  |
 
-`type` `aggregator` means this page is a witness, not the official pricing page. `last_checked_at` on this row can stay blank. The witness read has its own `fetched_at`.
+`type` `aggregator` means this page is a witness, not the official pricing page. `type` `platform_api` is the lab's own model list. It is not the pricing page. `last_checked_at` on this row can stay blank. The read has its own `fetched_at`.
 
 ### witness_reads
 
-| id | source_id | fetched_at | outcome | note | seen_slugs | is_baseline | agreed_count | not_compared_count |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 2 | 2026-11-13T16:30:00Z | ok |  | ["claude-haiku-4-5", "claude-new"] | true | 0 | 0 |
+| id | source_id | fetched_at | outcome | note | seen_slugs | retiring_slugs | is_baseline | agreed_count | not_compared_count |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2 | 2026-11-13T16:30:00Z | ok |  | ["claude-haiku-4-5", "claude-new"] | [] | true | 0 | 0 |
+| 2 | 5 | 2026-11-26T12:00:00Z | ok |  | ["claude-haiku-4.5", "claude-old"] | ["claude-old"] | false | 0 | 0 |
 
-`outcome` `ok` means the file parsed. `note` is empty on success. `seen_slugs` is the model ids in that file. `is_baseline` is true only for the first success. `agreed_count` is how many linked models matched. It is empty when the read failed.
+`outcome` `ok` means the file parsed. `note` is empty on success. `seen_slugs` is the model ids in that file. `retiring_slugs` is empty for an aggregator. On an official model list it is the filtered chat ids that were already retiring, so the next read can tell a new retirement from an old one. `is_baseline` is true only for the first success. `agreed_count` is how many linked models matched. A model list does not compare prices, so both counts are 0. They are empty when the read failed.
 
 ### verification_flags
 
@@ -310,12 +316,21 @@ The source id 2 is the LiteLLM file. Source id 3 is the OpenRouter list. The chi
 
 ### candidate_models
 
-| id | lab_id | raw_name | raw_slug | source_id | first_seen_at | status | resolved_model_id | reviewed_by | reviewed_at | review_note |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1 | claude-new | claude-new | 2 | 2026-11-13T16:30:00Z | pending_review |  |  |  |  |
-| 2 | 1 | Claude Sonnet 4.6 | claude-sonnet-4.6 | 1 | 2026-11-15T12:00:00Z | pending_review |  |  |  |  |
+| id | lab_id | raw_name | raw_slug | source_id | first_seen_at | status | kind | hint | resolved_model_id | reviewed_by | reviewed_at | review_note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | claude-new | claude-new | 2 | 2026-11-13T16:30:00Z | pending_review | new_name |  |  |  |  |  |
+| 2 | 1 | Claude Sonnet 4.6 | claude-sonnet-4.6 | 1 | 2026-11-15T12:00:00Z | pending_review | new_name |  |  |  |  |  |
+| 3 | 1 | Claude Old | claude-old | 5 | 2026-11-26T12:00:00Z | pending_review | retirement | Lifecycle deprecated. |  |  |  |  |
 
-`raw_name` and `raw_slug` are the same on row 1, because the cost map has no separate display name. Row 2 is an official pricing page: source id 1 is the Anthropic page from the first story, and `raw_name` is the parsed display name. `status` `pending_review` means a reviewer has not decided. Reject fills `reviewed_by`, `reviewed_at`, and `review_note`, and the slug does not come back. Add and publish on an official card sets `status` to `approved`, fills `resolved_model_id`, and publishes the price through `publishPriceVersion()`. Approve on a witness card sets `status` to `approved`, fills `resolved_model_id`, and adds the model with no price. It does not call `publishPriceVersion()`.
+`raw_name` and `raw_slug` are the same on row 1, because the cost map has no separate display name. Row 2 is an official pricing page: source id 1 is the Anthropic page from the first story, and `raw_name` is the parsed display name. `status` `pending_review` means a reviewer has not decided. `kind` `new_name` is a model we do not track. `kind` `retirement` is a shutdown date or a deprecated or retired lifecycle, and `hint` is the sentence the review page shows. A new-name card leaves `hint` empty. Reject fills `reviewed_by`, `reviewed_at`, and `review_note`, and the slug does not come back. Add and publish on an official pricing-page card sets `status` to `approved`, fills `resolved_model_id`, and publishes the price through `publishPriceVersion()`. Approve on a new-name card from a witness or a model list sets `status` to `approved`, fills `resolved_model_id`, and adds the model with no price. Accept on a retirement card does the same for an untracked model, then sets `models.deprecated_at`. Neither one calls `publishPriceVersion()`.
+
+### model_limits
+
+| id | model_id | source_id | max_input_tokens | max_output_tokens | observed_at |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 5 | 200000 | 8192 | 2026-11-26T12:00:00Z |
+
+One row per model. `source_id` 5 is the Anthropic model list, not the pricing page. The numbers are a reading aid, not a live read. A later successful read replaces them and `observed_at`. OpenAI's list has no token numbers, so an OpenAI model has no row here. This table does not store a price.
 
 ### model_signals
 

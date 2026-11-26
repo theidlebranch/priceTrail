@@ -78,6 +78,7 @@ function view(overrides: Partial<ModelDetailView> = {}): ModelDetailView {
     retired: false,
     versionCount: 1,
     sinceDay: "2026-10-18",
+    tokenLimit: null,
     headlines: [
       { label: "Input", amountText: "$10", change: null },
       { label: "Output", amountText: "$50", change: null },
@@ -140,6 +141,24 @@ describe("ModelDetail", () => {
     expect(screen.queryByText("All prices shown on this page are examples.")).toBeNull();
     expect(screen.queryByText("No current price is published.")).toBeNull();
     expect(screen.queryByText("A possible change is under review.")).toBeNull();
+    expect(screen.queryByText(/input limit/)).toBeNull();
+  });
+
+  it("shows the token-limit sentence when the read stored one", () => {
+    render(
+      <ModelDetail
+        view={view({
+          tokenLimit:
+            "input limit 1,000,000 tokens, output limit 128,000 tokens, read from the Anthropic model list on Nov 26, 2026 UTC.",
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "input limit 1,000,000 tokens, output limit 128,000 tokens, read from the Anthropic model list on Nov 26, 2026 UTC.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows one context tier at a time and keeps the change log whole", () => {

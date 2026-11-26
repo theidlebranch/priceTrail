@@ -71,6 +71,7 @@ describe("SignalsBoard", () => {
 describe("SignalJobBoard", () => {
   it("links a stored job and leaves an unread job as text", () => {
     const view = toSignalBoardView([
+      ...SIGNAL_JOB_URLS.slice(2).map((url) => job(url)),
       job(SIGNAL_JOB_URLS[0]),
       job(SIGNAL_JOB_URLS[1], {
         sourceId: 8,
@@ -82,6 +83,7 @@ describe("SignalJobBoard", () => {
         hasSuccessfulRead: true,
         disagreementCount: 1,
         newNameCount: 2,
+        retirementCount: 0,
         missingCount: 0,
       }),
     ]);
@@ -93,7 +95,7 @@ describe("SignalJobBoard", () => {
     const openrouter = within(list).getByRole("link", { name: /OpenRouter/ });
     expect(openrouter.getAttribute("href")).toBe("/review/signals/8");
     expect(openrouter.closest("li")?.className).toMatch(/border-l-status-warning/);
-    expect(screen.getByText("1 disagreement. 2 new names. 0 missing models.")).toBeTruthy();
+    expect(screen.getByText("1 disagreement. 2 new names. 0 retirement hints. 0 missing models.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
     expect(screen.queryByText(/wayback/i)).toBeNull();
   });
@@ -107,6 +109,7 @@ function job(url: string, overrides: Partial<SignalJobRow> = {}): SignalJobRow {
     hasSuccessfulRead: false,
     disagreementCount: null,
     newNameCount: null,
+    retirementCount: null,
     missingCount: null,
     ...overrides,
   };

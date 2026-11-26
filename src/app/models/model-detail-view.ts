@@ -15,6 +15,7 @@ import {
   type PriceHistories,
   type PriceHistorySeries,
 } from "@/core/pricing/price-history";
+import { tokenLimitSentence } from "@/core/models/official-list";
 import { pricePrecisionLabel } from "@/core/pricing/precision";
 import type {
   ModelDetailComponent,
@@ -148,6 +149,7 @@ export type ModelDetailView = {
   events: ModelDetailChangeEvent[];
   startingPrice: ModelDetailStartingPrice | null;
   changeUnderReview: boolean;
+  tokenLimit: string | null;
 };
 
 export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetailView {
@@ -191,6 +193,7 @@ export function toModelDetailView(read: ModelDetailRead, asOf: Date): ModelDetai
         ? null
         : startingPrice(offering.historyVersions, proofs),
     changeUnderReview: offering === undefined ? false : changeUnderReview(offering.reviewStatuses),
+    tokenLimit: read.tokenLimit === null ? null : tokenLimitSentence(read.tokenLimit),
   };
 }
 

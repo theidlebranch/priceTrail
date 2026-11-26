@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { SignalDb } from "@/server/pipeline/read-litellm-signal";
 import { LITELLM_COST_MAP_URL } from "@/server/sources/litellm-signal";
+import {
+  ANTHROPIC_MODELS_URL,
+  GOOGLE_MODELS_URL,
+  isOfficialModelListUrl,
+  OPENAI_MODELS_URL,
+} from "@/server/sources/official-model-list";
 import { OPENROUTER_MODELS_URL } from "@/server/sources/openrouter-signal";
 import {
   candidateModels,
@@ -42,7 +48,15 @@ export type LiteLLMSignalPage = {
     aggregatorValue: string;
     detectedAt: Date;
   }[];
-  candidates: { id: number; labName: string; rawSlug: string; rawName: string; firstSeenAt: Date }[];
+  candidates: {
+    id: number;
+    labName: string;
+    rawSlug: string;
+    rawName: string;
+    firstSeenAt: Date;
+    kind: "new_name" | "retirement";
+    hint: string | null;
+  }[];
   signals: {
     modelName: string;
     labName: string;
@@ -52,12 +66,12 @@ export type LiteLLMSignalPage = {
   }[];
 };
 
-export function findLiteLLMSignalPage(db: SignalDb): Promise<LiteLLMSignalPage> {
-  return findWitnessSignalPage(db, LITELLM_COST_MAP_URL);
-}
-
-export function findOpenRouterSignalPage(db: SignalDb): Promise<LiteLLMSignalPage> {
-  return findWitnessSignalPage(db, OPENROUTER_MODELS_URL);
+/** The latest read for one signal job, including an official model list. */
+export function findSignalPage(db: SignalDb, sourceUrl: string): Promise<LiteLLMSignalPage> {
+  if (!isSignalJobUrl(sourceUrl)) {
+    throw new Error("signal url is not a witness this page reads");
+  }
+  return findWitnessSignalPage(db, sourceUrl);
 }
 
 /**
@@ -140,6 +154,8 @@ async function findWitnessSignalPage(db: SignalDb, sourceUrl: string): Promise<L
       rawSlug: candidateModels.rawSlug,
       rawName: candidateModels.rawName,
       firstSeenAt: candidateModels.firstSeenAt,
+      kind: candidateModels.kind,
+      hint: candidateModels.hint,
     })
     .from(candidateModels)
     .innerJoin(labs, eq(candidateModels.labId, labs.id))
@@ -228,10 +244,17 @@ function emptyPage(): LiteLLMSignalPage {
 }
 
 /**
- * LiteLLM, then OpenRouter. The board asks for these URLs in this order.
+ * LiteLLM, then OpenRouter, then the three official model lists.
+ * The board asks for these URLs in this order.
  * A test can pass other URLs so it does not touch the live witness rows.
  */
-export const SIGNAL_JOB_URLS = [LITELLM_COST_MAP_URL, OPENROUTER_MODELS_URL] as const;
+export const SIGNAL_JOB_URLS = [
+  LITELLM_COST_MAP_URL,
+  OPENROUTER_MODELS_URL,
+  OPENAI_MODELS_URL,
+  ANTHROPIC_MODELS_URL,
+  GOOGLE_MODELS_URL,
+] as const;
 
 /** One page of witness reads. The next page starts strictly before the oldest row shown. */
 export const WITNESS_READ_PAGE_SIZE = 50;
@@ -251,6 +274,7 @@ export type SignalJobRow = {
   hasSuccessfulRead: boolean;
   disagreementCount: number | null;
   newNameCount: number | null;
+  retirementCount: number | null;
   missingCount: number | null;
 };
 
@@ -324,17 +348,17 @@ export async function listWitnessReadPage(
 }
 
 /**
- * True only for the LiteLLM or OpenRouter source row.
- * An official page, or any other aggregator, is not this board.
+ * True for LiteLLM, OpenRouter, or one of the three official model
+ * lists. An official pricing page, or any other URL, is not this board.
  */
 export async function hasSignalSource(db: SignalDb, id: number): Promise<boolean> {
   return (await findSignalSource(db, id)) !== null;
 }
 
 /**
- * The witness row for /review/signals/<id>, or null when this id is not
- * one of the two signal jobs. The page throws if a row vanishes after
- * the proxy already allowed it.
+ * The row for /review/signals/<id>, or null when this id is not one of
+ * the signal jobs. The page throws if a row vanishes after the proxy
+ * already allowed it.
  */
 export async function findSignalSource(
   db: SignalDb,
@@ -346,10 +370,20 @@ export async function findSignalSource(
     .where(eq(sources.id, id))
     .limit(1);
   const row = rows[0];
-  if (row === undefined || row.type !== "aggregator" || !isSignalJobUrl(row.url)) {
+  if (row === undefined || !isListedSignal(row)) {
     return null;
   }
   return { id: row.id, url: row.url };
+}
+
+function isListedSignal(row: { type: string; url: string }): boolean {
+  if (row.type === "aggregator") {
+    return row.url === LITELLM_COST_MAP_URL || row.url === OPENROUTER_MODELS_URL;
+  }
+  if (row.type === "platform_api") {
+    return isOfficialModelListUrl(row.url);
+  }
+  return false;
 }
 
 /**
@@ -435,6 +469,7 @@ async function readSignalJob(db: SignalDb, url: string): Promise<SignalJobRow> {
     hasSuccessfulRead,
     disagreementCount: hasSuccessfulRead ? await countDisagreements(db, sourceId) : null,
     newNameCount: hasSuccessfulRead ? await countNewNames(db, sourceId) : null,
+    retirementCount: hasSuccessfulRead ? await countRetirements(db, sourceId) : null,
     missingCount: hasSuccessfulRead ? await countMissing(db, sourceId) : null,
   };
 }
@@ -447,6 +482,7 @@ function emptyJob(url: string, sourceId: number | null = null): SignalJobRow {
     hasSuccessfulRead: false,
     disagreementCount: null,
     newNameCount: null,
+    retirementCount: null,
     missingCount: null,
   };
 }
@@ -473,11 +509,30 @@ async function countDisagreements(db: SignalDb, sourceId: number): Promise<numbe
 }
 
 async function countNewNames(db: SignalDb, sourceId: number): Promise<number> {
+  return countCards(db, sourceId, "new_name", "new name count");
+}
+
+async function countRetirements(db: SignalDb, sourceId: number): Promise<number> {
+  return countCards(db, sourceId, "retirement", "retirement count");
+}
+
+async function countCards(
+  db: SignalDb,
+  sourceId: number,
+  kind: "new_name" | "retirement",
+  label: string,
+): Promise<number> {
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(candidateModels)
-    .where(and(eq(candidateModels.sourceId, sourceId), eq(candidateModels.status, "pending_review")));
-  return readCountCell(rows[0]?.count, "new name count");
+    .where(
+      and(
+        eq(candidateModels.sourceId, sourceId),
+        eq(candidateModels.status, "pending_review"),
+        eq(candidateModels.kind, kind),
+      ),
+    );
+  return readCountCell(rows[0]?.count, label);
 }
 
 async function countMissing(db: SignalDb, sourceId: number): Promise<number> {

@@ -9,10 +9,12 @@ import {
   observations,
   offerings,
   priceComponents,
+  modelLimits,
   priceVersionEvidence,
   priceVersions,
   sources,
 } from "@/server/db/schema";
+import { officialModelListName } from "@/server/sources/official-model-list";
 
 /**
  * Read door for one public model page.
@@ -34,6 +36,8 @@ import {
  * reviewStatuses are the official items on this offering. flagged
  * is the only status that means a change is still under review.
  * An aggregator item is not included.
+ * tokenLimit is the latest official model-list count, or null when
+ * that model has no stored limit. OpenAI's list has no token numbers.
  */
 
 type Schema = typeof schema;
@@ -74,10 +78,18 @@ export type ModelDetailOffering = {
   reviewStatuses: string[];
 };
 
+export type ModelDetailTokenLimit = {
+  maxInputTokens: number | null;
+  maxOutputTokens: number | null;
+  observedAt: Date;
+  listName: "OpenAI" | "Anthropic" | "Google";
+};
+
 export type ModelDetailRead = {
   labName: string;
   modelName: string;
   deprecatedAt: Date | null;
+  tokenLimit: ModelDetailTokenLimit | null;
   offerings: ModelDetailOffering[];
 };
 
@@ -125,6 +137,8 @@ export async function findModelDetail(
     return null;
   }
 
+  const tokenLimit = await readTokenLimit(db, model.modelId);
+
   const offeringRows = await db
     .select({ id: offerings.id })
     .from(offerings)
@@ -135,6 +149,7 @@ export async function findModelDetail(
       labName: model.labName,
       modelName: model.modelName,
       deprecatedAt: model.deprecatedAt,
+      tokenLimit,
       offerings: [],
     };
   }
@@ -199,9 +214,41 @@ export async function findModelDetail(
     labName: model.labName,
     modelName: model.modelName,
     deprecatedAt: model.deprecatedAt,
+    tokenLimit,
     offerings: offeringRows.map((offering) =>
       offeringDetail(offering.id, versionRows, componentRows, evidenceRows, sourceRows),
     ),
+  };
+}
+
+async function readTokenLimit(db: ModelDetailDb, modelId: number): Promise<ModelDetailTokenLimit | null> {
+  const rows = await db
+    .select({
+      maxInputTokens: modelLimits.maxInputTokens,
+      maxOutputTokens: modelLimits.maxOutputTokens,
+      observedAt: modelLimits.observedAt,
+      sourceUrl: sources.url,
+    })
+    .from(modelLimits)
+    .innerJoin(sources, eq(sources.id, modelLimits.sourceId))
+    .where(eq(modelLimits.modelId, modelId))
+    .limit(1);
+  const row = rows[0];
+  if (row === undefined) {
+    return null;
+  }
+  const listName = officialModelListName(row.sourceUrl);
+  if (listName === null) {
+    throw new Error("token limit source is not an official model list");
+  }
+  if (row.maxInputTokens === null && row.maxOutputTokens === null) {
+    throw new Error("token limit row has no count");
+  }
+  return {
+    maxInputTokens: row.maxInputTokens,
+    maxOutputTokens: row.maxOutputTokens,
+    observedAt: row.observedAt,
+    listName,
   };
 }
 

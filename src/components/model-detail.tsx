@@ -42,6 +42,9 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
             {view.sinceDay}
           </p>
         ) : null}
+        {view.tokenLimit === null ? null : (
+          <p className="mt-3 text-sm text-muted-foreground">{view.tokenLimit}</p>
+        )}
         {view.changeUnderReview ? (
           <div className="mt-4 rounded-md border border-border border-l-2 border-l-status-warning bg-secondary">
             <p className="px-3 py-2 text-sm text-foreground" role="status">

@@ -29,6 +29,7 @@
     "prices:link-evidence": "tsx --env-file=.env scripts/link-price-evidence.ts",
     "signals:litellm": "tsx --env-file=.env scripts/read-litellm-signal.ts",
     "signals:openrouter": "tsx --env-file=.env scripts/read-openrouter-signal.ts",
+    "signals:model-lists": "tsx --env-file=.env scripts/read-model-lists.ts",
     "seed:litellm-aliases": "tsx --env-file=.env scripts/seed-litellm-aliases.ts"
   },
   "dependencies": {

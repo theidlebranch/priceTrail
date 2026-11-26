@@ -39,6 +39,7 @@ import {
   loadSeedPlan,
   plantSeedPendingExample,
   redactDatabaseUrl,
+  redactSecrets,
   runSeed,
   type SeedPlanEntry,
 } from "@/server/db/seed";
@@ -245,6 +246,19 @@ describe("redactDatabaseUrl", () => {
 
     expect(redactDatabaseUrl(message)).toBe("connect failed: postgresql://[redacted] extra");
     expect(redactDatabaseUrl(message)).not.toContain("secret");
+  });
+});
+
+describe("redactSecrets", () => {
+  it("hides a database URL and an API key without hiding the rest", () => {
+    const key = "sk-test-key-value";
+    const message = `failed postgresql://user:secret@db.example/price Authorization: Bearer ${key}`;
+
+    const redacted = redactSecrets(message, [key]);
+
+    expect(redacted).toBe("failed postgresql://[redacted] Authorization: Bearer [redacted]");
+    expect(redacted).not.toContain(key);
+    expect(redacted).not.toContain("secret@");
   });
 });
 
