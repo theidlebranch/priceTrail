@@ -598,3 +598,38 @@ export const modelLimits = pgTable(
     ),
   ],
 );
+
+/**
+ * One row per Google or GitHub account that has signed in.
+ *
+ * account_id is google:<id> or github:<numeric id>, the same id the
+ * rest of the app already stores. display_name and email are whatever
+ * the provider sent. A missing name or email stays empty. registered_at
+ * is the first stored sign-in and does not move. last_signed_in_at
+ * moves on a later sign-in. A page view does not write this table.
+ * This table does not store a price.
+ */
+export const accounts = pgTable(
+  "accounts",
+  {
+    accountId: text("account_id").primaryKey(),
+    displayName: text("display_name"),
+    email: text("email"),
+    registeredAt: timestamp("registered_at", { withTimezone: true }).notNull(),
+    lastSignedInAt: timestamp("last_signed_in_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "accounts_id_is_provider_account",
+      sql`${table.accountId} ~ '^google:[A-Za-z0-9_-]+$' OR ${table.accountId} ~ '^github:[0-9]+$'`,
+    ),
+    check(
+      "accounts_name_and_email_are_blank_or_filled",
+      sql`(${table.displayName} IS NULL OR length(btrim(${table.displayName})) > 0) AND (${table.email} IS NULL OR length(btrim(${table.email})) > 0)`,
+    ),
+    check(
+      "accounts_last_sign_in_is_not_before_registration",
+      sql`${table.lastSignedInAt} >= ${table.registeredAt}`,
+    ),
+  ],
+);

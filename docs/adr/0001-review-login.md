@@ -6,4 +6,6 @@ A shared password was the smaller option, and it cannot tell two reviewers apart
 
 An empty allowlist means nobody can review. `reviewed_by` stores the provider and the account id, so two people with the same display name stay distinct. This decision does not add a login library, a route lock, or a call to `publishPriceVersion()`.
 
-Later, the public header treats any Google or GitHub sign-in as a member. The first sign-in is the account. The session is still the cookie, and there is still no user table. A member can see Following, Alerts, and the other account links. Only an allowlisted account can open `/review`. A member who is not on the list still gets "This account cannot review."
+Later, the public header treats any Google or GitHub sign-in as a member. The first sign-in is the account. The session is still the cookie. A member can see Following, Alerts, and the other account links. Only an allowlisted account can open `/review`. A member who is not on the list still gets "This account cannot review."
+
+Step 43 stores each sign-in in `accounts`. That table is a list for reviewers. It is not the session, and it does not decide who may review.

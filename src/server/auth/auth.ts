@@ -4,11 +4,13 @@ import Google from "next-auth/providers/google";
 import { configuredReviewProviders, stampReviewerToken } from "@/core/auth/review-access";
 
 /**
- * Login for /review only.
+ * Login for the site.
  *
  * Auth.js is the library that talks to Google and GitHub and stores the
- * result in an encrypted cookie. We do not give it a database adapter, so
- * it does not create a user table. The cookie is the whole session.
+ * result in an encrypted cookie. We do not give it a database adapter.
+ * The cookie is still the session. A real sign-in also writes one
+ * accounts row, so a reviewer can list who has signed in. A later
+ * cookie refresh has no provider account, so it does not write again.
  *
  * The default cookie only keeps a name, an email, and a picture. An email
  * can change, so the jwt callback copies the provider's stable account id
@@ -41,8 +43,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       signIn: "/review/sign-in",
     },
     callbacks: {
-      jwt({ token, account }) {
-        return stampReviewerToken(token, account);
+      async jwt({ token, account, user }) {
+        const stamped = stampReviewerToken(token, account);
+        if (account != null) {
+          const { recordSignIn } = await import("@/server/auth/record-sign-in");
+          await recordSignIn({
+            provider: account.provider,
+            providerAccountId: account.providerAccountId,
+            name: textOrNull(user?.name) ?? textOrNull(token.name),
+            email: textOrNull(user?.email) ?? textOrNull(token.email),
+            signedInAt: new Date(),
+          });
+        }
+        return stamped;
       },
       session({ session, token }) {
         // Copy the raw strings onto the session object. The gate checks
@@ -68,3 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
     },
   };
 });
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
