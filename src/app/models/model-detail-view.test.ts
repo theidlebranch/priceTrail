@@ -15,6 +15,7 @@ function read(overrides: Partial<ModelDetailRead> = {}): ModelDetailRead {
     labName: "Anthropic",
     modelName: "Claude Fable 5.1",
     deprecatedAt: null,
+    tokenLimit: null,
     offerings: [offering()],
     ...overrides,
   };
@@ -182,7 +183,26 @@ describe("toModelDetailView", () => {
         notes: [],
       },
       changeUnderReview: false,
+      tokenLimit: null,
     });
+  });
+
+  it("shows the stored token limit and the UTC day it was read", () => {
+    const view = toModelDetailView(
+      read({
+        tokenLimit: {
+          maxInputTokens: 1_000_000,
+          maxOutputTokens: 128_000,
+          observedAt: new Date("2026-11-26T18:04:00.000Z"),
+          listName: "Anthropic",
+        },
+      }),
+      AS_OF,
+    );
+
+    expect(view.tokenLimit).toBe(
+      "input limit 1,000,000 tokens, output limit 128,000 tokens, read from the Anthropic model list on Nov 26, 2026 UTC.",
+    );
   });
 
   it("keeps cache-write tiers grouped when a condition label would sort between them", () => {
