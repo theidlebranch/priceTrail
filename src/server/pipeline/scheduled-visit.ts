@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { eventsFromVisit } from "@/core/alerts/site-alert";
 import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
+import { postSlackAlert } from "@/server/alerts/post-slack-alert";
 import { redactDatabaseUrl } from "@/server/db/seed";
 import type { EvidenceDb } from "@/server/db/repositories/evidence";
 import { parseDatabaseEnv } from "@/server/env";
@@ -92,9 +93,9 @@ type ScheduleHeaders = {
  * line for the host log. That line repeats the response body, plus the
  * schedule name and execution id when Vercel sent them. It does not include
  * the secret or the database URL. After the visit is filed, a Discord
- * message names a new model, a retirement or gone card, or a page that
- * could not be read. A failed post is logged and does not change the
- * response. This does not call publishPriceVersion().
+ * message and a Slack message name a new model, a retirement or gone
+ * card, or a page that could not be read. A failed post is logged and
+ * does not change the response. This does not call publishPriceVersion().
  */
 export async function respondToSchedule(input: {
   lab: string;
@@ -119,14 +120,26 @@ export async function respondToSchedule(input: {
     const { databaseUrl } = parseDatabaseEnv(input.env);
     opened = input.openDb(databaseUrl);
     const result = await input.runVisit(opened.db, source);
+    const events = eventsFromVisit(input.lab, result.kind, result.cards);
+    const fetchImpl = input.fetchImpl ?? fetch;
     try {
       await postDiscordAlert({
-        events: eventsFromVisit(input.lab, result.kind, result.cards),
+        events,
         env: input.env,
-        fetchImpl: input.fetchImpl ?? fetch,
+        fetchImpl,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Discord post failed";
+      console.error(redactDatabaseUrl(message));
+    }
+    try {
+      await postSlackAlert({
+        events,
+        env: input.env,
+        fetchImpl,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Slack post failed";
       console.error(redactDatabaseUrl(message));
     }
     const body = visitBody(result);

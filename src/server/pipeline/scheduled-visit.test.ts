@@ -295,6 +295,37 @@ describe("respondToSchedule", () => {
     expect(JSON.stringify(body)).not.toContain("hook-token");
   });
 
+  it("posts one slack message for a new model, a retirement, and a page that could not be read", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response("ok", { status: 200 }));
+    const webhook = "https://hooks.slack.com/services/T/B/hook-token";
+
+    const response = await respondToSchedule({
+      lab: "anthropic",
+      authorization: `Bearer ${SECRET}`,
+      env: { CRON_SECRET: SECRET, DATABASE_URL, SLACK_WEBHOOK_URL: webhook },
+      openDb: () => ({ db: {} as EvidenceDb, close: async () => {} }),
+      fetchImpl,
+      runVisit: async () => ({
+        kind: "parser_suspect" as const,
+        note: "0 matching tables",
+        cards: [
+          { kind: "new_name" as const, modelName: "Claude Example", modelSlug: "claude-example" },
+          { kind: "retirement" as const, modelName: "Old Model", modelSlug: "old-model" },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ kind: "parser_suspect", note: "0 matching tables" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(body.text).toContain("Claude Example is a new model waiting for review.");
+    expect(body.text).toContain("Old Model may be retired and is waiting for review.");
+    expect(body.text).toContain("the pricing page could not be read.");
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(webhook);
+    expect(JSON.stringify(body)).not.toContain("hook-token");
+  });
+
   it("returns 200 when discord throws and does not log the webhook URL", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const webhook = "https://discord.com/api/webhooks/1/hook-token";

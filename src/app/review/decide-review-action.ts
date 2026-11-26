@@ -10,6 +10,7 @@ import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { priceAlertEvents, type SiteAlertEvent } from "@/core/alerts/site-alert";
 import { ReviewRefusal } from "@/core/review/confirm-price";
 import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
+import { postSlackAlert } from "@/server/alerts/post-slack-alert";
 import { createDb } from "@/server/db/client";
 import { parseDatabaseEnv } from "@/server/env";
 import { decideReviewItem } from "@/server/review/decide-review-item";
@@ -26,9 +27,9 @@ import { decideReviewItem } from "@/server/review/decide-review-item";
  * render this page again, so a finished item drops the buttons. An
  * action that does not ask is not re-rendered.
  *
- * A published price tells Discord after the database connection is
- * closed. The same price, a rejection, and a refusal stay quiet. A
- * failed post does not undo the price.
+ * A published price tells Discord and Slack after the database
+ * connection is closed. The same price, a rejection, and a refusal stay
+ * quiet. A failed post does not undo the price.
  */
 export async function decideReviewAction(
   _previous: DecideReviewFormState,
@@ -76,6 +77,11 @@ export async function decideReviewAction(
     await postDiscordAlert({ events, env: process.env, fetchImpl: fetch });
   } catch {
     console.error("Discord post failed");
+  }
+  try {
+    await postSlackAlert({ events, env: process.env, fetchImpl: fetch });
+  } catch {
+    console.error("Slack post failed");
   }
   refresh();
   return null;

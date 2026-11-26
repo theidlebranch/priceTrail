@@ -7,6 +7,7 @@ import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { priceAlertEvents, type SiteAlertEvent } from "@/core/alerts/site-alert";
 import { ReviewRefusal } from "@/core/review/confirm-price";
 import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
+import { postSlackAlert } from "@/server/alerts/post-slack-alert";
 import { createDb } from "@/server/db/client";
 import { parseDatabaseEnv } from "@/server/env";
 import { acceptModelRetirement } from "@/server/review/accept-model-retirement";
@@ -19,8 +20,8 @@ import { rejectCandidateModel } from "@/server/review/reject-candidate";
  * The reviewer is checked again here. The browser does not send a price.
  * A refusal puts the typed note back. refresh() asks Next.js to render
  * the page again, so a finished card drops the buttons. Add and publish
- * tells Discord after the database connection is closed. Reject and
- * accept stay quiet. A failed post does not undo the price.
+ * tells Discord and Slack after the database connection is closed.
+ * Reject and accept stay quiet. A failed post does not undo the price.
  */
 export async function publishCandidateAction(
   _previous: DecideReviewFormState,
@@ -85,6 +86,11 @@ export async function publishCandidateAction(
     await postDiscordAlert({ events, env: process.env, fetchImpl: fetch });
   } catch {
     console.error("Discord post failed");
+  }
+  try {
+    await postSlackAlert({ events, env: process.env, fetchImpl: fetch });
+  } catch {
+    console.error("Slack post failed");
   }
   refresh();
   return null;
