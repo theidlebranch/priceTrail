@@ -9,9 +9,12 @@ import {
 import { requireAllowedReviewer } from "@/app/review/require-reviewer";
 import { priceAlertEvents, type SiteAlertEvent } from "@/core/alerts/site-alert";
 import { ReviewRefusal } from "@/core/review/confirm-price";
+import { deliveriesAfterPublish, postFollowAlerts, type FollowAlertDelivery } from "@/server/alerts/follow-alerts";
+import { readAlertWebhookKeyOrNull } from "@/server/alerts/webhook-seal";
 import { postDiscordAlert } from "@/server/alerts/post-discord-alert";
 import { postSlackAlert } from "@/server/alerts/post-slack-alert";
 import { createDb } from "@/server/db/client";
+import { redactDatabaseUrl } from "@/server/db/seed";
 import { parseDatabaseEnv } from "@/server/env";
 import { decideReviewItem } from "@/server/review/decide-review-item";
 
@@ -27,7 +30,8 @@ import { decideReviewItem } from "@/server/review/decide-review-item";
  * render this page again, so a finished item drops the buttons. An
  * action that does not ask is not re-rendered.
  *
- * A published price tells Discord and Slack after the database
+ * A published price tells the site-wide Discord and Slack webhooks,
+ * and the people who follow that model or its lab, after the database
  * connection is closed. The same price, a rejection, and a refusal stay
  * quiet. A failed post does not undo the price.
  */
@@ -49,6 +53,7 @@ export async function decideReviewAction(
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
   let events: SiteAlertEvent[] = [];
+  let deliveries: FollowAlertDelivery[] = [];
   try {
     const result = await decideReviewItem(db, {
       observationItemId: fields.observationItemId,
@@ -63,6 +68,16 @@ export async function decideReviewAction(
         lab: result.labSlug,
         model: result.modelSlug,
       });
+      try {
+        deliveries = await deliveriesAfterPublish(db, {
+          published: true,
+          labSlug: result.labSlug,
+          modelSlug: result.modelSlug,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Follower lookup failed";
+        console.error(redactDatabaseUrl(message));
+      }
     }
   } catch (error) {
     if (error instanceof ReviewRefusal) {
@@ -82,6 +97,11 @@ export async function decideReviewAction(
     await postSlackAlert({ events, env: process.env, fetchImpl: fetch });
   } catch {
     console.error("Slack post failed");
+  }
+  try {
+    await postFollowAlerts({ deliveries, fetchImpl: fetch, key: readAlertWebhookKeyOrNull(process.env) });
+  } catch {
+    console.error("Follower post failed");
   }
   refresh();
   return null;

@@ -1,4 +1,5 @@
 import { siteAlertLines, type SiteAlertEvent } from "@/core/alerts/site-alert";
+import { readDiscordWebhook } from "@/core/alerts/webhook-url";
 import { redactSecrets } from "@/server/db/seed";
 import type { FetchLike } from "@/server/sources/provider-source";
 
@@ -13,7 +14,6 @@ import type { FetchLike } from "@/server/sources/provider-source";
  * publishPriceVersion().
  */
 
-const DISCORD_HOSTS = new Set(["discord.com", "discordapp.com"]);
 const POST_TIMEOUT_MS = 10_000;
 const DISCORD_CONTENT_LIMIT = 2_000;
 const SUMMARY_LABELS: Record<SiteAlertEvent["kind"], string> = {
@@ -78,27 +78,6 @@ function summarizeAlert(events: readonly SiteAlertEvent[]): string {
     "Site alert summary (details exceed Discord's message limit):",
     ...Array.from(counts, ([kind, count]) => `${SUMMARY_LABELS[kind]}: ${count}`),
   ].join("\n");
-}
-
-type DiscordWebhook = { kind: "missing" } | { kind: "ignored" } | { kind: "ok"; url: string };
-
-function readDiscordWebhook(value: string | undefined): DiscordWebhook {
-  if (value === undefined || value.trim() === "") {
-    return { kind: "missing" };
-  }
-  let url: URL;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    return { kind: "ignored" };
-  }
-  if (url.protocol !== "https:" || !DISCORD_HOSTS.has(url.hostname)) {
-    return { kind: "ignored" };
-  }
-  if (url.username !== "" || url.password !== "") {
-    return { kind: "ignored" };
-  }
-  return { kind: "ok", url: url.toString() };
 }
 
 function failureText(error: unknown, secrets: readonly string[]): string {

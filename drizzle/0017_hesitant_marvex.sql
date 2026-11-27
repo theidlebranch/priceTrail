@@ -1,0 +1,1 @@
+ALTER TABLE "alert_webhooks" ADD CONSTRAINT "alert_webhooks_urls_are_sealed" CHECK (("alert_webhooks"."slack_webhook_url" IS NULL OR starts_with("alert_webhooks"."slack_webhook_url", 'v1.')) AND ("alert_webhooks"."discord_webhook_url" IS NULL OR starts_with("alert_webhooks"."discord_webhook_url", 'v1.')));

@@ -1,4 +1,5 @@
 import { siteAlertLines, type SiteAlertEvent } from "@/core/alerts/site-alert";
+import { readSlackWebhook } from "@/core/alerts/webhook-url";
 import { redactSecrets } from "@/server/db/seed";
 import type { FetchLike } from "@/server/sources/provider-source";
 
@@ -12,7 +13,6 @@ import type { FetchLike } from "@/server/sources/provider-source";
  * price stays as it was. This file does not call publishPriceVersion().
  */
 
-const SLACK_HOST = "hooks.slack.com";
 const POST_TIMEOUT_MS = 10_000;
 const SLACK_TEXT_LIMIT = 40_000;
 const SUMMARY_LABELS: Record<SiteAlertEvent["kind"], string> = {
@@ -77,27 +77,6 @@ function summarizeAlert(events: readonly SiteAlertEvent[]): string {
     "Site alert summary (details exceed Slack's message limit):",
     ...Array.from(counts, ([kind, count]) => `${SUMMARY_LABELS[kind]}: ${count}`),
   ].join("\n");
-}
-
-type SlackWebhook = { kind: "missing" } | { kind: "ignored" } | { kind: "ok"; url: string };
-
-function readSlackWebhook(value: string | undefined): SlackWebhook {
-  if (value === undefined || value.trim() === "") {
-    return { kind: "missing" };
-  }
-  let url: URL;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    return { kind: "ignored" };
-  }
-  if (url.protocol !== "https:" || url.hostname !== SLACK_HOST) {
-    return { kind: "ignored" };
-  }
-  if (url.username !== "" || url.password !== "") {
-    return { kind: "ignored" };
-  }
-  return { kind: "ok", url: url.toString() };
 }
 
 function failureText(error: unknown, secrets: readonly string[]): string {

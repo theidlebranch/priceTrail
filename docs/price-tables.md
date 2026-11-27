@@ -63,11 +63,17 @@ erDiagram
     timestamptz registered_at
     timestamptz last_signed_in_at
   }
+  alert_webhooks {
+    text account_id PK
+    text slack_webhook_url
+    text discord_webhook_url
+    timestamptz updated_at
+  }
 ```
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab. An `accounts` row is one Google or GitHub sign-in. It does not point at the other tables. `suggested_by` stores the same `account_id` string, and it is not a foreign key. A `follows` row is one account following one model or one lab. `account_id` is that same string, and it is not a foreign key. `kind` `model` points at `models`. `kind` `lab` points at `labs`. The other id stays empty. A follow does not publish a price.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab. An `accounts` row is one Google or GitHub sign-in. It does not point at the other tables. `suggested_by` stores the same `account_id` string, and it is not a foreign key. A `follows` row is one account following one model or one lab. `account_id` is that same string, and it is not a foreign key. `kind` `model` points at `models`. `kind` `lab` points at `labs`. The other id stays empty. A follow does not publish a price. An `alert_webhooks` row stores that same account's sealed Slack value and sealed Discord value. It does not point at `accounts` or `follows`. A filled cell starts with `v1.`. A blank cell means that channel is not saved. Both cells blank is not a row.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -400,3 +406,16 @@ A signed-in visitor can follow one model or one lab. That is one `follows` row. 
 | 2 | google:123 | lab |  | 1 | 2026-11-27T12:05:00Z |
 
 `account_id` is `google:<account id>` or `github:<numeric id>`. It is not a foreign key to `accounts`. `kind` `model` sets `model_id` and leaves `lab_id` empty. `kind` `lab` sets `lab_id` and leaves `model_id` empty. Row 1 follows Claude Haiku 4.5. Row 2 follows Anthropic. `followed_at` is the time of the first follow. A later follow of the same target does not move it. A retired model can stay on this table. Neither row is a price.
+
+## A saved webhook is not a price
+
+A signed-in person can save their own Slack URL and their own Discord URL. The URL is checked, then sealed. The table stores the sealed text, not the URL. That is one `alert_webhooks` row. These are not the site-wide environment variables. A message goes out only after a price they follow is published. The rows below are a reading aid. They are not inserted. The seals are obvious fakes, not real locked bytes.
+
+### alert_webhooks
+
+| account_id | slack_webhook_url | discord_webhook_url | updated_at |
+| --- | --- | --- | --- |
+| google:123 | v1.example-slack | v1.example-discord | 2026-11-27T12:10:00Z |
+| github:42 |  | v1.example-discord-only | 2026-11-27T12:12:00Z |
+
+`account_id` is `google:<account id>` or `github:<numeric id>`. It is not a foreign key to `accounts`. A filled `slack_webhook_url` or `discord_webhook_url` starts with `v1.` and is the sealed URL. The person typed an https Slack URL on `hooks.slack.com`, or an https Discord URL on `discord.com` or `discordapp.com`. That typed URL is checked, then sealed with `ALERT_WEBHOOK_KEY`. Row 1 saved both. Row 2 saved Discord only, so Slack stays empty. `updated_at` is the time of the last save or remove. Clearing both URLs deletes the row. Neither row is a price.
