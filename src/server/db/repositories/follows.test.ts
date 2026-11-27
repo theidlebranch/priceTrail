@@ -21,8 +21,8 @@ import { parseDatabaseEnv } from "@/server/env";
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
 const WHEN = new Date("2026-11-27T12:00:00.000Z");
 const LATER = new Date("2026-11-27T12:05:00.000Z");
-const ACCOUNT = "google:follow-test";
-const OTHER = "github:424242";
+const ACCOUNT = `google:follow-test-${randomUUID()}`;
+const OTHER = `github:${BigInt(`0x${randomUUID().replaceAll("-", "")}`)}`;
 
 describe.skipIf(databaseUrl.length === 0)("follows", () => {
   let close: (() => Promise<void>) | undefined;

@@ -45,9 +45,7 @@ export async function setFollowAction(
         followedAt: new Date(),
         ...resolved.target,
       });
-      if (!result.alreadyFollowed) {
-        refresh();
-      }
+      refresh();
       return {
         ok: true,
         ...followResultCopy({
@@ -59,9 +57,7 @@ export async function setFollowAction(
     }
 
     const result = await unfollowTarget(db, { accountId, ...resolved.target });
-    if (result.removed) {
-      refresh();
-    }
+    refresh();
     return {
       ok: true,
       ...followResultCopy({

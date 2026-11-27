@@ -34,8 +34,8 @@ erDiagram
   models ||--o| model_limits : "model_id"
   sources ||--o{ model_limits : "source_id"
   sources ||--o{ fetch_triggers : "source_id"
-  labs ||--o{ follows : "lab_id"
-  models ||--o{ follows : "model_id"
+  labs |o--o{ follows : "lab_id"
+  models |o--o{ follows : "model_id"
   follows {
     bigint id PK
     text account_id

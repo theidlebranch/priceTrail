@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import type { FollowFormState } from "@/app/follows/follow-action";
 import {
@@ -52,19 +52,33 @@ function SignedInFollowing({
   const labs = entries.filter((entry) => entry.kind === "lab");
   const models = entries.filter((entry) => entry.kind === "model");
   const [tab, setTab] = useState<"labs" | "models">(() => initialFollowTab(labs.length, models.length));
+  const labsTab = useRef<HTMLButtonElement>(null);
+  const modelsTab = useRef<HTMLButtonElement>(null);
   const selected = tab === "labs" ? labs : models;
 
   return (
     <div>
       <FollowingHeader />
-      <div role="tablist" aria-label="Following" className="mt-8 flex flex-wrap gap-2">
+      <div
+        role="tablist"
+        aria-label="Following"
+        className="mt-8 flex flex-wrap gap-2"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          // With two tabs, either direction moves to the other tab and wraps.
+          (event.target === labsTab.current ? modelsTab : labsTab).current?.focus();
+        }}
+      >
         <FollowTab
+          ref={labsTab}
           label={followTabLabel("lab", labs.length)}
           selected={tab === "labs"}
           controls="following-labs"
           onSelect={() => setTab("labs")}
         />
         <FollowTab
+          ref={modelsTab}
           label={followTabLabel("model", models.length)}
           selected={tab === "models"}
           controls="following-models"
@@ -121,11 +135,13 @@ function SignedInFollowing({
 }
 
 function FollowTab({
+  ref,
   label,
   selected,
   controls,
   onSelect,
 }: {
+  ref: Ref<HTMLButtonElement>;
   label: string;
   selected: boolean;
   controls: string;
@@ -133,17 +149,20 @@ function FollowTab({
 }) {
   return (
     <button
+      ref={ref}
       type="button"
       role="tab"
       id={`${controls}-tab`}
       aria-controls={controls}
       aria-selected={selected}
+      tabIndex={selected ? 0 : -1}
       className={
         selected
           ? "rounded-md border border-primary px-2.5 py-1 text-sm text-primary"
           : "rounded-md border border-transparent px-2.5 py-1 text-sm text-muted-foreground"
       }
       onClick={onSelect}
+      onFocus={onSelect}
     >
       {label}
     </button>

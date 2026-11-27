@@ -57,6 +57,29 @@ describe("FollowingList", () => {
     expect(screen.getByRole("tabpanel").textContent).toContain("Claude Fable 5.1");
   });
 
+  it("moves focus and selection between tabs with either horizontal arrow", () => {
+    render(<FollowingList entries={[LAB, MODEL]} signedIn action={unusedFollow} />);
+    const labs = screen.getByRole("tab", { name: "1 lab" });
+    const models = screen.getByRole("tab", { name: "1 model" });
+
+    expect(labs.tabIndex).toBe(0);
+    expect(models.tabIndex).toBe(-1);
+    labs.focus();
+    fireEvent.keyDown(labs, { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(models);
+    expect(labs.tabIndex).toBe(-1);
+    expect(models.tabIndex).toBe(0);
+    expect(screen.getByRole("tabpanel").textContent).toContain(MODEL.name);
+
+    fireEvent.keyDown(models, { key: "ArrowLeft" });
+
+    expect(document.activeElement).toBe(labs);
+    expect(labs.tabIndex).toBe(0);
+    expect(models.tabIndex).toBe(-1);
+    expect(screen.getByRole("tabpanel").textContent).toContain(LAB.name);
+  });
+
   it("gives an empty tab its own sentence", () => {
     render(<FollowingList entries={[]} signedIn action={unusedFollow} />);
 

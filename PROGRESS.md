@@ -106,9 +106,11 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 
 <!-- coderabbit-ai-generated:v1 -->
 
-<!-- coderabbit-ai-generated-section:v1:57b16a111002d8feaaa92f65f04b2c115f0f5421e86c6aa6084d6549db25fe6d -->
+<!-- coderabbit-ai-generated-section:v1:ea76d11f55d58b3ca430ad0976a85955a3c27e242c1470fb831590311344fbe1 -->
 
 - Discord alert and candidate sync review fixes: there is one documented webhook variable, a large alert sends counts by event type, and a retirement alert requires a row returned by the update. Regression tests cover a bodyless 204, oversized content, and conversion attempts that update nothing.
+
+- Follow review fixes: both target links are optional in the diagram, every successful follow or unfollow refreshes the page, and the arrow keys move focus and selection between Labs and Models. The database tests use a fresh account pair per run. `pnpm check` passed, and all five follow repository tests passed against disposable PostgreSQL.
 
 ## In progress
 
