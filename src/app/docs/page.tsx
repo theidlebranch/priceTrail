@@ -104,7 +104,7 @@ export default function DocsIndexPage() {
             <code>/review/sign-in</code>, and any other account is a 403.
           </p>
           <p>
-            These pages are empty placeholders: <code>/following</code>, <code>/alerts</code>,{" "}
+            These pages are empty placeholders: <code>/alerts</code>,{" "}
             <code>/receipts</code>, <code>/account</code>, and <code>/review/reports</code>.
           </p>
           <p className="doc-see">
@@ -372,13 +372,12 @@ export default function DocsIndexPage() {
             <li>changelog feeds</li>
             <li>deprecation (a lab retiring a model)</li>
             <li>webhooks (a lab calling us when a price changes)</li>
-            <li>follows (a person watching a model)</li>
             <li>wrong-price reports</li>
             <li>Wayback backfill (saving older copies we missed)</li>
             <li>personal notifications</li>
           </ul>
           <p>
-            These pages are in the app but empty: <code>/following</code>, <code>/alerts</code>,{" "}
+            These pages are in the app but empty: <code>/alerts</code>,{" "}
             <code>/receipts</code>, <code>/account</code>, and <code>/review/reports</code>.
           </p>
         </section>

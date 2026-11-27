@@ -34,6 +34,16 @@ erDiagram
   models ||--o| model_limits : "model_id"
   sources ||--o{ model_limits : "source_id"
   sources ||--o{ fetch_triggers : "source_id"
+  labs |o--o{ follows : "lab_id"
+  models |o--o{ follows : "model_id"
+  follows {
+    bigint id PK
+    text account_id
+    text kind
+    bigint model_id
+    bigint lab_id
+    timestamptz followed_at
+  }
   requests {
     bigint id PK
     text kind
@@ -57,7 +67,7 @@ erDiagram
 
 One lab has many models. One model has many aliases and many offerings. One offering has many price versions. One version has many components. The self-link is only a fix row pointing at a retracted row. A normal price change has no link.
 
-One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab. An `accounts` row is one Google or GitHub sign-in. It does not point at the other tables. `suggested_by` stores the same `account_id` string, and it is not a foreign key.
+One source is one page. It has many `fetch_log` rows, one per check. It has an `observations` row only when the parsed page changed. One observation has many items, one per tracked offering on that page. A `fetch_log` row points at an observation only when the outcome is `changed`, and only one log row may point at a given observation. A price version points at the observation item that opened it through `price_version_evidence`. The Wayback permalink stays on the observation. A version with no evidence row has no snapshot link yet. A witness source also has `witness_reads`, `verification_flags`, `candidate_models`, and `model_signals`. A disagreement also adds a `fetch_triggers` row that points at the official page, not at the witness. An official model list is a `platform_api` source. It can store `model_limits`, one current token-limit row per model. Those rows do not publish a price. A `requests` row is a lab suggestion. It does not point at `labs`. Accepting it does not insert a lab. An `accounts` row is one Google or GitHub sign-in. It does not point at the other tables. `suggested_by` stores the same `account_id` string, and it is not a foreign key. A `follows` row is one account following one model or one lab. `account_id` is that same string, and it is not a foreign key. `kind` `model` points at `models`. `kind` `lab` points at `labs`. The other id stays empty. A follow does not publish a price.
 
 How a visit moves through every table, including tables that are not created yet, is in [docs/architecture.md](architecture.md#how-a-check-is-filed).
 
@@ -377,3 +387,16 @@ A signed-in visitor can ask us to track a lab we do not have yet. That is one `r
 | github:42 |  |  | 2026-11-26T17:00:00Z | 2026-11-26T17:00:00Z |
 
 `account_id` is `google:<account id>` or `github:<numeric id>`. `display_name` and `email` are what that provider sent. A blank cell means the provider sent no name or no email. `registered_at` is the first stored sign-in and does not move. `last_signed_in_at` is the latest sign-in. Row 2 signed in once, so the two times match. A person who signed in before this table existed has no row until the next sign-in.
+
+## A follow is not a price
+
+A signed-in visitor can follow one model or one lab. That is one `follows` row. Following a lab does not insert a row for each of its models. A second follow of the same target changes nothing. Unfollow deletes the row. The rows below are a reading aid. They are not inserted.
+
+### follows
+
+| id | account_id | kind | model_id | lab_id | followed_at |
+| --- | --- | --- | --- | --- | --- |
+| 1 | google:123 | model | 1 |  | 2026-11-27T12:00:00Z |
+| 2 | google:123 | lab |  | 1 | 2026-11-27T12:05:00Z |
+
+`account_id` is `google:<account id>` or `github:<numeric id>`. It is not a foreign key to `accounts`. `kind` `model` sets `model_id` and leaves `lab_id` empty. `kind` `lab` sets `lab_id` and leaves `model_id` empty. Row 1 follows Claude Haiku 4.5. Row 2 follows Anthropic. `followed_at` is the time of the first follow. A later follow of the same target does not move it. A retired model can stay on this table. Neither row is a price.

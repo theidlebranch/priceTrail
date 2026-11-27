@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { FollowFormState } from "@/app/follows/follow-action";
 import type {
   ModelDetailChangeEvent,
   ModelDetailChangeLine,
@@ -6,7 +7,16 @@ import type {
   ModelDetailStartingPrice,
   ModelDetailView,
 } from "@/app/models/model-detail-view";
+import { FollowStar } from "@/components/follow-star";
 import { DirectionMark, TieredPrices } from "@/components/tiered-prices";
+
+export type ModelFollowControl = {
+  signedIn: boolean;
+  followed: boolean;
+  labSlug: string;
+  modelSlug: string;
+  action: (previous: FollowFormState, formData: FormData) => Promise<FollowFormState>;
+};
 
 /**
  * The checked detail. The view already decided the current price, the
@@ -15,7 +25,13 @@ import { DirectionMark, TieredPrices } from "@/components/tiered-prices";
  * version. An empty history is a successful read that found no chartable
  * period. The review banner is a sentence, not a second price.
  */
-export function ModelDetail({ view }: { view: ModelDetailView }) {
+export function ModelDetail({
+  view,
+  follow,
+}: {
+  view: ModelDetailView;
+  follow?: ModelFollowControl;
+}) {
   return (
     <div className="space-y-10">
       <header>
@@ -28,14 +44,33 @@ export function ModelDetail({ view }: { view: ModelDetailView }) {
             / {view.labName} / {view.modelName}
           </span>
         </p>
-        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-page-title font-semibold tracking-tight text-foreground">
             {view.modelName}
           </h1>
           {view.retired ? (
             <span className="text-meta text-tertiary-foreground">Retired</span>
           ) : null}
+          {follow === undefined ? null : (
+            <FollowStar
+              name={view.modelName}
+              kind="model"
+              followed={follow.followed}
+              signedIn={follow.signedIn}
+              labSlug={follow.labSlug}
+              modelSlug={follow.modelSlug}
+              action={follow.action}
+            />
+          )}
         </div>
+        {follow !== undefined && !follow.signedIn ? (
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            <Link href="/sign-in" className="text-primary">
+              Sign in
+            </Link>{" "}
+            to follow this model.
+          </p>
+        ) : null}
         {view.versionCount > 0 && view.sinceDay !== null ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {view.versionCount} price {view.versionCount === 1 ? "version" : "versions"} since{" "}
