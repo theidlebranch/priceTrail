@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { FollowFormState } from "@/app/follows/follow-action";
 import type { SuggestLabState } from "@/components/lab-list";
 import { LabList } from "@/components/lab-list";
 import { ContributionList } from "@/components/contribution-list";
@@ -19,6 +20,8 @@ describe("LabList", () => {
         ]}
         signedIn={false}
         action={unusedSuggest}
+        followedSlugs={[]}
+        followAction={unusedFollow}
       />,
     );
 
@@ -31,7 +34,7 @@ describe("LabList", () => {
   });
 
   it("shows the suggest form when the visitor is signed in, and an empty catalog", () => {
-    render(<LabList entries={[]} signedIn action={unusedSuggest} />);
+    render(<LabList entries={[]} signedIn action={unusedSuggest} followedSlugs={[]} followAction={unusedFollow} />);
 
     expect(screen.getByText("No labs are tracked yet.")).toBeTruthy();
     expect(screen.getByText("0 labs")).toBeTruthy();
@@ -106,6 +109,10 @@ describe("ContributionList", () => {
 });
 
 function unusedSuggest(): Promise<SuggestLabState> {
+  return Promise.resolve(null);
+}
+
+function unusedFollow(): Promise<FollowFormState> {
   return Promise.resolve(null);
 }
 

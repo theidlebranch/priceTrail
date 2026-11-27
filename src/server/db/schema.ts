@@ -633,3 +633,51 @@ export const accounts = pgTable(
     ),
   ],
 );
+
+/**
+ * One row is one account following one model or one lab.
+ *
+ * account_id is google:<id> or github:<numeric id>. It is the same
+ * string the session already stores. It is not a foreign key to
+ * accounts, so a person can follow before that table has their row.
+ * kind model means model_id is set and lab_id is empty. kind lab means
+ * the opposite. A partial unique index is used because Postgres treats
+ * two empty ids as different, and a nullable unique key would allow
+ * two follows of the same model. followed_at is the time the caller
+ * passed in. A second follow of the same target does not move it.
+ * Unfollow deletes the row. A retired model can stay followed.
+ * This table does not store a price.
+ */
+export const followKind = pgEnum("follow_kind", ["model", "lab"]);
+
+export const follows = pgTable(
+  "follows",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    accountId: text("account_id").notNull(),
+    kind: followKind("kind").notNull(),
+    modelId: bigint("model_id", { mode: "number" }).references(() => models.id, {
+      onDelete: "restrict",
+    }),
+    labId: bigint("lab_id", { mode: "number" }).references(() => labs.id, {
+      onDelete: "restrict",
+    }),
+    followedAt: timestamp("followed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("follows_one_model")
+      .on(table.accountId, table.modelId)
+      .where(sql`${table.kind} = 'model'`),
+    uniqueIndex("follows_one_lab")
+      .on(table.accountId, table.labId)
+      .where(sql`${table.kind} = 'lab'`),
+    check(
+      "follows_account_id_is_provider_account",
+      sql`${table.accountId} ~ '^google:[A-Za-z0-9_-]+$' OR ${table.accountId} ~ '^github:[0-9]+$'`,
+    ),
+    check(
+      "follows_kind_matches_one_target",
+      sql`(${table.kind} = 'model' AND ${table.modelId} IS NOT NULL AND ${table.labId} IS NULL) OR (${table.kind} = 'lab' AND ${table.labId} IS NOT NULL AND ${table.modelId} IS NULL)`,
+    ),
+  ],
+);

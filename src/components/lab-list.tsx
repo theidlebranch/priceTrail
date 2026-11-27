@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
+import type { FollowFormState } from "@/app/follows/follow-action";
 import type { LabListEntry } from "@/app/labs/lab-list";
+import { FollowStar } from "@/components/follow-star";
 import { LabsPageHeader } from "@/components/labs-page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,10 +23,14 @@ export function LabList({
   entries,
   signedIn,
   action,
+  followedSlugs,
+  followAction,
 }: {
   entries: readonly LabListEntry[];
   signedIn: boolean;
   action: (previous: SuggestLabState, formData: FormData) => Promise<SuggestLabState>;
+  followedSlugs: readonly string[];
+  followAction: (previous: FollowFormState, formData: FormData) => Promise<FollowFormState>;
 }) {
   return (
     <div>
@@ -36,11 +42,21 @@ export function LabList({
           {entries.map((entry) => (
             <li
               key={entry.slug}
-              className="flex items-baseline justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
+              className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
             >
               <span className="font-medium text-foreground">{entry.name}</span>
-              <span className="text-meta text-tertiary-foreground tabular-nums">
-                {entry.modelCountLabel}
+              <span className="flex items-center gap-3">
+                <span className="text-meta text-tertiary-foreground tabular-nums">
+                  {entry.modelCountLabel}
+                </span>
+                <FollowStar
+                  name={entry.name}
+                  kind="lab"
+                  followed={followedSlugs.includes(entry.slug)}
+                  signedIn={signedIn}
+                  labSlug={entry.slug}
+                  action={followAction}
+                />
               </span>
             </li>
           ))}
@@ -53,7 +69,7 @@ export function LabList({
           <Link href="/sign-in" className="text-primary">
             Sign in
           </Link>{" "}
-          to suggest a lab we do not track.
+          to follow a lab, or to suggest a lab we do not track.
         </p>
       )}
     </div>

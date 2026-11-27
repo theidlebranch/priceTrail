@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { setFollowAction } from "@/app/follows/follow-action";
 import { toModelDetailView } from "@/app/models/model-detail-view";
 import { assertPublicSlug } from "@/app/models/model-list-entries";
 import { ModelDetail } from "@/components/model-detail";
+import { readSignedInAccountId } from "@/server/auth/signed-in-account";
 import { createDb } from "@/server/db/client";
+import { listFollows } from "@/server/db/repositories/follows";
 import { findModelDetail } from "@/server/db/repositories/model-detail";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -56,6 +59,7 @@ async function ModelDetailLoader({
   await connection();
   assertPublicSlug(labSlug, "lab");
   assertPublicSlug(modelSlug, "model");
+  const accountId = await readSignedInAccountId();
   const { databaseUrl } = parseDatabaseEnv(process.env);
   const { db, close } = createDb(databaseUrl);
 
@@ -64,9 +68,25 @@ async function ModelDetailLoader({
     if (row === null) {
       throw new Error("tracked model disappeared before the page could read it");
     }
+    const followed =
+      accountId !== null &&
+      (await listFollows(db, accountId)).some(
+        (item) => item.kind === "model" && item.labSlug === labSlug && item.modelSlug === modelSlug,
+      );
     // asOf is this request. The chart function does not read the clock itself,
     // so a test can pass a fixed day and the open line still has an end.
-    return <ModelDetail view={toModelDetailView(row, new Date())} />;
+    return (
+      <ModelDetail
+        view={toModelDetailView(row, new Date())}
+        follow={{
+          signedIn: accountId !== null,
+          followed,
+          labSlug,
+          modelSlug,
+          action: setFollowAction,
+        }}
+      />
+    );
   } finally {
     await close();
   }

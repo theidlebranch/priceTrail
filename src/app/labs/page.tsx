@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { setFollowAction } from "@/app/follows/follow-action";
 import { toLabListEntries } from "@/app/labs/lab-list";
 import { suggestLabAction } from "@/app/labs/suggest-lab-action";
 import { LabList } from "@/components/lab-list";
 import { LabsPageHeader } from "@/components/labs-page-header";
 import { readSignedInAccountId } from "@/server/auth/signed-in-account";
 import { createDb } from "@/server/db/client";
+import { listFollows } from "@/server/db/repositories/follows";
 import { listLabs } from "@/server/db/repositories/lab-requests";
 import { parseDatabaseEnv } from "@/server/env";
 
@@ -55,8 +57,20 @@ async function LabListLoader() {
 
   try {
     const rows = await listLabs(db);
+    const followedSlugs =
+      accountId === null
+        ? []
+        : (await listFollows(db, accountId))
+            .filter((row) => row.kind === "lab")
+            .map((row) => row.labSlug);
     return (
-      <LabList entries={toLabListEntries(rows)} signedIn={accountId !== null} action={suggestLabAction} />
+      <LabList
+        entries={toLabListEntries(rows)}
+        signedIn={accountId !== null}
+        action={suggestLabAction}
+        followedSlugs={followedSlugs}
+        followAction={setFollowAction}
+      />
     );
   } finally {
     await close();
