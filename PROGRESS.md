@@ -114,7 +114,7 @@ The ordered checklist is [docs/build-plan.md](docs/build-plan.md). Do not copy t
 <!-- /coderabbit-ai-generated:v1 -->
 
 - Seed database tests still need a schema-only Neon branch. Put its connection string in `.env` as `TEST_DATABASE_URL`. Do not reuse `DATABASE_URL`.
-- The next build-plan piece is step 44: follow a model or a lab. Source requests, wrong-price reports, and Wayback backfill are the post-MVP backlog in step 50. Personal email, Slack, Discord, and the on-site bubble are step 51, and they are required even if they take longer than two hours.
+- The next build-plan piece is step 44: follow a model or a lab. Step 45, follow-based Slack and Discord webhooks, is planned and not started. A person saves their own URLs, and a post goes out only for a model or lab they follow. The site-wide environment variables stay step 42. Source requests, wrong-price reports, and Wayback backfill are the post-MVP backlog in step 50. Personal email and the on-site bubble are step 51, and they are required even if they take longer than two hours.
 
 ## Blocked
 

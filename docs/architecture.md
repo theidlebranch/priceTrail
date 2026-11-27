@@ -320,7 +320,7 @@ Reuse what's already known from day-job work, with no new tools to learn mid-pro
 3. Cloud platform APIs (Azure/AWS/Google) as the most trustworthy sources.
 4. **Request a new source.** A signed-in visitor submits a pricing URL. Accepting records the request and does not add a parser or a scheduled visit.
 5. **Report a wrong price.** A signed-in visitor can say a published price is wrong. The published price stays up until a reviewer correction goes through `publishPriceVersion()`.
-6. **Personal notifications.** A person should hear about a change without signing in to look. Email, a Slack message, a Discord message, and a notification bubble on the site. This one is required, even if it takes longer than the small site-wide webhook. The decision is [docs/adr/0002-personal-notifications.md](adr/0002-personal-notifications.md). The step is 51 in [docs/build-plan.md](build-plan.md).
+6. **Personal notifications.** A person should hear about a change without signing in to look. Email, a Slack message, a Discord message, and a notification bubble on the site. This one is required, even if it takes longer than the small site-wide webhook. Follow-based Slack and Discord webhooks are step 45 in the MVP. Email and the bubble stay step 51. The decision is [docs/adr/0002-personal-notifications.md](adr/0002-personal-notifications.md). The step is 51 in [docs/build-plan.md](build-plan.md).
 
 Rule of thumb while building: if a decision only matters once you have 6+ providers or regional pricing, don't make it yet. The exception is the shape of the core fact (components, effective-date honesty, model identity), which is why those are in the schema now.
 
