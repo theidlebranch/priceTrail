@@ -113,6 +113,20 @@
       "when": 1795778509140,
       "tag": "0015_follows",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795798338457,
+      "tag": "0016_alert_webhooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795801065144,
+      "tag": "0017_hesitant_marvex",
+      "breakpoints": true
     }
   ]
 }

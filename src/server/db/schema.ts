@@ -681,3 +681,41 @@ export const follows = pgTable(
     ),
   ],
 );
+
+/**
+ * One row is one account's own Slack and Discord webhook seals.
+ *
+ * account_id is google:<id> or github:<numeric id>. It is not a
+ * foreign key to accounts, for the same reason as follows. These are
+ * not the site-wide environment variables. A column is empty or a
+ * sealed value that starts with v1. The URL is checked, then sealed,
+ * before it is stored. Both empty is not a row: the caller deletes it.
+ * This table does not store a price.
+ */
+export const alertWebhooks = pgTable(
+  "alert_webhooks",
+  {
+    accountId: text("account_id").primaryKey(),
+    slackWebhookUrl: text("slack_webhook_url"),
+    discordWebhookUrl: text("discord_webhook_url"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "alert_webhooks_account_id_is_provider_account",
+      sql`${table.accountId} ~ '^google:[A-Za-z0-9_-]+$' OR ${table.accountId} ~ '^github:[0-9]+$'`,
+    ),
+    check(
+      "alert_webhooks_urls_are_blank_or_filled",
+      sql`(${table.slackWebhookUrl} IS NULL OR length(btrim(${table.slackWebhookUrl})) > 0) AND (${table.discordWebhookUrl} IS NULL OR length(btrim(${table.discordWebhookUrl})) > 0)`,
+    ),
+    check(
+      "alert_webhooks_has_one_url",
+      sql`${table.slackWebhookUrl} IS NOT NULL OR ${table.discordWebhookUrl} IS NOT NULL`,
+    ),
+    check(
+      "alert_webhooks_urls_are_sealed",
+      sql`(${table.slackWebhookUrl} IS NULL OR starts_with(${table.slackWebhookUrl}, 'v1.')) AND (${table.discordWebhookUrl} IS NULL OR starts_with(${table.discordWebhookUrl}, 'v1.'))`,
+    ),
+  ],
+);
